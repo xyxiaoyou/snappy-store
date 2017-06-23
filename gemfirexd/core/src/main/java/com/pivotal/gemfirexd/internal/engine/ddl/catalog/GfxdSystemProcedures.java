@@ -1505,7 +1505,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
       throws StandardException {
     GemFireContainer container = (GemFireContainer)region.getUserAttribute();
     TableDescriptor td = container.getTableDescriptor();
-    String cols = null;
+    String cols = "";
     if (td != null) {
       String[] baseColumns = td.getColumnNamesArray();
       GfxdIndexManager im = container.getIndexManager();
@@ -1534,7 +1534,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
       LocalRegion region) throws StandardException {
     GemFireContainer container = (GemFireContainer)region.getUserAttribute();
     TableDescriptor td = container.getTableDescriptor();
-    String cols = null;
+    String cols = "";
     if (td != null) {
       String[] baseColumns = td.getColumnNamesArray();
       ReferencedKeyConstraintDescriptor primaryKey = td.getPrimaryKey();
