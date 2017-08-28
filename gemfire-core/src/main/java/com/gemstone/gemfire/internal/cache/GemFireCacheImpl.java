@@ -1071,7 +1071,8 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
               "memory-size) is not supported in SnappyData OSS version.");
         }
         try {
-          Class clazz = Class.forName("com.gemstone.gemfire.internal.cache.store.ManagedDirectBufferAllocator");
+          Class clazz = Class.forName(
+              "com.gemstone.gemfire.internal.cache.store.ManagedDirectBufferAllocator");
           Method method = clazz.getDeclaredMethod("instance");
           this.bufferAllocator = (DirectBufferAllocator)method.invoke(null);
         } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException |

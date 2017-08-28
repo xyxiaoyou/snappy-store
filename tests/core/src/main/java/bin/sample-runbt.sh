@@ -85,7 +85,7 @@ export releaseVersion=`echo "${filename%*.*}"| cut -d'-' -f5-6`
 
 snappyTestsJarName=`ls $SNAPPYDATADIR/dtests/build-artifacts/scala-2.11/libs/snappydata-store-scala-tests*`
 snappyTestsJarFilename=`tr "/" "\n" <<< $snappyTestsJarName | tail -1`
-export snappyTestsJarVersion=`echo "${snappyTestsJarFilename%*.*}"| cut -d'-' -f5-6`
+export snappyTestsJarVersion=`echo "${snappyTestsJarFilename%*.*}"| cut -d'-' -f5`
 
 CLASSPATH=$JTESTS:$EXTRA_JTESTS:$JTESTS/../../libs/snappydata-store-hydra-tests-${releaseVersion}-all.jar:$SNAPPYDATADIR/dtests/build-artifacts/scala-2.11/libs/snappydata-store-scala-tests-${snappyTestsJarVersion}-tests.jar
 LIB=$SNAPPYDATADIR/build-artifacts/scala-2.11/snappy/jars
