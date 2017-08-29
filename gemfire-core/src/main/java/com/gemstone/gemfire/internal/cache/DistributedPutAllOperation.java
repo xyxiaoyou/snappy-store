@@ -28,7 +28,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 import com.gemstone.gemfire.DataSerializer;
 import com.gemstone.gemfire.cache.DataPolicy;
@@ -60,7 +59,6 @@ import com.gemstone.gemfire.internal.cache.versions.VersionTag;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.shared.Version;
 import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
-import com.gemstone.gemfire.internal.snappy.StoreCallbacks;
 import com.gemstone.gemfire.internal.snappy.UMMMemoryTracker;
 import com.gemstone.gnu.trove.THashMap;
 import com.gemstone.gnu.trove.TObjectIntHashMap;
@@ -338,7 +336,7 @@ public final class DistributedPutAllOperation extends AbstractUpdateOperation {
     // parallel wan is enabled
     private long tailKey = 0L;
 
-    volatile UUID batchUUID = BucketRegion.zeroUUID;
+    volatile long batchUUID = BucketRegion.INVALID_UUID;
 
     public VersionTag versionTag;
 
@@ -428,7 +426,7 @@ public final class DistributedPutAllOperation extends AbstractUpdateOperation {
       if ((this.flags & HAS_TAILKEY) != 0) {
         this.tailKey = InternalDataSerializer.readSignedVL(in);
       }
-      this.batchUUID = InternalDataSerializer.readUUID(in);
+      this.batchUUID = InternalDataSerializer.readSignedVL(in);
     }
 
     @Override
@@ -441,7 +439,8 @@ public final class DistributedPutAllOperation extends AbstractUpdateOperation {
         sb.append(", b").append(this.bucketId);
       }
       if (versionTag != null) {
-        sb.append(",v").append(versionTag.getEntryVersion()).append(",rv="+versionTag.getRegionVersion());
+        sb.append(",v").append(versionTag.getEntryVersion())
+            .append(",rv=").append(versionTag.getRegionVersion());
       }
       if (filterRouting != null) {
         sb.append(", ").append(filterRouting);
@@ -449,10 +448,14 @@ public final class DistributedPutAllOperation extends AbstractUpdateOperation {
       if (callbackArg != null) {
         sb.append(",callbackArg=").append(callbackArg);
       }
+      final long batchUUID = this.batchUUID;
+      if (batchUUID != BucketRegion.INVALID_UUID) {
+        sb.append(",uuid=").append(batchUUID);
+      }
       sb.append(")");
       return sb.toString();
     }
-    
+
     void setSender(InternalDistributedMember sender) {
       if (this.versionTag != null) {
         this.versionTag.replaceNullIDs(sender);
@@ -530,7 +533,7 @@ public final class DistributedPutAllOperation extends AbstractUpdateOperation {
         DataSerializer.writeObject(this.callbackArg, out);
       }
       InternalDataSerializer.writeSignedVL(this.tailKey, out);
-      InternalDataSerializer.writeUUID(this.batchUUID, out);
+      InternalDataSerializer.writeSignedVL(this.batchUUID, out);
     }
 
     /**
@@ -565,11 +568,11 @@ public final class DistributedPutAllOperation extends AbstractUpdateOperation {
       this.tailKey = key;
     }
 
-    public UUID getBatchUUID() {
+    public long getBatchUUID() {
       return this.batchUUID;
     }
 
-    public void setBatchUUID(UUID uuid) {
+    public void setBatchUUID(long uuid) {
       this.batchUUID = uuid;
     }
 
