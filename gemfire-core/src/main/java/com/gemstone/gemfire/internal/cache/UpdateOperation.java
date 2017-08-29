@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 import com.gemstone.gemfire.DataSerializer;
 import com.gemstone.gemfire.InternalGemFireError;
@@ -45,7 +44,6 @@ import com.gemstone.gemfire.internal.cache.EntryEventImpl.NewValueImporter;
 import com.gemstone.gemfire.internal.cache.tier.sockets.ClientProxyMembershipID;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.offheap.annotations.Unretained;
-import com.gemstone.gemfire.internal.util.Breadcrumbs;
 
 /**
  * Handles distribution messaging for updating an entry in a region.
@@ -164,7 +162,7 @@ public class UpdateOperation extends AbstractUpdateOperation
     static final int IS_PUT_DML = getNextByteMask(HAS_DELTA_WITH_FULL_VALUE);
 
     private long tailKey = 0L;
-    private UUID batchUUID = BucketRegion.zeroUUID;
+    private long batchUUID = BucketRegion.INVALID_UUID;
 
     public UpdateMessage(){}
 
@@ -430,7 +428,7 @@ public class UpdateOperation extends AbstractUpdateOperation
         this.eventId = new EventID();
         InternalDataSerializer.invokeFromData(this.eventId, in);
         this.tailKey = InternalDataSerializer.readSignedVL(in);
-        this.batchUUID = InternalDataSerializer.readUUID(in);
+        this.batchUUID = InternalDataSerializer.readSignedVL(in);
       }
       else {
         this.eventId = null;
@@ -497,7 +495,7 @@ public class UpdateOperation extends AbstractUpdateOperation
         else {
           InternalDataSerializer.writeSignedVL(0, out);
         }
-        InternalDataSerializer.writeUUID(this.event.getBatchUUID(), out);
+        InternalDataSerializer.writeSignedVL(this.event.getBatchUUID(), out);
       }
       Object key = this.key;
       if (key instanceof KeyWithRegionContext) {
