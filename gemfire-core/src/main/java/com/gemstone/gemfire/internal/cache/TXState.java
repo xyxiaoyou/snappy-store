@@ -1133,7 +1133,8 @@ public final class TXState implements TXStateInterface {
         }
       }
 
-      publishRecordedVersions();
+      commitAndMergeEntries();
+      //publishRecordedVersions();
       if (reuseEV) {
         cbEvent.release();
       }
@@ -1142,6 +1143,108 @@ public final class TXState implements TXStateInterface {
       }
     }
     return eventsToFree;
+  }
+
+  // Merge only if delta
+  // otherwise overwriting should work.
+  private void commitAndMergeEntries() {
+    try {
+      Iterator<RegionEntry> itr1 = unCommittedEntryReference.iterator();
+      Iterator<Object> itr2 = committedEntryReference.iterator();
+
+      Iterator<LocalRegion> itr3 = regionReference.iterator();
+      Iterator<VersionInformation> itr4 = queue.iterator();
+      if (TXStateProxy.LOG_FINEST) {
+        GemFireCacheImpl.getInstance().getLogger().info("Merging the commit changes.. " + unCommittedEntryReference.size()
+            + " " + committedEntryReference.size() + " " + regionReference.size() + " size of queue " + queue.size());
+      }
+      RegionEntry uncommitted;
+      RegionEntry committed;
+      VersionStamp originalStamp, stampInMap;
+      EntryEventImpl event = EntryEventImpl.createVersionTagHolder();
+      while (itr1.hasNext() && itr2.hasNext() && itr4.hasNext()) {
+        uncommitted = itr1.next();
+        Object entr = itr2.next();
+        VersionInformation vi = itr4.next();
+
+        if (!(entr instanceof Token)) {
+          committed = (RegionEntry)entr;
+        } else {
+          committed = null;
+        }
+        LocalRegion region = itr3.next();
+        synchronized (uncommitted) {
+          if (committed != null) {
+            originalStamp = committed.getVersionStamp();
+            stampInMap = uncommitted.getVersionStamp();
+
+            // if uncommitted has already been committed
+
+            //else
+            if (stampInMap.getEntryVersion() == originalStamp.getEntryVersion() + 1) {
+              // my uncommitted entry
+              // don't do anything
+            } else {
+              // the stamp has changed, it means
+              // we have to get correct entry from oldEntryMap.
+
+              Object key = uncommitted.getKeyCopy();
+              RegionEntry myEntry = region.getCache().getEntryFromOldMap(region, vi.version, key, uncommitted);
+              //change stamp to the one from myEntry
+              VersionStamp myStamp = myEntry.getVersionStamp();
+
+              final int oldSize = region.calculateRegionEntryValueSize(myEntry);
+              // some modification has already happened,
+              RegionEntry oldRe = NonLocalRegionEntry.newEntryWithoutFaultIn(uncommitted, region, true);
+              //oldRe.setUpdateInProgress(true);
+              region.getCache().addOldEntry(oldRe, uncommitted, region, oldSize);
+              // put your value here
+              // change the region version too if the regionVersion is lower
+
+              VersionTag myStampAsTag = null;
+              if (myStamp != null) {
+                myStampAsTag = myStamp.asVersionTag();
+              }
+              if (myStampAsTag.getRegionVersion() > stampInMap.getRegionVersion()) {
+                if (stampInMap != null && myStampAsTag != null) {
+                  stampInMap.setVersions(myStampAsTag);
+                  stampInMap.setMemberID(myStampAsTag.getMemberID());
+                }
+                event.setVersionTag(myStampAsTag);
+              } else {
+                event.setVersionTag(stampInMap.asVersionTag());
+              }
+              event.setRegion(region);
+              // we need to do this under the region entry lock
+              // set originRemote so that version is not generated but used from event
+              event.setOriginRemote(true);
+              if(myEntry instanceof  NonLocalRegionEntry) {
+                event.setNewValue(((NonLocalRegionEntry)myEntry).getUpdateDelta());
+              }
+              else {
+                event.setNewValue(myEntry._getValue());
+              }
+              if (myEntry.isTombstone()) {
+                event.setOperation(Operation.CREATE);
+                event.putNewEntry(region, uncommitted);
+              } else {
+                event.setOperation(Operation.UPDATE);
+                event.setEntryLastModified(myEntry.getLastModified());
+                // we will need to change it to update with delta
+                //event.setPutDML(true);
+                event.putExistingEntry(region, uncommitted, oldSize);
+                //uncommitted.setValueWithTombstoneCheck(committed._getValue(), event);
+              }
+            }
+          }
+        }
+      }
+      // we need to take RVV lock and record the recorded version in the snapshot so that
+      // there are no unnecessary exceptions recorded due to rollback
+      publishRecordedVersions();
+    } catch (RegionClearedException re) {
+      re.printStackTrace();
+    }
   }
 
   private void publishRecordedVersions() {
@@ -1157,6 +1260,23 @@ public final class TXState implements TXStateInterface {
         // also write a different recordVersion which will record without making clone
 
         cache.acquireWriteLockOnSnapshotRvv();
+        // Iterate over the my region entry reference
+        // take lock on the my region entry reference
+        // even my entry version could change ? check the version to confirm
+        // if version is same.i.e no other tx changed the re
+          // get the corresponding oldEntry region entry reference
+          // take lock?
+          // check if that entry has been committed
+          // if yes then merge my uncommitted change with the the corresponding one
+        // if version is higher
+          // find my corresponding entry from oldEntryMap
+            // get the corresponding committed/uncommitted region entry reference
+            // check if that entry has been committed
+            // if yes then merge my uncommitted change with the the corresponding one
+            // if no then don't do anything
+
+
+
         try {
           for (VersionInformation vi : queue) {
             if (TXStateProxy.LOG_FINE) {

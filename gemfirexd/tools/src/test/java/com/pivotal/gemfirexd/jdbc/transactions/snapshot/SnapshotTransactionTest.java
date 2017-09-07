@@ -2087,5 +2087,244 @@ public class SnapshotTransactionTest  extends JdbcTestBase {
     assert (numRows1 == 26);
 
   }
+
+  // test after disabling conflict, if last one wins
+  // it should be last commit that should win and its entry should be in
+  // the AbstractRegionMap
+  public void testConcurrentSnapshotUpdateAPI() throws Exception {
+    Connection conn = getConnection();
+    PartitionAttributesFactory paf = new PartitionAttributesFactory();
+    PartitionAttributes prAttr = paf.setTotalNumBuckets(1).create();
+    AttributesFactory attr = new AttributesFactory();
+    attr.setConcurrencyChecksEnabled(true);
+    attr.setPartitionAttributes(prAttr);
+    final Region r = GemFireCacheImpl.getInstance().createRegion("t1", attr.create());
+
+    r.getCache().getCacheTransactionManager().begin(IsolationLevel.SNAPSHOT, null);
+    Map map = new HashMap();
+    map.put(1,1);
+    r.putAll(map);
+    // even before commit it should be visible
+    assertEquals(1, r.get(1));
+    r.getCache().getCacheTransactionManager().commit();
+
+    //itr will work on a snapshot.
+    r.getCache().getCacheTransactionManager().begin(IsolationLevel.SNAPSHOT, null);
+    // read the entries
+    assertEquals(1, r.get(1));// get don't need to take from snapshot
+    TXStateInterface txstate = TXManagerImpl.getCurrentTXState();
+    Iterator txitr = txstate.getLocalEntriesIterator(null, false, false, true, (LocalRegion)r);
+    Iterator itr = ((LocalRegion)r).getSharedDataView().getLocalEntriesIterator(null, false, false, true, (LocalRegion)r);
+    // after this start another insert in a separate thread and those put shouldn't be visible
+    Object waiter1 = new Object();
+    Object waiter2 = new Object();
+    Boolean[] notified = {false};
+    Runnable run = new Runnable() {
+      @Override
+      public void run() {
+        r.getCache().getCacheTransactionManager().begin(IsolationLevel.SNAPSHOT, null);
+        r.put(1, 2);
+
+        synchronized (waiter2){
+          waiter2.notifyAll();
+          notified[0] = true;
+        }
+        synchronized (waiter1) {
+          try {
+            waiter1.wait();
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
+        }
+        r.getCache().getCacheTransactionManager().commit();
+      }
+    };
+    Thread t1 = new Thread(run);
+    t1.start();
+    synchronized (waiter2) {
+      if (!notified[0])
+        waiter2.wait();
+    }
+
+    int num = 0;
+    while (txitr.hasNext()) {
+      RegionEntry re = (RegionEntry)txitr.next();
+      if(!re.isTombstone()) {
+        num++;
+        // 1,1 and 2,2
+        assertEquals(re.getKey(), re.getValue(null));
+      }
+    }
+    assertEquals(1, num);
+    r.getCache().getCacheTransactionManager().commit();
+
+    run = new Runnable() {
+      @Override
+      public void run() {
+        r.getCache().getCacheTransactionManager().begin(IsolationLevel.SNAPSHOT, null);
+        r.put(1, 3);
+        r.getCache().getCacheTransactionManager().commit();
+        //dont commit!
+      }
+    };
+    Thread t2 = new Thread(run);
+    t2.start();
+    t2.join();
+
+    //take an snapshot again
+    r.getCache().getCacheTransactionManager().begin(IsolationLevel.SNAPSHOT, null);
+    // read the entries
+    num = 0;
+    while (itr.hasNext()) {
+      RegionEntry re = (RegionEntry)itr.next();
+      if(!re.isTombstone()) {
+        num++;
+        assertEquals(re.getKey(), 1);
+        assertEquals(3, re.getValue(null));
+      }
+    }
+    assertEquals(1, num);
+    r.getCache().getCacheTransactionManager().commit();
+
+    synchronized (waiter1){
+      waiter1.notifyAll();
+    }
+    t1.join();
+
+    r.getCache().getCacheTransactionManager().begin(IsolationLevel.SNAPSHOT, null);
+    // read the entries
+    num = 0;
+    while (itr.hasNext()) {
+      RegionEntry re = (RegionEntry)itr.next();
+      if(!re.isTombstone()) {
+        num++;
+        assertEquals(re.getKey(), 1);
+        assertEquals(2, re.getValue(null));
+      }
+    }
+    assertEquals(1, num);
+    r.getCache().getCacheTransactionManager().commit();
+
+  }
+
+  public void testConcurretnUpdateTable() throws Exception {
+    Connection conn = getConnection();
+    Statement st = conn.createStatement();
+    // Use single bucket as it will be easy to test versions
+    st.execute("Create table t1 (c1 int not null , c2 int not null ,c3 int not null, "
+        + "primary key(c1)) partition by column (c1) buckets 1 enable concurrency checks " + getSuffix
+        ());
+
+    conn.commit();
+    conn.setTransactionIsolation(getIsolationLevel());
+
+    st.execute("insert into t1 values(1,1,1)");
+    conn.commit();
+
+    int numRow = 0;
+    st.execute("select * from t1");
+    ResultSet rs = st.getResultSet();
+    while (rs.next()) {
+      assertEquals(1, rs.getInt(1));
+      assertEquals(1, rs.getInt(2));
+      assertEquals(1, rs.getInt(3));
+      numRow++;
+    }
+    assertEquals(1, numRow);
+
+    Object waiter1 = new Object();
+    Object waiter2 = new Object();
+    Boolean[] notified = {false};
+    Runnable run = new Runnable() {
+      @Override
+      public void run() {
+        try {
+          Connection conn1 = TestUtil.getConnection();
+          Misc.getGemFireCache().getCacheTransactionManager().begin(IsolationLevel.SNAPSHOT, null);
+          Statement st = conn1.createStatement();
+          st.execute("update t1 set c2 = 2 where c1 = 1");
+          synchronized (waiter2) {
+            waiter2.notifyAll();
+            notified[0] = true;
+          }
+          synchronized (waiter1) {
+            try {
+              waiter1.wait();
+            } catch (InterruptedException e) {
+              e.printStackTrace();
+            }
+          }
+          Misc.getGemFireCache().getCacheTransactionManager().commit();
+        } catch (SQLException e) {
+          e.printStackTrace();
+        }
+      }
+    };
+    Thread t1 = new Thread(run);
+    t1.start();
+    synchronized (waiter2) {
+      if (!notified[0])
+        waiter2.wait();
+    }
+
+    numRow = 0;
+    st.execute("select * from t1");
+    rs = st.getResultSet();
+    while (rs.next()) {
+      assertEquals(1, rs.getInt(1));
+      assertEquals(1, rs.getInt(2));
+      assertEquals(1, rs.getInt(3));
+      numRow++;
+    }
+    assertEquals(1, numRow);
+
+    run = new Runnable() {
+      @Override
+      public void run() {
+        try {
+          Connection conn1 = TestUtil.getConnection();
+          Misc.getGemFireCache().getCacheTransactionManager().begin(IsolationLevel.SNAPSHOT, null);
+          Statement st = conn1.createStatement();
+          st.execute("update t1 set c3 = 2 where c1 = 1");
+          Misc.getGemFireCache().getCacheTransactionManager().commit();
+        }catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+    };
+    Thread t2 = new Thread(run);
+    t2.start();
+    t2.join();
+
+    numRow = 0;
+    st.execute("select * from t1");
+    rs = st.getResultSet();
+    while (rs.next()) {
+      assertEquals(1, rs.getInt(1));
+      assertEquals(1, rs.getInt(2));
+      assertEquals(2, rs.getInt(3));
+      numRow++;
+    }
+    assertEquals(1, numRow);
+
+
+    synchronized (waiter1){
+      waiter1.notifyAll();
+    }
+    t1.join();
+
+    numRow = 0;
+    st.execute("select * from t1");
+    rs = st.getResultSet();
+    while (rs.next()) {
+      System.out.println();
+      assertEquals(1, rs.getInt(1));
+      assertEquals(2, rs.getInt(2));
+      assertEquals(2, rs.getInt(3));
+      numRow++;
+    }
+    assertEquals(1, numRow);
+
+  }
 }
 

@@ -699,6 +699,58 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
     }
   }
 
+
+  public RegionEntry getEntryFromOldMap(LocalRegion region, long version, Object entryKey, RegionEntry re) {
+    String regionPath = region.getFullPath();
+    if (re.getVersionStamp().getEntryVersion() <= 1) {
+      RegionEntry oldRegionEntry = NonLocalRegionEntry.newEntry(re.getKeyCopy(), Token.TOMBSTONE,
+          (LocalRegion)region, re.getVersionStamp().asVersionTag());
+      if (getLoggerI18n().fineEnabled()) {
+        getLoggerI18n().fine("Returning TOMBSTONE");
+      }
+      return oldRegionEntry;
+    } else {
+      List<RegionEntry> oldEntries = new ArrayList<>();
+      Map<Object, BlockingQueue<RegionEntry>> regionMap = oldEntryMap.get(regionPath);
+      if (regionMap == null) {
+        if (getLoggerI18n().fineEnabled()) {
+          getLoggerI18n().fine("For region  " + region + " the snapshot doesn't have any snapshot yet but there " +
+              "are entries present in the region" +
+              " the RVV " + ((LocalRegion)region).getVersionVector().fullToString() + " and snapshot RVV " +
+              ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() + "against the key " + entryKey +
+              " the entry in region is " + re + " with version " + re.getVersionStamp().asVersionTag());
+        }
+        return null;
+      }
+
+      BlockingQueue<RegionEntry> entries = regionMap.get(entryKey);
+      if (entries == null) {
+        if (getLoggerI18n().fineEnabled()) {
+          getLoggerI18n().fine("For region  " + region + " the snapshot doesn't have any snapshot yet but there " +
+              "are entries present in the region" +
+              " the RVV " + ((LocalRegion)region).getVersionVector().fullToString() + " and snapshot RVV " +
+              ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() + " the entries are " + entries + " against the key " + entryKey +
+              " the entry in region is " + re + " with version " + re.getVersionStamp().asVersionTag());
+        }
+        return null;
+      }
+      for (RegionEntry value : entries) {
+        if(value.getVersionStamp().getRegionVersion() == version){
+          if (getLoggerI18n().fineEnabled()) {
+            getLoggerI18n().fine("For region  " + region +
+                " the RVV " + ((LocalRegion)region).getVersionVector().fullToString() + " and snapshot RVV " +
+                ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() + " the entries are " + entries +
+                "against the key " + entryKey +
+                " the entry in region is " + re + " with version " + re.getVersionStamp().asVersionTag() +
+                " the oldEntries are " + oldEntries + " returning : " + value);
+          }
+          return value;
+        }
+      }
+    }
+    return null;
+  }
+
   public Map getOldEntriesForRegion(String regionName) {
     return oldEntryMap.get(regionName);
   }

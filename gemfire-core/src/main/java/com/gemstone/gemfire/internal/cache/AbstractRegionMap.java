@@ -3967,6 +3967,9 @@ RETRY_LOOP:
                         if (re.getVersionStamp().asVersionTag().getEntryVersion() > 0) {
                           oldRe = NonLocalRegionEntry.newEntryWithoutFaultIn(re, event.getRegion(), true);
                           oldRe.setUpdateInProgress(true);
+                          if (event.hasDelta())
+                            ((NonLocalRegionEntry)oldRe).setUpdateDelta(event.getDeltaNewValue());
+
                           checkConflict(owner, event, re);
                         }
                         // need to put old entry in oldEntryMap for MVCC
@@ -4137,7 +4140,11 @@ RETRY_LOOP:
       TXState localState = event.getTXState().getLocalTXState();
       if (!firstEntry(re)) {
         if (!TXState.checkEntryInSnapshot(localState, event.getRegion(), re)) {
-          throw new ConflictException("The value has changed.");
+          owner.getLogWriterI18n().info(LocalizedStrings.DEBUG, "Not conflicting .. The current re is " + re + " the event is " + event);
+          RegionEntry oldEntry = (RegionEntry)owner.getCache().readOldEntry
+              (owner, re.getKey(), localState.getCurrentSnapshot(), true, re, localState);
+          setOldValueInEvent(event, oldEntry, true, true);
+          //throw new ConflictException("The value has changed.");
         }
       }
     }

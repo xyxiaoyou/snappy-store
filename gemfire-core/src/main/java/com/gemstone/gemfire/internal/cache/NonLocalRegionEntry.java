@@ -36,6 +36,7 @@ import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedM
 import com.gemstone.gemfire.internal.Assert;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl.FactoryStatics;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl.StaticSystemCallbacks;
+import com.gemstone.gemfire.internal.cache.delta.Delta;
 import com.gemstone.gemfire.internal.cache.locks.ExclusiveSharedLockObject;
 import com.gemstone.gemfire.internal.cache.locks.LockMode;
 import com.gemstone.gemfire.internal.cache.locks.LockingPolicy;
@@ -54,6 +55,7 @@ public class NonLocalRegionEntry implements RegionEntry, VersionStamp {
   protected Object value;
   private VersionTag<?> versionTag;
   private boolean updateInProgress = false;
+  private Delta delta;
 
   /**
    * Create one of these in the local case so that we have a snapshot of the
@@ -310,7 +312,14 @@ public class NonLocalRegionEntry implements RegionEntry, VersionStamp {
     }
     return this.value;
   }
-  
+
+  public final void setUpdateDelta(Delta delta) {
+    this.delta = delta;
+  }
+
+  public Delta getUpdateDelta() {
+    return delta;
+  }
   /** update the value held in this non-local region entry */
   void setCachedValue(Object newValue) {
     this.value = newValue;
