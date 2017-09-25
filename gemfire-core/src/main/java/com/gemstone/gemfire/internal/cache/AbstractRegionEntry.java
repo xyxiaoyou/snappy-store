@@ -772,11 +772,11 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
     try {
     if (curValue == null) curValue = Token.NOT_AVAILABLE;
 
+    Object key = getRawKey();
+    if (key != null) {
+      region.decInMemoryKeySize(key);
+    }
     if (curValue == Token.NOT_AVAILABLE) {
-      Object key = getRawKey();
-      if( key != null ){
-        region.decInMemoryKeySize(key);
-      }
       // In some cases we need to get the current value off of disk.
       
       // if the event is transmitted during GII and has an old value, it was
@@ -1433,6 +1433,9 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
         setValueField(val);
         if (context != null) context.updateMemoryStats(rawOldVal, val);
         ((SerializedDiskBuffer)rawOldVal).release();
+        if (newEntry) {
+          context.incInMemoryKeySize(keyBefore);
+        }
         return;
       }
     }
@@ -1447,6 +1450,9 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
       setValueField(val);
       if (!isOffHeap && context != null) {
         context.updateMemoryStats(rawOldVal, val);
+        if (newEntry) {
+          context.incInMemoryKeySize(keyBefore);
+        }
       }
     }
     else {
