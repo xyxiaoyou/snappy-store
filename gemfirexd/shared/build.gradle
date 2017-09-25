@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -40,7 +40,7 @@ task createVersionPropertiesFile(dependsOn: 'processResources') {
       'Product-Name'      : PRODUCT_NAME,
       'Product-Version'   : version,
       'Enterprise-Edition': isEnterprise,
-      'Build-Id'          : System.env.USER + ' ' + buildNumber,
+      'Build-Id'          : buildIdPrefix + buildNumber,
       'Build-Date'        : buildDate,
       'Build-Platform'    : "${osName.getName()} ${osVersion} ${osArch}",
       'Build-Java-Version': jdkVersion,

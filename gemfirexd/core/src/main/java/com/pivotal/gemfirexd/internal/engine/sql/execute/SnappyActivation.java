@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -17,8 +17,13 @@
 
 package com.pivotal.gemfirexd.internal.engine.sql.execute;
 
-import com.gemstone.gemfire.internal.cache.LocalRegion;
-import com.pivotal.gemfirexd.internal.catalog.ExternalCatalog;
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Vector;
+
+import com.gemstone.gemfire.internal.cache.TXManagerImpl;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdQueryResultCollector;
@@ -27,9 +32,9 @@ import com.pivotal.gemfirexd.internal.engine.distributed.GfxdResultCollector;
 import com.pivotal.gemfirexd.internal.engine.distributed.SnappyResultHolder;
 import com.pivotal.gemfirexd.internal.engine.distributed.message.LeadNodeExecutorMsg;
 import com.pivotal.gemfirexd.internal.engine.distributed.metadata.DMLQueryInfo;
-import com.pivotal.gemfirexd.internal.engine.distributed.metadata.TableQueryInfo;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.jdbc.GemFireXDRuntimeException;
+import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.internal.iapi.sql.ParameterValueSet;
 import com.pivotal.gemfirexd.internal.iapi.sql.ResultDescription;
@@ -44,12 +49,6 @@ import com.pivotal.gemfirexd.internal.impl.sql.GenericResultDescription;
 import com.pivotal.gemfirexd.internal.impl.sql.execute.BaseActivation;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.snappy.LeadNodeExecutionContext;
-
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Vector;
 
 /**
  * Activation implementation for getting results from lead node.
@@ -193,7 +192,7 @@ public class SnappyActivation extends BaseActivation {
     boolean enableStreaming = this.lcc.streamingEnabled();
     GfxdResultCollector<Object> rc = getResultCollector(enableStreaming, rs);
     executeOnLeadNode(rs, rc, this.sql, enableStreaming, this.getConnectionID(), this.lcc
-        .getCurrentSchemaName(), this.pvs, this.isPrepStmt, this.isUpdateOrDelete);
+        .getCurrentSchemaName(), this.pvs, this.isPrepStmt, this.isUpdateOrDelete, this.lcc);
   }
 
   private void prepareWithResultSet(SnappyPrepareResultSet rs)
@@ -201,7 +200,7 @@ public class SnappyActivation extends BaseActivation {
     boolean enableStreaming = this.lcc.streamingEnabled();
     GfxdResultCollector<Object> rc = getPrepareResultCollector(rs);
     prepareOnLeadNode(rs, rc, this.sql, enableStreaming, this.getConnectionID(), this.lcc
-        .getCurrentSchemaName(), this.pvs, this.isUpdateOrDelete);
+        .getCurrentSchemaName(), this.pvs, this.isUpdateOrDelete, this.lcc);
   }
 
   private GfxdResultCollector<Object> getResultCollector(final boolean enableStreaming,
@@ -309,15 +308,25 @@ public class SnappyActivation extends BaseActivation {
     this.resultDescription = resultDescription;
   }
 
-  public static void executeOnLeadNode(SnappySelectResultSet rs, GfxdResultCollector<Object> rc,
+  private static void executeOnLeadNode(SnappySelectResultSet rs, GfxdResultCollector<Object> rc,
       String sql, boolean enableStreaming, long connId, String schema, ParameterValueSet pvs,
-      boolean isPreparedStatement, boolean isUpdateOrDelete)
+      boolean isPreparedStatement, boolean isUpdateOrDelete, LanguageConnectionContext lcc)
       throws StandardException {
     // TODO: KN probably username, statement id and connId to be sent in
     // execution and of course tx id when transaction will be supported.
     LeadNodeExecutionContext ctx = new LeadNodeExecutionContext(connId);
     LeadNodeExecutorMsg msg = new LeadNodeExecutorMsg(sql, schema, ctx, rc, pvs,
         isPreparedStatement, false, isUpdateOrDelete);
+    // release all locks before sending the message else it can lead to deadlocks
+    if (lcc != null) {
+      lcc.getTransactionExecute().releaseAllLocks(true, true);
+    }
+    // wait for any pending transactions before routing new operations to lead
+    final TXManagerImpl.TXContext txContext = TXManagerImpl
+        .currentTXContext();
+    if (txContext != null) {
+      txContext.waitForPendingCommit();
+    }
     try {
       msg.executeFunction(enableStreaming, false, rs, true);
     } catch (SQLException se) {
@@ -328,12 +337,15 @@ public class SnappyActivation extends BaseActivation {
 
   private static void prepareOnLeadNode(SnappyPrepareResultSet rs, GfxdResultCollector<Object> rc,
       String sql, boolean enableStreaming, long connId, String schema, ParameterValueSet pvs,
-      boolean isUpdateOrDelete) throws StandardException {
+      boolean isUpdateOrDelete, LanguageConnectionContext lcc) throws StandardException {
     // TODO: KN probably username, statement id and connId to be sent in
     // execution and of course tx id when transaction will be supported.
     LeadNodeExecutionContext ctx = new LeadNodeExecutionContext(connId);
     LeadNodeExecutorMsg msg = new LeadNodeExecutorMsg(sql, schema, ctx, rc, pvs,
         true, true, isUpdateOrDelete);
+    if (lcc != null) {
+      lcc.getTransactionExecute().releaseAllLocks(true, true);
+    }
     try {
       msg.executeFunction(enableStreaming, false, rs, true);
     } catch (SQLException se) {
@@ -342,29 +354,22 @@ public class SnappyActivation extends BaseActivation {
     }
   }
 
-  public static boolean isColumnTable(DMLQueryInfo dmlQueryInfo, boolean skipLocks) {
+  public static boolean isColumnTable(DMLQueryInfo dmlQueryInfo) {
     if (dmlQueryInfo != null) {
-      ExternalCatalog extCatalog = Misc.getMemStore().getExternalCatalog();
-      if (extCatalog != null) {
-        List<TableQueryInfo> allTables = dmlQueryInfo.getTableQueryInfoList();
-        if (allTables != null) {
-          for (TableQueryInfo t : allTables) {
-            if (null != t) {
-              LocalRegion region = t.getRegion();
-              // don't try to query hive for system tables etc
-              if (region != null && region.getScope().isLocal()) {
-                continue;
-              }
-              String tabName = t.getFullTableName();
-              boolean isColumnTable = extCatalog.isColumnTable(t.getSchemaName(), t.getTableName(), skipLocks);
-              if (GemFireXDUtils.TraceQuery) {
-                SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
-                    "SnappyActivation.isColumnTable: table-name=" + tabName +
-                        " ,isColumnTable=" + isColumnTable);
-              }
-              if (isColumnTable) {
-                return true;
-              }
+      List<GemFireContainer> allContainers = dmlQueryInfo.getContainerList();
+      boolean isColumnTable = false;
+      if (allContainers != null) {
+        for (GemFireContainer container : allContainers) {
+          if (null != container) {
+            isColumnTable = container.isRowBuffer();
+            if (GemFireXDUtils.TraceQuery) {
+              String tabName = container.getSchemaName() + container.getTableName();
+              SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
+                  "SnappyActivation.isColumnTable: table-name=" + tabName +
+                      " ,isColumnTable=" + isColumnTable);
+            }
+            if (isColumnTable) {
+              return true;
             }
           }
         }

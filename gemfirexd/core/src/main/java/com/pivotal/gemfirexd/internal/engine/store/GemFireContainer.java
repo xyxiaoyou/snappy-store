@@ -475,6 +475,18 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
     initTableFlags();
   }
 
+  private ExternalCatalog waitForHiveCatalogInit() {
+    ExternalCatalog ret;
+    int cnt = -1;
+    // Retrying after sleep of some millisecs to reduce the worst case
+    // of delaying that put for a large period of time
+    while ((ret = Misc.getMemStore().getExternalCatalog()) == null
+        && cnt < GfxdConstants.HA_NUM_RETRIES) {
+      GemFireXDUtils.sleepForRetry(cnt++);
+    }
+    return ret;
+  }
+
   public void invalidateHiveMetaData() {
     externalTableMetaData.set(null);
   }
@@ -491,12 +503,19 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
         schemaName = fullName.substring(0, schemaIndex);
         tableName = fullName.substring(schemaIndex + 1);
       }
+      ExternalCatalog extcat = Misc.getMemStore().getExternalCatalog();
+      if (extcat == null) {
+        extcat = waitForHiveCatalogInit();
+        if (extcat == null) {
+          throw new TimeoutException("The snappy catalog in hive metastore is not accessible");
+        }
+      }
       // containers are created during initialization, ignore them
-      externalTableMetaData.compareAndSet(null,
-          Misc.getMemStore().getExternalCatalog().getHiveTableMetaData(
+      externalTableMetaData.compareAndSet(null, extcat.getHiveTableMetaData(
               schemaName, tableName, true));
       if (isPartitioned()) {
         metaData = externalTableMetaData.get();
+        if (metaData == null) return null;
         ((PartitionedRegion)this.region).setColumnBatchSizes(
             metaData.columnBatchSize, metaData.columnMaxDeltaRows,
             GfxdConstants.SNAPPY_MIN_COLUMN_DELTA_ROWS);
@@ -1963,6 +1982,7 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
    */
   final void localDestroy(final GemFireTransaction tran)
       throws StandardException {
+    final LocalRegion region = this.region;
     if (this.skipListMap != null && this.baseContainer.isApplicationTable()) {
       this.skipListMap.clear();
       LocalRegion baseRegion;
@@ -1982,29 +2002,29 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
         }
       }
     }
-    else if (this.region == null || this.region.isDestroyed()) {
+    else if (region == null || region.isDestroyed()) {
       final LanguageConnectionContext lcc;
         // [sumedh] A genuine case should be caught at the derby level
         // while other case where it can arise is receiving a GfxdDDLMessage
         // for a region destruction that has already been replayed using
         // the hidden _DDL_STMTS_REGION.
-        if ((this.region == null || ((!Misc.initialDDLReplayInProgress() && tran != null)
+        if ((region == null || ((!Misc.initialDDLReplayInProgress() && tran != null)
             && (lcc = tran.getLanguageConnectionContext()) != null
             && !lcc.isConnectionForRemote()))
             && GemFireXDUtils.TraceDDLReplay) {
 //        if (GemFireXDUtils.TraceDDLReplay) {
           SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_DDLREPLAY,
               "GemFireContainer#destroy: region ["
-                  + (this.region != null ? this.region.getFullPath() : "null")
+                  + (region != null ? region.getFullPath() : "null")
                   + "] for table '" + this.qualifiedName
                   + "' already destroyed");
         throw new RegionDestroyedException(toString(), this.qualifiedName);
       }
     }
-    else if (this.region.isInitialized()) {
+    else if (region.isInitialized()) {
       // before dropping the table, ensure that WAN queues, if any, are
       // drained completely         
-      waitForGatewayQueuesToFlush();      
+      waitForGatewayQueuesToFlush();
       // Do not distribute region destruction to other caches since the
       // distribution is already handled by GfxdDDLMessages.
       // [sumedh] Special treatment for partitioned region to skip the parent
@@ -2012,25 +2032,24 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
       // DML on the region so there is no problem with inconsistency for PR with
       // parent region existing on some nodes and not on others.
       if (this.regionAttributes.getDataPolicy().withPartitioning()) {      
-//        ((PartitionedRegion)this.region).localDestroyRegion(null, true);
+//        ((PartitionedRegion)region).localDestroyRegion(null, true);
         final LanguageConnectionContext lcc;
         if (!Misc.initialDDLReplayInProgress() && tran != null
             && (lcc = tran.getLanguageConnectionContext()) != null
             && !lcc.isConnectionForRemote()) {
-          ((PartitionedRegion)this.region).destroyRegion(null);
+          region.destroyRegion(null);
+        } else if (Misc.initialDDLReplayInProgress()) {
+          ((PartitionedRegion)region).localDestroyRegion(null, true);
         }
-	else if (Misc.initialDDLReplayInProgress()) {
-	  ((PartitionedRegion)this.region).localDestroyRegion(null, true);
-	}
       }
       else {        
-        this.region.localDestroyRegion();
+        region.localDestroyRegion();
       }
       removeIdentityRegionEntries(tran);
     }
     else {
       // cleanup a failed initialization
-      this.region.cleanupFailedInitialization();
+      region.cleanupFailedInitialization();
     }
     if (this.globalIndexMap != null) {
       this.globalIndexMap.destroyCache();
@@ -5599,7 +5618,7 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
             !LocalRegion.isMetaTable(region.getFullPath())) {
           ExternalCatalog ec = Misc.getMemStore().getExternalCatalog();
           LanguageConnectionContext lcc = Misc.getLanguageConnectionContext();
-          if (ec != null && lcc != null && lcc.isQueryRoutingEnabled() &&
+          if (ec != null && lcc != null && lcc.isQueryRoutingFlagTrue() &&
               Misc.initialDDLReplayDone()) {
             if (ec.isColumnTable(schemaName, table.toString(), true)) {
               dvds[SYSTABLESRowFactory.SYSTABLES_TABLETYPE - 1] = new SQLChar("C");

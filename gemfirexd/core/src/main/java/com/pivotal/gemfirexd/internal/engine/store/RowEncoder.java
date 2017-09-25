@@ -18,6 +18,8 @@ package com.pivotal.gemfirexd.internal.engine.store;
 
 import java.util.Map;
 
+import com.gemstone.gemfire.internal.cache.BucketRegion;
+import com.gemstone.gemfire.internal.cache.EntryEventImpl;
 import com.gemstone.gemfire.internal.cache.RegionEntry;
 import com.pivotal.gemfirexd.internal.iapi.sql.execute.ExecRow;
 import com.pivotal.gemfirexd.internal.iapi.types.DataValueDescriptor;
@@ -42,4 +44,27 @@ public interface RowEncoder {
    * Decode the key from key columns as encoded by {@link #toRow}.
    */
   RegionKey fromRowToKey(DataValueDescriptor[] key, GemFireContainer container);
+
+  /**
+   * An interface to do some common pre-processing (e.g. set common UUID key)
+   * for a set of rows in a bulk/batch insert.
+   */
+  PreProcessRow getPreProcessorForRows(GemFireContainer container);
+
+  /**
+   * Any actions required after column store put operations which happen
+   * outside of entry locks (unlike a CacheListener)
+   */
+  void afterColumnStorePuts(BucketRegion bucket, EntryEventImpl[] events);
+
+  /**
+   * An interface to do some common pre-processing for bulk/batch inserts.
+   */
+  interface PreProcessRow {
+
+    /**
+     * Preprocess the current row and return the result.
+     */
+    DataValueDescriptor[] preProcess(DataValueDescriptor[] row);
+  }
 }

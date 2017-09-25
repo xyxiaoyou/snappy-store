@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -47,7 +47,7 @@ allprojects {
     antVersion = '1.9.7'
     pxfVersion = '2.5.1.0'
     osgiVersion = '6.0.0'
-    jettyVersion = '9.2.16.v20160414'
+    jettyVersion = '9.2.22.v20170606'
     hadoopVersion = '2.7.3'
     protobufVersion = '2.6.1'
     kryoVersion = '4.0.0'
@@ -61,6 +61,7 @@ allprojects {
     guavaVersion = '14.0.1'
     nettyAllVersion = '4.0.42.Final'
     jlineVersion = '2.14.2'
+    fastutilVersion = '8.1.0'
     //hbaseVersion = '0.94.4-gemfire-r45047'
     //hadoopVersion = '2.2.0-gphd-3.1.0.0'
     //hadoopVersion = '2.4.1-gphd-3.2.0.0-54'
@@ -78,8 +79,8 @@ allprojects {
 
     PRODUCT_MAJOR = '1'
     PRODUCT_MINOR = '5'
-    PRODUCT_MAINT = '5'
-    PRODUCT_CLASSIFIER = ''
+    PRODUCT_MAINT = '6'
+    PRODUCT_CLASSIFIER = '-rc1.1'
     PRODUCT_RELEASE_STAGE = ''
     PRODUCT_VERSION = "${PRODUCT_MAJOR}.${PRODUCT_MINOR}.${PRODUCT_MAINT}${PRODUCT_CLASSIFIER}"
     PRODUCT_VENDOR = 'SnappyData, Inc.'
@@ -96,6 +97,7 @@ allprojects {
     gitBranch = "${gitCmd} rev-parse --abbrev-ref HEAD".execute().text.trim()
     commitId = "${gitCmd} rev-parse HEAD".execute().text.trim()
     sourceDate = "${gitCmd} log -n 1 --format=%ai".execute().text.trim()
+    buildIdPrefix = System.env.USER + ' '
 
     osArch = System.getProperty('os.arch')
     osName = org.gradle.internal.os.OperatingSystem.current()
@@ -123,11 +125,14 @@ allprojects {
   } else {
     buildDir = 'build-artifacts/' + osDir
   }
+  if (rootProject.hasProperty('enablePublish')) {
+    buildIdPrefix = 'SnappyData, Inc. '
+  }
 
   ext {
     productDir = file("${rootProject.buildDir}/store")
     locDir = 'com/pivotal/gemfirexd/internal/loc'
-    clientMsgOutDir = "${project(subprojectBase + 'gemfirexd-core').buildDir}/client/${locDir}"
+    clientMsgOutDir = "${project(subprojectBase + 'snappydata-store-core').buildDir}/client/${locDir}"
     if (!rootProject.hasProperty('sanity')) {
       isSane = 'true'
     } else {
@@ -459,7 +464,7 @@ subprojects {
 
   test {
     dependsOn "${subprojectBase}storeProduct"
-    maxParallelForks = (2 * Runtime.getRuntime().availableProcessors())
+    maxParallelForks = (Runtime.getRuntime().availableProcessors() * 3) / 2
     minHeapSize = '1g'
     maxHeapSize = '1g'
 
@@ -621,7 +626,7 @@ subprojects {
 
   task integrationTest(type:Test) {
     dependsOn "${subprojectBase}storeProduct"
-    maxParallelForks = (2 * Runtime.getRuntime().availableProcessors())
+    maxParallelForks = Runtime.getRuntime().availableProcessors()
 
     include '**/*Test.class'
     exclude '**/*DUnitTest.class'
@@ -798,10 +803,10 @@ task junit {
   dependsOn subprojects.junit
 }
 task dunit {
-  dependsOn "${subprojectBase}gemfirexd-tools:dunit"
+  dependsOn "${subprojectBase}snappydata-store-tools:dunit"
 }
 task wan {
-  dependsOn "${subprojectBase}gemfirexd-tools:wan"
+  dependsOn "${subprojectBase}snappydata-store-tools:wan"
 }
 task integrationTest {
   dependsOn subprojects.integrationTest
@@ -832,15 +837,15 @@ if (!rootProject.hasProperty('store')) {
 task generateSources {
   dependsOn subprojectBase + 'gemfire-jgroups:jgMagic'
   dependsOn subprojectBase + 'gemfire-core:createVersionPropertiesFile'
-  dependsOn subprojectBase + 'gemfirexd-core:compileJavacc'
-  dependsOn subprojectBase + 'gemfirexd-core:generatePropertiesFiles'
+  dependsOn subprojectBase + 'snappydata-store-core:compileJavacc'
+  dependsOn subprojectBase + 'snappydata-store-core:generatePropertiesFiles'
   dependsOn subprojectBase + 'gemfire-core:createVersionPropertiesFile'
-  dependsOn subprojectBase + 'gemfirexd-shared:createVersionPropertiesFile'
-  dependsOn subprojectBase + 'gemfirexd-core:doSplit'
-  dependsOn subprojectBase + 'gemfirexd-core:odbcMeta'
-  dependsOn subprojectBase + 'gemfirexd-client:generatePropertiesFiles'
-  dependsOn subprojectBase + 'gemfirexd-tools:compileJavacc'
-  dependsOn subprojectBase + 'gemfirexd-tools:generatePropertiesFiles'
+  dependsOn subprojectBase + 'snappydata-store-shared:createVersionPropertiesFile'
+  dependsOn subprojectBase + 'snappydata-store-core:doSplit'
+  dependsOn subprojectBase + 'snappydata-store-core:odbcMeta'
+  dependsOn subprojectBase + 'snappydata-store-client:generatePropertiesFiles'
+  dependsOn subprojectBase + 'snappydata-store-tools:compileJavacc'
+  dependsOn subprojectBase + 'snappydata-store-tools:generatePropertiesFiles'
 }
 
 def includeJar(def jarFile) {
@@ -856,17 +861,17 @@ jar.enabled = false
 install.enabled = false
 
 // pack the entire GemFireXD product tree
-task storeProduct(dependsOn: [ subprojectBase + 'gemfirexd-client:shadowJar',
-    subprojectBase + 'gemfirexd-core:shadowJar',
-    subprojectBase + 'gemfirexd-tools:shadowJar' ]) << {
+task storeProduct(dependsOn: [ subprojectBase + 'snappydata-store-client:shadowJar',
+    subprojectBase + 'snappydata-store-core:shadowJar',
+    subprojectBase + 'snappydata-store-tools:shadowJar' ]) << {
 
   delete productDir
 
-  def sharedProject = project(subprojectBase + 'gemfirexd-shared')
-  def clientProject = project(subprojectBase + 'gemfirexd-client')
+  def sharedProject = project(subprojectBase + 'snappydata-store-shared')
+  def clientProject = project(subprojectBase + 'snappydata-store-client')
   def gemcoreProject = project(subprojectBase + 'gemfire-core')
-  def coreProject = project(subprojectBase + 'gemfirexd-core')
-  def toolsProject = project(subprojectBase + 'gemfirexd-tools')
+  def coreProject = project(subprojectBase + 'snappydata-store-core')
+  def toolsProject = project(subprojectBase + 'snappydata-store-tools')
 
   def gcmDir = System.getProperty('GCMDIR', '/gcm')
 
@@ -912,17 +917,29 @@ task storeProduct(dependsOn: [ subprojectBase + 'gemfirexd-client:shadowJar',
     fileMode 0755
   }
 
-  // the native JNI library
+  // the native JNI libraries
   if (osName.isLinux()) {
+    copy {
+      from gemcoreProject.projectDir.getAbsolutePath() + '/lib'
+      into "${productDir}/lib"
+      include '*.so'
+    }
     copy {
       from coreProject.projectDir.getAbsolutePath() + '/lib'
       into "${productDir}/lib"
     }
   }
+  if (osName.isWindows()) {
+    copy {
+      from gemcoreProject.projectDir.getAbsolutePath() + '/lib'
+      into "${productDir}/lib"
+      include '*.dll'
+    }
+  }
 
   // examples, javadocs, vsd
   copy {
-    from(project(subprojectBase + 'gemfirexd-core').projectDir.getAbsolutePath() + '/../examples') {
+    from(project(subprojectBase + 'snappydata-store-core').projectDir.getAbsolutePath() + '/../examples') {
       exclude 'src/main/java/mapreduce/README.txt'
       exclude 'src/main/java/mapreduce/pom.xml'
     }
@@ -933,7 +950,7 @@ task storeProduct(dependsOn: [ subprojectBase + 'gemfirexd-client:shadowJar',
     into "${productDir}/examples"
   }
   copy {
-    from(project(subprojectBase + 'gemfirexd-core').projectDir.getAbsolutePath() + '/../examples') {
+    from(project(subprojectBase + 'snappydata-store-core').projectDir.getAbsolutePath() + '/../examples') {
       include 'src/main/java/mapreduce/README.txt'
       include 'src/main/java/mapreduce/pom.xml'
     }
@@ -943,7 +960,7 @@ task storeProduct(dependsOn: [ subprojectBase + 'gemfirexd-client:shadowJar',
     }
   }
   copy {
-    from (project(subprojectBase + 'gemfirexd-core').projectDir.getAbsolutePath() + '/../quickstart')
+    from (project(subprojectBase + 'snappydata-store-core').projectDir.getAbsolutePath() + '/../quickstart')
     into "${productDir}/quickstart"
   }
   copy {
@@ -988,7 +1005,7 @@ task storeProduct(dependsOn: [ subprojectBase + 'gemfirexd-client:shadowJar',
       include 'hydratest/hydracheck/*.sh'
       include 'bin/scaleperf/*'
     }
-    from (project(subprojectBase +  'gemfirexd-tests').projectDir.getAbsolutePath() + '/src/main/java') {
+    from (project(subprojectBase +  'snappydata-store-tests').projectDir.getAbsolutePath() + '/src/main/java') {
       include '**/*.bt'
       include '**/*.conf'
       include '**/*.inc'
@@ -1001,12 +1018,12 @@ task storeProduct(dependsOn: [ subprojectBase + 'gemfirexd-client:shadowJar',
       include '**/*.ts'
       include '**/*.pl'
     }
-    into (project(subprojectBase + 'gemfirexd-tests').buildDir.getAbsolutePath() + '/classes/main')
+    into (project(subprojectBase + 'snappydata-store-tests').buildDir.getAbsolutePath() + '/classes/main')
   }
 }
 if (rootProject.hasProperty('docs')) {
-  storeProduct.dependsOn subprojectBase + 'gemfirexd-shared:javadoc',
-                    subprojectBase + 'gemfirexd-core:javadoc'
+  storeProduct.dependsOn subprojectBase + 'snappydata-store-shared:javadoc',
+                    subprojectBase + 'snappydata-store-core:javadoc'
 }
 
 task cleanAll {

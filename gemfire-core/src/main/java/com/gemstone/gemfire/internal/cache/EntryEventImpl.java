@@ -107,7 +107,6 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.UUID;
 
 /**
  * Implementation of an entry event
@@ -1823,13 +1822,13 @@ public class EntryEventImpl extends KeyInfo implements
       if (this.memoryTracker != null) {
         owner.acquirePoolMemory(oldSize,
                 event.getNewValueBucketSize(),
-                true,
+                false,
                 this.memoryTracker,
                 true);
       } else {
         owner.delayedAcquirePoolMemory(oldSize,
                 event.getNewValueBucketSize(),
-                true,
+                false,
                 true);
       }
     } else {
@@ -2320,6 +2319,10 @@ public class EntryEventImpl extends KeyInfo implements
     return (this.delta != null);
   }
 
+  public final boolean hasColumnDelta() {
+    return this.delta instanceof SerializedDiskBuffer;
+  }
+
   /**
    * Return true for an internal Delta that requires an old value in region.
    */
@@ -2520,8 +2523,6 @@ public class EntryEventImpl extends KeyInfo implements
     buf.append(this.getBucketId());
     buf.append(";tailKey=");
     buf.append(this.getTailKey());
-    buf.append(";batchIDUUID=");
-    buf.append(this.getBatchUUID());
     buf.append(";oldValue=");
     try {
       ArrayUtils.objectStringNonRecursive(basicGetOldValue(), buf);
@@ -2882,8 +2883,6 @@ public class EntryEventImpl extends KeyInfo implements
   }
 
   protected long tailKey = -1L;
-  protected UUID batchUUID = BucketRegion.zeroUUID;
-
   /**
    * Return true if this event came from a server by the client doing a get.
    * @since 5.7
@@ -3253,14 +3252,6 @@ public class EntryEventImpl extends KeyInfo implements
     return this.tailKey;
   }
 
-  public final UUID getBatchUUID() {
-    return this.batchUUID;
-  }
-
-  public final void setBatchUUID(UUID uuid) {
-    this.batchUUID = uuid;
-  }
-
   private Thread invokeCallbacksThread;
   private long currentOpLogKeyId = -1;
 
@@ -3442,7 +3433,6 @@ public class EntryEventImpl extends KeyInfo implements
     this.deltaBytes = null;
     this.txState = null;
     this.tailKey = -1L;
-    this.batchUUID = BucketRegion.zeroUUID;
     this.versionTag = null;
     if (!keepLastModifiedTime) {
       this.entryLastModified = -1L;

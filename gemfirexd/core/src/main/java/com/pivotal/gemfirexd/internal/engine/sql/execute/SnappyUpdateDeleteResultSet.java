@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -25,7 +25,7 @@ public final class SnappyUpdateDeleteResultSet extends SnappySelectResultSet {
 
   private int rowCount = -1;
 
-  public SnappyUpdateDeleteResultSet(Activation ac, boolean returnRows) {
+  SnappyUpdateDeleteResultSet(Activation ac, boolean returnRows) {
     super(ac, returnRows);
   }
 
@@ -40,9 +40,7 @@ public final class SnappyUpdateDeleteResultSet extends SnappySelectResultSet {
       rowCount = 0;
       try {
         ExecRow row;
-        while ((row = getNextRow()) != null
-            && row.nColumns() > 0 // TODO: Remove after SNAP-1944
-            ) {
+        while ((row = getNextRow()) != null && row.nColumns() > 0) {
           rowCount += row.getLastColumn().getInt();
         }
       } catch (Exception ex) {

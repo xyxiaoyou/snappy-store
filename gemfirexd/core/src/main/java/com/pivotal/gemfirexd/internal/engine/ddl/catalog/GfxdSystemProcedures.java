@@ -31,6 +31,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.logging.Level;
 import javax.annotation.Nonnull;
 
 import com.gemstone.gemfire.DataSerializer;
@@ -121,6 +122,7 @@ import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.snappy.LeadNodeSmartConnectorOpContext;
 import com.pivotal.gemfirexd.load.Import;
 import io.snappydata.thrift.ServerType;
+import org.apache.log4j.LogManager;
 
 /**
  * GemFireXD built-in system procedures that will get executed on every
@@ -2004,6 +2006,8 @@ public class GfxdSystemProcedures extends SystemProcedures {
       String codeset, short replace, short lockTable, int numThreads,
       short caseSensitiveNames, String importClassName, String errorFile)
       throws SQLException {
+
+    Misc.invalidSnappyDataFeature("IMPORT_TABLE_EX procedure");
     Connection conn = getDefaultConn();
     try {
       // not sure whether this is also a bug in Derby or not,
@@ -2056,6 +2060,8 @@ public class GfxdSystemProcedures extends SystemProcedures {
       String columnDelimiter, String characterDelimiter, String codeset,
       short replace, short lockTable, int numThreads, short caseSensitiveNames,
       String importClassName, String errorFile) throws SQLException {
+
+    Misc.invalidSnappyDataFeature("IMPORT_DATA_EX procedure");
     Connection conn = getDefaultConn();
     try {
       // tableName and schemaName need to be case insensitive.
@@ -2107,6 +2113,8 @@ public class GfxdSystemProcedures extends SystemProcedures {
       String characterDelimiter, String codeset, short replace,
       short lockTable, int numThreads, short caseSensitiveNames,
       String importClassName, String errorFile) throws SQLException {
+
+    Misc.invalidSnappyDataFeature("IMPORT_TABLE_LOBS_FROM_EXTFILE procedure");
     Connection conn = getDefaultConn();
     try {
       // tableName and schemaName need to be case insensitive.
@@ -2160,6 +2168,8 @@ public class GfxdSystemProcedures extends SystemProcedures {
       String codeset, short replace, short lockTable, int numThreads,
       short caseSensitiveNames, String importClassName, String errorFile)
       throws SQLException {
+
+    Misc.invalidSnappyDataFeature("IMPORT_DATA_LOBS_FROM_EXTFILE procedure");
     Connection conn = getDefaultConn();
     try {
       // tableName and schemaName need to be case insensitive.
@@ -2186,6 +2196,22 @@ public class GfxdSystemProcedures extends SystemProcedures {
 
     // import finished successfully, commit it.
     conn.commit();
+  }
+
+  /**
+   * This procedure sets the log level for either the root logger or a class.
+   * If the logClass is empty string, the root logger's level is set.
+   */
+  public static void SET_LOG_LEVEL(String logClass, String level)
+          throws SQLException, StandardException {
+
+    final Object[] params = new Object[] { logClass, level };
+    // first process locally
+    GfxdSystemProcedureMessage.SysProcMethod.setLogLevel.processMessage(
+            params, Misc.getMyId());
+    // then publish to other members including locators
+    publishMessage(params, false,
+            GfxdSystemProcedureMessage.SysProcMethod.setLogLevel, false, true);
   }
 
   /**
