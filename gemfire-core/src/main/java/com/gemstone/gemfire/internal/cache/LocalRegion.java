@@ -14524,9 +14524,7 @@ public class LocalRegion extends AbstractRegion
   private final AtomicLong keyBytesInMemory = new AtomicLong();
 
   /**
-   * Based on the old and current key object of RegionEntry this method either increases
-   * or decreases the total in memory key size.
-   * Logic to increase or decrease
+   * Increase the in memory counter keyBytesInMemory with key size
    * @param key
    */
   @Override
@@ -14536,11 +14534,12 @@ public class LocalRegion extends AbstractRegion
     this.acquirePoolMemory(0L, keySize, false, null, true);
   }
 
+  /**
+   * Decrease the in memory counter keyBytesInMemory with key size
+   * @param key
+   */
   @Override
   public void decInMemoryKeySize(Object key) {
-/*    if(this.getFullPath().toLowerCase().contains("t1")){
-      Thread.dumpStack();
-    }*/
     int keySize = CachedDeserializableFactory.calcMemSize(key);
     keyBytesInMemory.addAndGet(-1 * keySize);
     this.freePoolMemory(keySize, false);
