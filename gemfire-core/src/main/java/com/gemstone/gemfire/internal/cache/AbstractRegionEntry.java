@@ -771,8 +771,12 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
     SimpleMemoryAllocatorImpl.unskipRefCountTracking();
     try {
     if (curValue == null) curValue = Token.NOT_AVAILABLE;
-    
+
     if (curValue == Token.NOT_AVAILABLE) {
+      Object key = getRawKey();
+      if( key != null ){
+        region.decInMemoryKeySize(key);
+      }
       // In some cases we need to get the current value off of disk.
       
       // if the event is transmitted during GII and has an old value, it was
@@ -1421,6 +1425,8 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
     // release old SerializedDiskBuffer explicitly for eager cleanup
     final boolean isOffHeap = isOffHeap();
     Object rawOldVal = null;
+    Object keyBefore = getRawKey();
+    boolean newEntry = (getValueAsToken() == Token.REMOVED_PHASE1);
     if (!isOffHeap) {
       rawOldVal = getValueField();
       if (rawOldVal != val && rawOldVal instanceof SerializedDiskBuffer) {
@@ -1451,6 +1457,7 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
       SimpleMemoryAllocatorImpl.skipRefCountTracking();
       @Retained @Released Object oldValue = _getValueRetain(region, true);
       SimpleMemoryAllocatorImpl.unskipRefCountTracking();
+
       try {
       int tries = 1;
       for (;;) {
@@ -1473,6 +1480,12 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
           }
           if (!isOffHeap && context != null) {
             context.updateMemoryStats(rawOldVal, val);
+
+            if(keyBefore == null && key != null) {
+              context.incInMemoryKeySize(key); // Evictions
+            } else if (keyBefore != null && key == null && !newEntry) {
+              context.decInMemoryKeySize(keyBefore); // Fault-ins
+            }
           }
           // also upgrade GemFireXD schema information if required; there is no
           // problem of concurrency since GFXD DDL cannot happen concurrently

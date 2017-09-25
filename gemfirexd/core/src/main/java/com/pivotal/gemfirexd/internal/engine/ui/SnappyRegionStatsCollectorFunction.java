@@ -145,10 +145,6 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
   private long getEntryOverhead(RegionEntry entry,
       GemFireXDInstrumentation sizer) {
     long entryOverhead = sizer.sizeof(entry);
-    Object key = entry.getRawKey();
-    if (key != null) {
-      entryOverhead += sizer.sizeof(key);
-    }
     if (entry instanceof DiskEntry) {
       entryOverhead += sizer.sizeof(((DiskEntry)entry).getDiskId());
     }

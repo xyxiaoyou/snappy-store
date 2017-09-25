@@ -126,6 +126,9 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   private final AtomicLongWithTerminalState bytesInMemory =
     new AtomicLongWithTerminalState();
 
+  private final AtomicLongWithTerminalState keyBytesInMemory =
+      new AtomicLongWithTerminalState();
+
   private final AtomicLong inProgressSize = new AtomicLong();
 
   public static final ReadEntryUnderLock READ_SER_VALUE = new ReadEntryUnderLock() {
@@ -2959,6 +2962,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   public long getSizeInMemory() {
     return Math.max(this.bytesInMemory.get(), 0L);
   }
+
 
   public long getInProgressSize() {
     return inProgressSize.get();

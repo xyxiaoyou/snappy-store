@@ -48,4 +48,12 @@ public interface RegionEntryContext extends HasCachePerfStats {
   default void updateMemoryStats(Object oldValue, Object newValue) {
     // only used by BucketRegion as of now
   }
+
+  default public void incInMemoryKeySize(Object key) {
+    // only used by BucketRegion as of now
+  }
+
+  default public void decInMemoryKeySize(Object key) {
+    // only used by BucketRegion as of now
+  }
 }
