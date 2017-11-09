@@ -363,6 +363,12 @@ public abstract class GfxdFunctionMessage<T> extends
         final boolean retry = msg.isHA();
         if (retry && retryCnt > 0
             && GemFireXDUtils.retryToBeDone(e, messageRetryCount)) {
+          if (this instanceof GetAllLocalIndexExecutorMessage &&
+              (e instanceof GfxdDDLReplayInProgressException ||
+                  e.getCause() instanceof GfxdDDLReplayInProgressException)) {
+            throw new FunctionException("VB: Unexpected exception from uninitialized node. List=" +
+                Arrays.toString(getGemFireCache().getUnInitializedMembers()), e);
+          }
           // TODO: TX: currently cannot retry in absence of a mechanism to
           // restore TX state to previous condition (checkpoint)
           if (msg.optimizeForWrite() && msg.isTransactional()) {

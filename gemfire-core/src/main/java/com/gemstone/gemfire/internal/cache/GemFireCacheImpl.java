@@ -5553,6 +5553,13 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
     }
   }
 
+  public InternalDistributedMember[] getUnInitializedMembers() {
+    synchronized (this.unInitializedMembers) {
+      return this.unInitializedMembers.toArray(
+          new InternalDistributedMember[this.unInitializedMembers.size()]);
+    }
+  }
+
   /**
    * Return false for volunteer primary if this node is not currently initialized. Also adds the {@link BucketAdvisor}
    * to a list that will be replayed once this node is initialized.
