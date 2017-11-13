@@ -166,19 +166,19 @@ public class UpdateQueryInfo extends DMLQueryInfo {
         if (cqi.isTableInfoMissing()) {
           cqi.setMissingTableInfo(tqi);
         }
-        if (cqi.isUsedInPartitioning()) {
-          throw StandardException.newException(SQLState.NOT_IMPLEMENTED,
-              "Update of partitioning column not supported");
-        }
+//        if (cqi.isUsedInPartitioning()) {
+//          throw StandardException.newException(SQLState.NOT_IMPLEMENTED,
+//              "Update of partitioning column not supported");
+//        }
         // For the time being since we are allowing only one table
         // the columns are necessarily part of the lone TableQueryInfo
         // Later the check needs to be more robust
-        if (cqi.isPartOfPrimaryKey(tqi.getPrimaryKeyColumns())) {
-          throw StandardException
-              .newException(
-                  SQLState.NOT_IMPLEMENTED,
-                  "Update of column which is primary key or is part of the primary key, not supported");
-        }
+//        if (cqi.isPartOfPrimaryKey(tqi.getPrimaryKeyColumns())) {
+//          throw StandardException
+//              .newException(
+//                  SQLState.NOT_IMPLEMENTED,
+//                  "Update of column which is primary key or is part of the primary key, not supported");
+//        }
         /* No need to go through function execution for unique constraints
         if(checkForColumnConstr && cqi.isReferencedByUniqueConstraint()) {
           checkForColumnConstr = false;
