@@ -45,7 +45,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -60,6 +60,7 @@ import com.gemstone.gemfire.admin.jmx.Agent;
 import com.gemstone.gemfire.admin.jmx.AgentConfig;
 import com.gemstone.gemfire.admin.jmx.AgentFactory;
 import com.gemstone.gemfire.cache.*;
+import com.gemstone.gemfire.cache.TimeoutException;
 import com.gemstone.gemfire.cache.execute.FunctionService;
 import com.gemstone.gemfire.cache.util.ObjectSizer;
 import com.gemstone.gemfire.distributed.DistributedMember;
@@ -74,7 +75,6 @@ import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedM
 import com.gemstone.gemfire.i18n.LogWriterI18n;
 import com.gemstone.gemfire.internal.Assert;
 import com.gemstone.gemfire.internal.ClassPathLoader;
-import com.gemstone.gemfire.internal.GFToSlf4jBridge;
 import com.gemstone.gemfire.internal.GemFireLevel;
 import com.gemstone.gemfire.internal.HostStatSampler.StatsSamplerCallback;
 import com.gemstone.gemfire.internal.LogWriterImpl;
@@ -83,6 +83,7 @@ import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.FinalizeObject;
+import com.gemstone.gemfire.internal.shared.LauncherBase;
 import com.gemstone.gemfire.internal.shared.StringPrintWriter;
 import com.gemstone.gnu.trove.THashMap;
 import com.gemstone.gnu.trove.TLongHashSet;
@@ -378,7 +379,13 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
    * should be set as soon as the first embedded connection is created
    * and will not change ever.
    */
-  private ExternalCatalog externalCatalog;
+  private volatile ExternalCatalog externalCatalog;
+
+  private volatile Future<?> externalCatalogInit;
+
+  public static final ThreadLocal<Boolean> externalCatalogInitThread =
+      new ThreadLocal<>();
+
   /**
    *************************************************************************
    * Public Methods implementing AccessFactory Interface
@@ -909,28 +916,28 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
       this.hdfsRootDir = propValue;
     }
     propValue = PropertyUtil.findAndGetProperty(props,
-        CacheServerLauncher.CRITICAL_HEAP_PERCENTAGE, GfxdConstants.GFXD_PREFIX
-            + CacheServerLauncher.CRITICAL_HEAP_PERCENTAGE);
+        LauncherBase.CRITICAL_HEAP_PERCENTAGE, GfxdConstants.GFXD_PREFIX
+            + LauncherBase.CRITICAL_HEAP_PERCENTAGE);
     if (propValue != null) {
       criticalHeapPercent = Float.parseFloat(propValue);
     }
     propValue = PropertyUtil.findAndGetProperty(props,
-        CacheServerLauncher.EVICTION_HEAP_PERCENTAGE, GfxdConstants.GFXD_PREFIX
-            + CacheServerLauncher.EVICTION_HEAP_PERCENTAGE);
+        LauncherBase.EVICTION_HEAP_PERCENTAGE, GfxdConstants.GFXD_PREFIX
+            + LauncherBase.EVICTION_HEAP_PERCENTAGE);
     if (propValue != null) {
       evictionHeapPercent = Float.parseFloat(propValue);
     }
     propValue = PropertyUtil.findAndGetProperty(props,
-        CacheServerLauncher.CRITICAL_OFF_HEAP_PERCENTAGE,
+        LauncherBase.CRITICAL_OFF_HEAP_PERCENTAGE,
         GfxdConstants.GFXD_PREFIX
-            + CacheServerLauncher.CRITICAL_OFF_HEAP_PERCENTAGE);
+            + LauncherBase.CRITICAL_OFF_HEAP_PERCENTAGE);
     if (propValue != null) {
       criticalOffHeapPercent = Float.parseFloat(propValue);
     }
     propValue = PropertyUtil.findAndGetProperty(props,
-        CacheServerLauncher.EVICTION_OFF_HEAP_PERCENTAGE,
+        LauncherBase.EVICTION_OFF_HEAP_PERCENTAGE,
         GfxdConstants.GFXD_PREFIX
-            + CacheServerLauncher.EVICTION_OFF_HEAP_PERCENTAGE);
+            + LauncherBase.EVICTION_OFF_HEAP_PERCENTAGE);
     if (propValue != null) {
       evictionOffHeapPercent = Float.parseFloat(propValue);
     }
@@ -2069,8 +2076,9 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
       return;
     }
 
-    if (this.externalCatalog != null) {
-      this.externalCatalog.stop();
+    final ExternalCatalog externalCatalog = this.externalCatalog;
+    if (externalCatalog != null) {
+      externalCatalog.close();
     }
     // stop spark executor if it is running
     CallbackFactoryProvider.getClusterCallbacks().stopExecutor();
@@ -2101,7 +2109,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
       }
     });
     try {
-      stopper.join(5000L);
+      stopper.join(3000L);
       if (stopper.isAlive()) {
         // interrupt the stopper
         stopper.interrupt();
@@ -2397,43 +2405,91 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
 
   // The first access of this will instantiate the snappy catalog
 	public void initExternalCatalog() {
-    GFToSlf4jBridge bridgeLogger = ((GFToSlf4jBridge)Misc.getI18NLogWriter());
-    int previousLevel = bridgeLogger.getLevel();
-    try {
-      // just log the warning messages, during hive client initialization
-      // as it generates hundreds of line of logs which are of no use.
-      // Once the initialization is done, restore the logging level.
-      bridgeLogger.setLevel(LogWriterImpl.WARNING_LEVEL);
-
-      if (this.externalCatalog == null) {
-        synchronized (this) {
-          if (this.externalCatalog == null) {
-            // Instantiate using reflection
-            try {
-              this.externalCatalog = (ExternalCatalog)ClassPathLoader
-                  .getLatest().forName("io.snappydata.impl.SnappyHiveCatalog")
-                  .newInstance();
-            } catch (InstantiationException | IllegalAccessException
-                | ClassNotFoundException e) {
-              throw new IllegalStateException(
-                  "could not instantiate the snappy catalog", e);
-            }
+    if (this.externalCatalog == null) {
+      synchronized (this) {
+        if (this.externalCatalog == null) {
+          // Instantiate using reflection
+          try {
+            this.externalCatalog = (ExternalCatalog)ClassPathLoader
+                .getLatest().forName("io.snappydata.impl.SnappyHiveCatalog")
+                .newInstance();
+          } catch (InstantiationException | IllegalAccessException
+              | ClassNotFoundException e) {
+            throw new IllegalStateException(
+                "could not instantiate the snappy catalog", e);
           }
         }
       }
-      if (this.externalCatalog == null) {
-        throw new IllegalStateException(
-            "could not instantiate snappy catalog");
-      }
-    } catch(Throwable ex) {
-      throw new RuntimeException(ex);
-    } finally {
-      bridgeLogger.setLevel(previousLevel);
     }
-	}
+    if (this.externalCatalog == null) {
+      throw new IllegalStateException("Could not instantiate snappy catalog");
+    }
+  }
+
+  public void setExternalCatalogInit(Future<?> init) {
+    this.externalCatalogInit = init;
+  }
+
+  public static boolean handleCatalogInit(Future<?> init) {
+    try {
+      init.get(60, TimeUnit.SECONDS);
+      return true;
+    } catch (java.util.concurrent.TimeoutException e) {
+      return false;
+    } catch (ExecutionException e) {
+      throw new RuntimeException(e.getCause());
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * Get the {@link ExternalCatalog} or wait for it to be initialized, or else
+   * throw a {@link TimeoutException} if wait failed unsuccessfully but never
+   * return a null.
+   */
+  public ExternalCatalog getExistingExternalCatalog() {
+    ExternalCatalog catalog;
+    int cnt = 0;
+    // retry catalog get after some sleep
+    while ((catalog = getExternalCatalog()) == null && ++cnt < 10) {
+      Throwable t = null;
+      try {
+        Thread.sleep(2);
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        t = ie;
+      }
+      // check for JVM going down
+      Misc.checkIfCacheClosing(t);
+    }
+    if (catalog != null) {
+      return catalog;
+    } else {
+      throw new TimeoutException(
+          "The SnappyData catalog in hive meta-store is not accessible");
+    }
+  }
 
   public ExternalCatalog getExternalCatalog() {
-    return this.externalCatalog;
+    return getExternalCatalog(true);
+  }
+
+  public ExternalCatalog getExternalCatalog(boolean fullInit) {
+    final ExternalCatalog externalCatalog;
+    if ((externalCatalog = this.externalCatalog) != null &&
+        externalCatalog.waitForInitialization()) {
+      if (fullInit) {
+        final Future<?> init = this.externalCatalogInit;
+        if (init != null && !Boolean.TRUE.equals(externalCatalogInitThread.get())
+            && !handleCatalogInit(init)) {
+          return null;
+        }
+      }
+      return externalCatalog;
+    } else {
+      return null;
+    }
   }
 
   public void setDBName(String dbname) {
