@@ -54,6 +54,8 @@ public class SnapshotTxGIIDUnit extends DistributedSQLTestBase {
 
   public static final String regionName = "GII_TEST_T1";
 
+  public static final String childregionName = "GII_TEST_T2";
+
   @Override
   protected String reduceLogging() {
     return "fine";
@@ -126,6 +128,32 @@ public class SnapshotTxGIIDUnit extends DistributedSQLTestBase {
     assertNotNull(pr);
   }
 
+  public static void createColocatedPR(String name, String parent, Integer redundancy, Integer totalNumBuckets) {
+    final GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
+    assertNotNull(cache);
+    DiskStore ds = cache.findDiskStore("disk");
+    if (ds == null) {
+      ds = cache.createDiskStoreFactory()
+          .setDiskDirs(getDiskDirs()).create("disk");
+    }
+
+    PartitionAttributesFactory paf = new PartitionAttributesFactory();
+    paf.setRedundantCopies(redundancy.intValue())
+        .setLocalMaxMemory(50).setTotalNumBuckets(
+        totalNumBuckets.intValue());
+    paf.setColocatedWith(parent);
+    PartitionAttributes prAttr = paf.create();
+    AttributesFactory attr = new AttributesFactory();
+    attr.setPartitionAttributes(prAttr);
+    attr.setDataPolicy(DataPolicy.PERSISTENT_PARTITION);
+    attr.setDiskStoreName("disk");
+    attr.setDiskSynchronous(true);
+    attr.setConcurrencyChecksEnabled(true);
+
+    Region pr = cache.createRegion(name, attr.create());
+    assertNotNull(pr);
+  }
+
   public static void createRR(String regionName) {
     final GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
     assertNotNull(cache);
@@ -148,6 +176,15 @@ public class SnapshotTxGIIDUnit extends DistributedSQLTestBase {
       Thread.sleep(millis);
     } catch (InterruptedException e) {
       e.printStackTrace();
+    }
+  }
+
+  private void putSomeValuesInRegion(int numValues, String regionName) {
+    final GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
+    final Region r = cache.getRegion(regionName);
+    Map<Integer, Integer> m = new HashMap();
+    for (int i = 0; i < numValues; i++) {
+      r.put(i, i);
     }
   }
 
@@ -182,6 +219,71 @@ public class SnapshotTxGIIDUnit extends DistributedSQLTestBase {
     }
     r.getCache().getCacheTransactionManager().commit();
   }
+
+
+  public void testDiskCorruption() throws Exception {
+
+    startVMs(0, 3);
+    Properties props = new Properties();
+    final Connection conn = TestUtil.getConnection(props);
+    conn.createStatement();
+
+    VM server1 = this.serverVMs.get(0);
+    VM server2 = this.serverVMs.get(1);
+    VM server3 = this.serverVMs.get(2);
+
+    server1.invoke(SnapshotTxGIIDUnit.class, "createPR", new Object[]{regionName, 1, 1024});
+    server2.invoke(SnapshotTxGIIDUnit.class, "createPR", new Object[]{regionName, 1, 1024});
+    server3.invoke(SnapshotTxGIIDUnit.class, "createPR", new Object[]{regionName, 1, 1024});
+
+    for (int i = 0; i < 20; i++) {
+      server1.invoke(SnapshotTxGIIDUnit.class, "createColocatedPR",
+          new Object[]{childregionName + i, regionName, 1, 1024});
+      server2.invoke(SnapshotTxGIIDUnit.class, "createColocatedPR",
+          new Object[]{childregionName + i, regionName, 1, 1024});
+      server3.invoke(SnapshotTxGIIDUnit.class, "createColocatedPR",
+          new Object[]{childregionName + i, regionName, 1, 1024});
+    }
+
+    // Put some values to initialize buckets
+    server1.invoke(new SerializableRunnable() {
+      @Override
+      public void run() {
+        putSomeValuesInRegion(500000, regionName);
+        for (int i = 0; i < 20; i++) {
+          putSomeValuesInRegion(500000, childregionName + i);
+        }
+      }
+    });
+
+    restartServerVMNums(new int[]{2}, 0, null, null);
+
+    server2 = this.serverVMs.get(1);
+
+    AsyncInvocation ai2 = server1.invokeAsync(new SerializableRunnable() {
+      @Override
+      public void run() {
+        putSomeValuesInRegion(500000, regionName);
+        for (int i = 0; i < 20; i++) {
+          putSomeValuesInRegion(500000, childregionName + i);
+        }
+      }
+    });
+
+    restartServerVMNums(new int[]{0}, 0, null, null);
+
+    // Create the PR region
+    server2.invoke(SnapshotTxGIIDUnit.class, "createPR", new Object[]{regionName, 2, 1});
+
+    waitForGIICallbackStarted(-2, InitialImageOperation.GIITestHookType.BeforeRequestRVV);
+
+    unblockGII(-2, InitialImageOperation.GIITestHookType.BeforeRequestRVV);
+
+    // Wait for the PR to get initialized and GII completes on the lone bucket
+    waitForRegionInit(-2);
+
+  }
+
 
   public void testSnapshotGII_concurrentWrites() throws Exception {
 

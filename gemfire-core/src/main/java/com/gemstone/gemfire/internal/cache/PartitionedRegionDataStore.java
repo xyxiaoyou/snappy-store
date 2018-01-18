@@ -1741,11 +1741,20 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
       writeLock.lock();
       try {
         if (!forceRemovePrimary && bucketAdvisor.isPrimary()) {
+          // instead of returning here we should make sure that
+          // 1. If I am child bucket.
+          // 2. There are parent buckets available on this node
+          // 3. Make sure that parent is also primary
+          // 4. And if we are returning false then parent removal should also fail.
           return false;
         }
 
         // recurse down to each tier of children to remove first
-        removeBucketForColocatedChildren(bucketId, forceRemovePrimary);
+        boolean childBucketRemoved = removeBucketForColocatedChildren(bucketId, forceRemovePrimary);
+        if (!childBucketRemoved) {
+          return false;
+        }
+        // The loop should break the moment one of the child removal failed.
 
         if (bucketRegion.getPartitionedRegion().isShadowPR()) {
           if (bucketRegion.getPartitionedRegion().getColocatedWithRegion() != null) {
