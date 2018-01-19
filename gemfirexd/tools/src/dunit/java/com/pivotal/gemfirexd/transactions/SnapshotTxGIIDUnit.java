@@ -259,6 +259,8 @@ public class SnapshotTxGIIDUnit extends DistributedSQLTestBase {
     restartServerVMNums(new int[]{2}, 0, null, null);
 
     server2 = this.serverVMs.get(1);
+    // Create the PR region
+    server2.invoke(SnapshotTxGIIDUnit.class, "createPR", new Object[]{regionName, 1, 1024});
 
     AsyncInvocation ai2 = server1.invokeAsync(new SerializableRunnable() {
       @Override
@@ -270,14 +272,11 @@ public class SnapshotTxGIIDUnit extends DistributedSQLTestBase {
       }
     });
 
-    restartServerVMNums(new int[]{0}, 0, null, null);
-
-    // Create the PR region
-    server2.invoke(SnapshotTxGIIDUnit.class, "createPR", new Object[]{regionName, 2, 1});
-
-    waitForGIICallbackStarted(-2, InitialImageOperation.GIITestHookType.BeforeRequestRVV);
-
-    unblockGII(-2, InitialImageOperation.GIITestHookType.BeforeRequestRVV);
+    for (int i = 0; i < 3; i++) {
+      restartServerVMNums(new int[] { i }, 0, null, null);
+      VM s = this.serverVMs.get(1);
+      s.invoke(SnapshotTxGIIDUnit.class, "createPR", new Object[]{regionName, 1, 1024});
+    }
 
     // Wait for the PR to get initialized and GII completes on the lone bucket
     waitForRegionInit(-2);
