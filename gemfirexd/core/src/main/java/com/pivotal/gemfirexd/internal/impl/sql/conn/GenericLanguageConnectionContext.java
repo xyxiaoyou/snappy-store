@@ -53,10 +53,12 @@ import java.util.Set;
 // GemStone changes BEGIN
 import java.util.Properties;
 
+import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.cache.Region;
 import com.gemstone.gemfire.cache.TransactionFlag;
 import com.gemstone.gemfire.distributed.internal.DistributionManager;
 import com.gemstone.gemfire.internal.cache.Checkpoint;
+import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
 import com.gemstone.gemfire.internal.cache.TXState;
 import com.gemstone.gemfire.internal.cache.wan.GatewaySenderEventCallbackArgument;
 import com.gemstone.gnu.trove.THashMap;
@@ -487,12 +489,14 @@ public final class GenericLanguageConnectionContext
         if (cachedInitialDefaultSchemaDescr == null) {
             DataDictionary dd = getDataDictionary();
             String authorizationId = getAuthorizationId();
+			String defaultSchema = authorizationId.replace('-', '_');
             SchemaDescriptor sd =
                 dd.getSchemaDescriptor(
-                    authorizationId, getTransactionCompile(), false);
+                    defaultSchema, getTransactionCompile(), false);
+
             if (sd == null) {
                 sd = new SchemaDescriptor(
-                    dd, authorizationId, authorizationId, (UUID)null, false);
+                    dd, defaultSchema, authorizationId, (UUID)null, false);
             }
             cachedInitialDefaultSchemaDescr = sd;
         }
@@ -4151,12 +4155,14 @@ public final class GenericLanguageConnectionContext
 
 	private static final int SNAPPY_INTERNAL_CONNECTION = 0x10000;
 
-  private static final int FLAGS_DEFAULT = 0x0;
+	private static final int METASTORE_IN_DD = 0x20000;
+
+	private static final int FLAGS_DEFAULT = METASTORE_IN_DD;
 
   /** flags that cannot be changed via {@link #setFlags(int)} */
   private static final int FLAGS_IMMUTABLE = CONNECTION_REMOTE
       | CONNECTION_REMOTE_DDL | SKIP_LOCKS | POS_DUP_FN
-      | ENABLE_STREAMING | SKIP_LISTENERS;
+      | ENABLE_STREAMING | SKIP_LISTENERS | METASTORE_IN_DD;
 
   private int gfxdFlags = FLAGS_DEFAULT;
 
@@ -5017,6 +5023,16 @@ public final class GenericLanguageConnectionContext
 	@Override
 	public boolean isDefaultPersistent() {
 		return GemFireXDUtils.isSet(this.gfxdFlags, DEFAULT_PERSISTENT);
+	}
+
+	@Override
+	public void setPersistMetaStoreInDataDictionary(boolean b) {
+		this.gfxdFlags = GemFireXDUtils.set(this.gfxdFlags, METASTORE_IN_DD, b);
+	}
+
+	@Override
+	public boolean isPersistMetaStoreInDataDictionary() {
+		return GemFireXDUtils.isSet(this.gfxdFlags, METASTORE_IN_DD);
 	}
 
   /**

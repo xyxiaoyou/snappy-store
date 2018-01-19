@@ -47,7 +47,6 @@ import com.gemstone.gemfire.internal.cache.DiskRegionStats;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl.StaticSystemCallbacks;
 import com.gemstone.gemfire.internal.cache.ProxyBucketRegion;
-import com.gemstone.gemfire.internal.cache.partitioned.Bucket;
 import com.gemstone.gemfire.internal.cache.persistence.PersistentMemberManager.MemberRevocationListener;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.process.StartupStatus;
@@ -80,6 +79,7 @@ public class PersistenceAdvisorImpl implements PersistenceAdvisor {
   private volatile Set<PersistentMemberID> allMembersWaitingFor;
   private volatile Set<PersistentMemberID> offlineMembersWaitingFor;
   protected final Object lock;
+  private static PersistenceAdvisorObserver observer = null;
   
   public static final boolean TRACE = Boolean.getBoolean("gemfire.TRACE_PERSISTENCE_ADVISOR");
   
@@ -409,7 +409,8 @@ public class PersistenceAdvisorImpl implements PersistenceAdvisor {
           trace(" We still have an initializing id: " + initializingId + "  Telling peers to remove the old id " + oldId + " and transitioning this initializing id to old id. recipients " + profileUpdateRecipients);
         }
         //TODO prpersist - clean this up
-        long viewVersion = advisor.startOperation();
+        long viewVersion = -1;
+        viewVersion = advisor.startOperation();
         try {
           PrepareNewPersistentMemberMessage.send(profileUpdateRecipients,
               dm, regionPath, oldId, initializingId);
@@ -715,6 +716,10 @@ public class PersistenceAdvisorImpl implements PersistenceAdvisor {
   public boolean checkMyStateOnMembers(Set<InternalDistributedMember> replicates) throws ReplyException {
     PersistentStateQueryResults remoteStates = getMyStateOnMembers(replicates);
     boolean equal = false;
+    if (observer != null) {
+      observer.observe(regionPath);
+    }
+
     for(Map.Entry<InternalDistributedMember, PersistentMemberState> entry: remoteStates.stateOnPeers.entrySet()) {
       InternalDistributedMember member = entry.getKey();
       PersistentMemberID remoteId = remoteStates.persistentIds.get(member);
@@ -754,7 +759,8 @@ public class PersistenceAdvisorImpl implements PersistenceAdvisor {
   
   public void finishPendingDestroy() {
   //send a message to peers indicating that they should remove this profile
-    long viewVersion = advisor.startOperation();
+    long viewVersion = -1;
+    viewVersion = advisor.startOperation();
     try {
       if(logger.infoEnabled()) {
         advisor.getLogWriter().info(LocalizedStrings.DEBUG, "The advisee is " + advisor.getAdvisee());
@@ -1125,8 +1131,8 @@ public class PersistenceAdvisorImpl implements PersistenceAdvisor {
       long waitThreshold = advisor.getDistributionManager().getConfig().getAckWaitThreshold();
       // reduce the first log time from 15secs so that higher layers can report
       // sooner to user
-      if (waitThreshold > 1) {
-        waitThreshold = waitThreshold / 2;
+      if (waitThreshold >= 5) {
+        waitThreshold = waitThreshold / 5;
       }
       long warningTime = System.nanoTime() + TimeUnit.SECONDS.toNanos(waitThreshold);
       boolean warned = false;
@@ -1287,5 +1293,14 @@ public class PersistenceAdvisorImpl implements PersistenceAdvisor {
   
   public boolean isOnline() {
     return online;
+  }
+
+  public static interface PersistenceAdvisorObserver {
+    default public void observe(String regionPath) {
+    }
+  }
+
+  public static void setPersistenceAdvisorObserver(PersistenceAdvisorObserver o) {
+     observer = o;
   }
 }
