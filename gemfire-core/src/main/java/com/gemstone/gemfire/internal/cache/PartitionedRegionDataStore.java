@@ -1746,12 +1746,22 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
           // 2. There are parent buckets available on this node
           // 3. Make sure that parent is also primary
           // 4. And if we are returning false then parent removal should also fail.
+          if (logger.fineEnabled()) {
+            getLogWriter()
+                    .fine(
+                            "Returning false from removeBucket for bucket  " + bucketRegion);
+          }
           return false;
         }
 
         // recurse down to each tier of children to remove first
         boolean childBucketRemoved = removeBucketForColocatedChildren(bucketId, forceRemovePrimary);
         if (!childBucketRemoved) {
+          if (logger.fineEnabled()) {
+            getLogWriter()
+                    .fine(
+                            "Returning false from removeBucket because we couldn't remove one the child bucket.");
+          }
           return false;
         }
         // The loop should break the moment one of the child removal failed.
