@@ -182,7 +182,7 @@ public final class DSFIDFactory implements DataSerializableFixedID {
     if (dsfid >= Byte.MIN_VALUE && dsfid <= Byte.MAX_VALUE) {
       dsfidMap[dsfid + Byte.MAX_VALUE + 1] = creator;
     } else {
-      dsfidMap2.put(dsfid, creator);
+      dsfidMap2.justPut(dsfid, creator);
     }
   }
 
@@ -721,8 +721,12 @@ public final class DSFIDFactory implements DataSerializableFixedID {
         () -> new MissingPersistentIDsResponse());
     registerDSFID(REVOKE_PERSISTENT_ID_REQUEST,
         () -> new RevokePersistentIDRequest());
+    registerDSFID(WAITING_PERSISTENT_IDS_REQUEST,
+        () -> new WaitingPersistentIDRequest());
     registerDSFID(REVOKE_PERSISTENT_ID_RESPONSE,
         () -> new RevokePersistentIDResponse());
+    registerDSFID(WAITING_PERSISTENT_IDS_RESPONSE,
+        () -> new WaitingPersistentIDsResponse());
     registerDSFID(REMOVE_PERSISTENT_MEMBER_REQUEST,
         () -> new RemovePersistentMemberMessage());
     registerDSFID(FUNCTION_STREAMING_ORDERED_REPLY_MESSAGE,
@@ -807,6 +811,10 @@ public final class DSFIDFactory implements DataSerializableFixedID {
     registerDSFID(SERVER_PING_MESSAGE, () -> new ServerPingMessage());
     registerDSFID(SNAPSHOT_GII_UNLOCK_MESSAGE,
         () -> new InitialImageOperation.SnapshotBucketLockReleaseMessage());
+    registerDSFID(UNBLOCK_PERSISTENT_ID_REQUEST,
+        () -> new UnblockPersistentIDRequest());
+    registerDSFID(UNBLOCK_PERSISTENT_ID_RESPONSE,
+        () -> new UnblockPersistentIDResponse());
     typesRegistered = true;
   }
 
