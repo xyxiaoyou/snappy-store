@@ -145,6 +145,8 @@ public class ColocationHelper {
           .getCache());
       PartitionRegionConfig prConf = (PartitionRegionConfig)prRoot
           .get(getRegionIdentifier(colocatedWith));
+      // if prCof is null it means it may not be initialized.
+      // what to do?
       prID = prConf.getPRId();
       colocatedPR = PartitionedRegion.getPRFromId(prID);
       colocatedPR.waitOnBucketMetadataInitialization();

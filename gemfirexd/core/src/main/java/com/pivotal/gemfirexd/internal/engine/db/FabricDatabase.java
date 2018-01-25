@@ -63,6 +63,7 @@ import com.gemstone.gemfire.internal.ClassPathLoader;
 import com.gemstone.gemfire.internal.GFToSlf4jBridge;
 import com.gemstone.gemfire.internal.LogWriterImpl;
 import com.gemstone.gemfire.internal.cache.*;
+import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.gemstone.gnu.trove.THashMap;
@@ -1278,6 +1279,7 @@ public final class FabricDatabase implements ModuleControl,
         ExecutorService execService = cache.getDistributionManager()
             .getWaitingThreadPool();
         List<Future<Boolean>> results = new ArrayList<>();
+        List<GemFireContainer> failed = new ArrayList<>(1);
         for (GemFireContainer container : uninitializedContainers) {
           if (logger.infoEnabled() &&
               !Misc.isSnappyHiveMetaTable(container.getSchemaName())) {
@@ -1289,19 +1291,43 @@ public final class FabricDatabase implements ModuleControl,
           final FabricService service = FabricServiceManager
               .currentFabricServiceInstance();
           Future<Boolean> f = execService.submit(() -> {
+            boolean initialized = true;
             try {
+              if (observer != null)
+                //observer.regionPreInitialized(container);
+              Misc.getGemFireCache().getLoggerI18n().info(LocalizedStrings.DEBUG, "Going to initialize " + container.getTableName());
               container.initializeRegion();
+              initialized = true;
             } finally {
               if (service instanceof FabricServerImpl) {
-                ((FabricServerImpl)service).notifyTableInitialized();
+                Misc.getGemFireCache().getLoggerI18n().info(LocalizedStrings.DEBUG, "Going to Notify for " + container.getTableName());
+                ((FabricServerImpl)service).notifyTableInitialized(initialized);
               }
             }
             return true;
           });
           results.add(f);
 
+          // we want to throw first exception we get in initialization.
           if (service instanceof FabricServerImpl) {
             ((FabricServerImpl)service).waitTableInitialized();
+
+            if (!((FabricServerImpl)service).isInitializedOrWait()) {
+              try {
+                f.get();
+              } catch (ExecutionException failure) {
+                // ignore at this point and retry once more
+                if (logger.warningEnabled()) {
+                  logger.warning(
+                      "FabricDatabase: error in initialization of container: " +
+                          container + ".", failure);
+                }
+                if (failure.getCause() instanceof StandardException)
+                  throw (StandardException)failure.getCause();
+                else
+                  throw failure;
+              }
+            }
           }
 
           // wait for notification
@@ -1312,7 +1338,8 @@ public final class FabricDatabase implements ModuleControl,
           }
         }
 
-        List<GemFireContainer> failed = new ArrayList<>(1);
+        // Next exceptions will be after WAIT.
+
         int index = 0;
         for (Future<Boolean> f : results) {
           try {

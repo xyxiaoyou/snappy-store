@@ -37,6 +37,7 @@ public class FabricServerImpl extends FabricServiceImpl implements FabricServer 
 
   private final Object initializationNotification = new Object();
   private boolean notified;
+  private boolean initializedOrWait;
 
   @Override
   public boolean isServer() {
@@ -98,7 +99,7 @@ public class FabricServerImpl extends FabricServiceImpl implements FabricServer 
       PersistentMemberID myId, String message) {
     if (GemFireXDUtils.TraceFabricServiceBoot) {
       logger.info("Accepting WAITING notification" +
-          (message != null ? ": " + message : ""));
+          (message != null ? ": " + message : ""), new Exception("SKSK notifyWaiting " + regionPath));
     }
     if (this.serverstatus != State.WAITING) {
       this.previousServerStatus = this.serverstatus;
@@ -109,9 +110,10 @@ public class FabricServerImpl extends FabricServiceImpl implements FabricServer 
         message);
   }
 
-  public void notifyTableInitialized() {
+  public void notifyTableInitialized(boolean initialized) {
     synchronized (initializationNotification) {
       notified = true;
+      this.initializedOrWait = initialized;
       initializationNotification.notifyAll();
     }
   }
@@ -119,6 +121,7 @@ public class FabricServerImpl extends FabricServiceImpl implements FabricServer 
   private void notifyTableWait() {
     synchronized (initializationNotification) {
       notified = true;
+      this.initializedOrWait = true;
       initializationNotification.notifyAll();
     }
   }
@@ -130,5 +133,9 @@ public class FabricServerImpl extends FabricServiceImpl implements FabricServer 
       }
       notified = false;
     }
+  }
+
+  public boolean isInitializedOrWait() {
+    return initializedOrWait;
   }
 }
