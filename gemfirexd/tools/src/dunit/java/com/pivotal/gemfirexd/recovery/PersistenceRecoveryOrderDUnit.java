@@ -80,10 +80,10 @@ public class PersistenceRecoveryOrderDUnit extends DistributedSQLTestBase {
 
     st1.execute("CREATE TABLE T3 (COL1 int, COL2 int)  partition by column (COL1) colocate with (t1) persistent redundancy 1 buckets 100");
 
-    st1.execute("CREATE TABLE T4 (COL1 int, COL2 int)  partition by column (COL1) colocate with (t1) persistent redundancy 1 buckets 100");
+    st1.execute("CREATE TABLE T4 (COL1 int, COL2 int)  partition by column (COL1) colocate with (t2) persistent redundancy 1 buckets 100");
 
 
-    st1.execute("CREATE TABLE T5 (COL1 int, COL2 int) partition by column (COL1) colocate with (t1) persistent redundancy 1 buckets 100");
+    st1.execute("CREATE TABLE T5 (COL1 int, COL2 int) partition by column (COL1) colocate with (t4) persistent redundancy 1 buckets 100");
     st1.execute("CREATE TABLE T6 (COL1 int, COL2 int) partition by column (COL1)  persistent redundancy 1 buckets 110");
     st1.execute("CREATE TABLE T7 (COL1 int, COL2 int) partition by column (COL1)  persistent redundancy 1 buckets 110");
     st1.execute("CREATE TABLE T8 (COL1 int, COL2 int) partition by column (COL1)  persistent redundancy 1 buckets 110");
@@ -127,19 +127,27 @@ public class PersistenceRecoveryOrderDUnit extends DistributedSQLTestBase {
       }
     });
 
-    t= new Thread(new SerializableRunnable("Create persistent table ") {
+    try {
+      restartVMNums(-1);
+      fail("Expected restart fail");
+    } catch (Exception e) {
+
+    }
+    //restartVMNums(-2);
+
+    /*t = new Thread(new SerializableRunnable("Create persistent table ") {
 
       @Override
       public void run() {
         try {
-          restartVMNums(new int[]{-1}, 0, null, p);
+          restartVMNums(new int[] { -1, -2 }, 0, null, p);
         } catch (Exception e) {
           e.printStackTrace();
         }
       }
     });
-    t.start();
-    waitForBlockedInitialization(server1);
+    t.start();*/
+   // waitForBlockedInitialization(server1);
 
     /*for (int i = 1; i < 6; i++) {
       ResultSet rs = st1.executeQuery("select * from t" + i);
@@ -151,8 +159,90 @@ public class PersistenceRecoveryOrderDUnit extends DistributedSQLTestBase {
     }*/
   }
 
+  public void testParallelInitializationColocatedTable2() throws Exception {
+    Properties p = new Properties();
+    p.setProperty("default-recovery-delay", "0");
+    p.setProperty("default-startup-recovery-delay", "0");
+    startVMs(1, 2, 0, null, p);
+    Properties props = new Properties();
+    final Connection conn = TestUtil.getConnection(props);
+    Statement st1 = conn.createStatement();
+    VM server1 = this.serverVMs.get(0);
+    VM server2 = this.serverVMs.get(1);
 
-  public void _testWaitForLatestMember1() throws Exception {
+    st1.execute("CREATE TABLE T1 (COL1 int, COL2 int) partition by column (COL1) persistent redundancy 1 buckets 100");
+
+    st1.execute("CREATE TABLE T2 (COL1 int, COL2 int)  partition by column (COL1) colocate with (t1) persistent redundancy 1 buckets 100");
+
+    st1.execute("CREATE TABLE T3 (COL1 int, COL2 int)  partition by column (COL1) colocate with (t1) persistent redundancy 1 buckets 100");
+
+    st1.execute("CREATE TABLE T4 (COL1 int, COL2 int)  partition by column (COL1) colocate with (t2) persistent redundancy 1 buckets 100");
+
+
+    st1.execute("CREATE TABLE T5 (COL1 int, COL2 int) partition by column (COL1) colocate with (t4) persistent redundancy 1 buckets 100");
+    st1.execute("CREATE TABLE T6 (COL1 int, COL2 int) partition by column (COL1)  persistent redundancy 1 buckets 110");
+    st1.execute("CREATE TABLE T7 (COL1 int, COL2 int) partition by column (COL1)  persistent redundancy 1 buckets 110");
+    st1.execute("CREATE TABLE T8 (COL1 int, COL2 int) partition by column (COL1)  persistent redundancy 1 buckets 110");
+
+
+    for (int i = 1; i < 9; i++)
+      st1.execute("INSERT INTO T" + i + " values(1,1)");
+
+
+    stopVMNum(-1);
+    for (int i = 1; i < 9; i++) {
+      for (int j = 1; j < 100000; j++)
+        st1.execute("INSERT INTO T" + i + " values(" + 2 * j + "," + 3 * j + ")");
+    }
+
+    stopVMNum(-2);
+
+    Thread t = new Thread(new SerializableRunnable("Create persistent table ") {
+
+      @Override
+      public void run() {
+        try {
+          restartVMNums(new int[]{-1}, 0, null, p);
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+    });
+    t.start();
+    assertTrue(t.isAlive());
+
+    waitForBlockedInitialization(server1);
+    restartVMNums(-2);
+    t.join();
+    stopVMNums(-1,-2);
+
+
+    t = new Thread(new SerializableRunnable("Create persistent table ") {
+
+      @Override
+      public void run() {
+        try {
+          restartVMNums(new int[] { -1, -2 }, 0, null, p);
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+    });
+    t.start();
+
+    t.join();
+
+    for (int i = 1; i < 9; i++) {
+      ResultSet rs = st1.executeQuery("select * from t" + i);
+      int count = 0;
+      while (rs.next()) {
+        count++;
+      }
+      assertEquals(100000, count);
+    }
+  }
+
+  public void testWaitForLatestMember1() throws Exception {
     Properties p = new Properties();
     p.setProperty("default-recovery-delay", "-1");
     p.setProperty("default-startup-recovery-delay", "-1");
@@ -190,7 +280,7 @@ public class PersistenceRecoveryOrderDUnit extends DistributedSQLTestBase {
     t.join(500);
   }
 
-  public void _testWaitForLatestMember2() throws Exception {
+  public void testWaitForLatestMember2() throws Exception {
     Properties p = new Properties();
     p.setProperty("default-recovery-delay", "-1");
     p.setProperty("default-startup-recovery-delay", "-1");

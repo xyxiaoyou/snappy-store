@@ -172,6 +172,10 @@ public class RedundancyLogger extends RecoveryRunnable implements PersistentStat
         if(this.membershipChanged) {
           this.membershipChanged = false;
           for(RegionStatus region : regions) {
+            GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
+            if (cache != null) {
+              cache.getLoggerI18n().info(LocalizedStrings.DEBUG, "For regionstatus " + region.region + " Goign to log");
+            }
             region.logWaitingForMembers();
           }
           warningLogged = true;
@@ -224,6 +228,8 @@ public class RedundancyLogger extends RecoveryRunnable implements PersistentStat
      * Indicates that a completion message has been logged.
      */
     private volatile boolean loggedDoneMessage = true;
+
+    private volatile boolean firstNotification = true;
     
     public RegionStatus(PartitionedRegion region) {
       this.thisMember = createPersistentMemberID(region);
@@ -358,7 +364,20 @@ public class RedundancyLogger extends RecoveryRunnable implements PersistentStat
       /*
        * Log any offline members the region is waiting for.
        */
-      if(thereAreBucketsToBeRecovered && !offlineMembers.isEmpty()) {
+
+      GemFireCacheImpl.getInstance().getLoggerI18n().info(LocalizedStrings.DEBUG,
+          "The info are offline Members : " + offlineMembers + " allmembersToWaitFor " + allMembersToWaitFor
+      + " thereAreBucketsTobeRecovered : " + thereAreBucketsToBeRecovered);
+
+      if (firstNotification) {
+        if (sysCb != null) {
+          sysCb.waitingForDataSync(this.region, new HashSet(),
+              new HashSet(), this.thisMember, "");
+        }
+        this.firstNotification = false;
+      }
+      else if((thereAreBucketsToBeRecovered && !offlineMembers.isEmpty())) {
+
         Set<String> membersToWaitForLogEntries = new HashSet<String>();
         
         TransformUtils.transform(offlineMembers.entrySet(), membersToWaitForLogEntries, TransformUtils.persistentMemberEntryToLogEntryTransformer);
@@ -377,7 +396,6 @@ public class RedundancyLogger extends RecoveryRunnable implements PersistentStat
           sysCb.waitingForDataSync(this.region, offlineMembers.keySet(),
               missingBuckets, this.thisMember, message);
         }
-
         this.loggedDoneMessage = false;
       }
       /*

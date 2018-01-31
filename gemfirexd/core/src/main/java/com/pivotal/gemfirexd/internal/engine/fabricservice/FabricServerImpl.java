@@ -20,9 +20,14 @@ package com.pivotal.gemfirexd.internal.engine.fabricservice;
 import java.sql.SQLException;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.Future;
 
 import com.gemstone.gemfire.SystemFailure;
 import com.gemstone.gemfire.cache.CacheFactory;
+import com.gemstone.gemfire.cache.partition.PartitionRegionHelper;
+import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
+import com.gemstone.gemfire.internal.cache.PartitionedRegion;
+import com.gemstone.gemfire.internal.cache.PartitionedRegionHelper;
 import com.gemstone.gemfire.internal.cache.persistence.PersistentMemberID;
 import com.pivotal.gemfirexd.FabricServer;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
@@ -36,6 +41,7 @@ import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 public class FabricServerImpl extends FabricServiceImpl implements FabricServer {
 
   private final Object initializationNotification = new Object();
+  private String regionPathToWaitFor = "";
   private boolean notified;
   private boolean initializedOrWait;
 
@@ -97,38 +103,54 @@ public class FabricServerImpl extends FabricServiceImpl implements FabricServer 
   public void notifyWaiting(String regionPath,
       Set<PersistentMemberID> membersToWaitFor, Set<Integer> missingBuckets,
       PersistentMemberID myId, String message) {
-    if (GemFireXDUtils.TraceFabricServiceBoot) {
-      logger.info("Accepting WAITING notification" +
-          (message != null ? ": " + message : ""), new Exception("SKSK notifyWaiting " + regionPath));
-    }
-    if (this.serverstatus != State.WAITING) {
-      this.previousServerStatus = this.serverstatus;
-    }
-    this.serverstatus = State.WAITING;
-    notifyTableWait();
-    notifyWaitingInLauncher(regionPath, membersToWaitFor, missingBuckets, myId,
-        message);
-  }
-
-  public void notifyTableInitialized(boolean initialized) {
-    synchronized (initializationNotification) {
-      notified = true;
-      this.initializedOrWait = initialized;
-      initializationNotification.notifyAll();
-    }
-  }
-
-  private void notifyTableWait() {
-    synchronized (initializationNotification) {
-      notified = true;
-      this.initializedOrWait = true;
-      initializationNotification.notifyAll();
+    if (missingBuckets != null && missingBuckets.isEmpty() && membersToWaitFor.isEmpty()) {
+      if (GemFireXDUtils.TraceFabricServiceBoot) {
+        logger.info("Accepting WAITING notification" +
+            (message != null ? ": " + message : ""), new Exception("SKSK notifyWaiting " + regionPath));
+      }
+      // only notify the FabricDataBase.postCreateDDLReplay
+      notifyTableWait(regionPath);
+    } else {
+      if (GemFireXDUtils.TraceFabricServiceBoot) {
+        logger.info("Accepting WAITING notification" +
+            (message != null ? ": " + message : ""), new Exception("SKSK notifyWaiting " + regionPath));
+      }
+      if (this.serverstatus != State.WAITING) {
+        this.previousServerStatus = this.serverstatus;
+      }
+      this.serverstatus = State.WAITING;
+      notifyTableWait(regionPath);
+      notifyWaitingInLauncher(regionPath, membersToWaitFor, missingBuckets, myId,
+          message);
     }
   }
 
-  public void waitTableInitialized() throws InterruptedException {
+  public void notifyTableInitialized(boolean initialized, String regionPath) {
     synchronized (initializationNotification) {
-      while (!notified) {
+      if(regionPath.equals(regionPathToWaitFor)) {
+        notified = true;
+        this.initializedOrWait = initialized;
+        initializationNotification.notifyAll();
+        regionPathToWaitFor = "";
+      }
+    }
+  }
+
+  private void notifyTableWait(String regionPath) {
+    synchronized (initializationNotification) {
+      if(regionPath.equals(regionPathToWaitFor)) {
+        notified = true;
+        this.initializedOrWait = true;
+        initializationNotification.notifyAll();
+        regionPathToWaitFor = "";
+      }
+    }
+  }
+
+  public void waitTableInitialized(Future<?> waitFor, String regionPath) throws InterruptedException {
+    synchronized (initializationNotification) {
+      this.regionPathToWaitFor = regionPath;
+      while (this.regionPathToWaitFor.equals(regionPath) && !notified && !waitFor.isDone()) {
         initializationNotification.wait(500);
       }
       notified = false;
@@ -137,5 +159,9 @@ public class FabricServerImpl extends FabricServiceImpl implements FabricServer 
 
   public boolean isInitializedOrWait() {
     return initializedOrWait;
+  }
+
+  public boolean isNotified() {
+    return notified;
   }
 }
