@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Used on distributed replicated regions to track GII and various state.
@@ -131,6 +132,16 @@ public class UnsharedImageState implements ImageState {
   @Override
   public void setRequestedUnappliedDelta(boolean flag) {
     requestedDelta = flag;
+  }
+
+  @Override
+  public boolean isPendingTXRegionStatesWriteLocked() {
+    return this.pendingTXRegionStatesLock.isWriteLocked();
+  }
+
+  @Override
+  public Thread getPendingTXRegionStatesLockOwner() {
+    return pendingTXRegionStatesLockOwner;
   }
 
   @Override

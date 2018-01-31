@@ -153,7 +153,14 @@ public final class TXRegionState extends ReentrantLock {
     this.expiryReadLock = r.getTxEntryExpirationReadLock();
     this.isValid = true;
 
-    if (!r.isInitialized() && r.getImageState().lockPendingTXRegionStates(true, false)) {
+
+    // check if lock already taken by the same thread
+    // in that case don't take lock
+    ImageState imgState = r.getImageState();
+    if (!r.isInitialized()
+        && ((imgState.isPendingTXRegionStatesWriteLocked()
+        &&  imgState.getPendingTXRegionStatesLockOwner().getId() == Thread.currentThread().getId())
+        ||  imgState.lockPendingTXRegionStates(true, false))) {
       try {
         if (!r.getImageState().addPendingTXRegionState(this)) {
           this.pendingTXOps = null;
@@ -165,7 +172,6 @@ public final class TXRegionState extends ReentrantLock {
       } finally {
         r.getImageState().unlockPendingTXRegionStates(true);
       }
-
     } else {
       this.pendingTXOps = null;
       this.pendingTXLockFlags = null;

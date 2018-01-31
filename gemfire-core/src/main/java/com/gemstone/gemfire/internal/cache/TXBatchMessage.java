@@ -157,6 +157,13 @@ public final class TXBatchMessage extends TXMessage {
           region = baseRegion = null;
         }
         final int numOps = this.pendingOps.size();
+        // take pendingTXRegionStates lock first so that
+        // GII thread doesn't block on TXRegionState.
+        for (LocalRegion r : pendingOpsRegions) {
+          if (!r.isInitialized())
+            r.getImageState().lockPendingTXRegionStates(true, false);
+        }
+
         for (int index = 0; index < numOps; index++) {
           entry = this.pendingOps.get(index);
           if (pendingOpsRegion == null) {
