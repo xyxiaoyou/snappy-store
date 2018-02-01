@@ -159,29 +159,40 @@ public final class TXBatchMessage extends TXMessage {
         final int numOps = this.pendingOps.size();
         // take pendingTXRegionStates lock first so that
         // GII thread doesn't block on TXRegionState.
+        boolean[] locked = new boolean[pendingOpsRegion.size()];
+        int lockedIndex = 0;
         for (LocalRegion r : pendingOpsRegions) {
-          if (!r.isInitialized())
-            r.getImageState().lockPendingTXRegionStates(true, false);
+          if (!r.isInitialized()) {
+            locked[lockedIndex] = r.getImageState().lockPendingTXRegionStates(true, false);
+            lockedIndex++;
+          }
         }
-
-        for (int index = 0; index < numOps; index++) {
-          entry = this.pendingOps.get(index);
-          if (pendingOpsRegion == null) {
-            region = this.pendingOpsRegions.get(index);
-            if (region.isUsedForPartitionedRegionBucket()) {
-              baseRegion = region.getPartitionedRegion();
+        try {
+          for (int index = 0; index < numOps; index++) {
+            entry = this.pendingOps.get(index);
+            if (pendingOpsRegion == null) {
+              region = this.pendingOpsRegions.get(index);
+              if (region.isUsedForPartitionedRegionBucket()) {
+                baseRegion = region.getPartitionedRegion();
+              } else {
+                baseRegion = region;
+              }
             }
-            else {
-              baseRegion = region;
+            if (txState.isCoordinator()) {
+              region.waitForData();
+            }
+            txrs = txState.writeRegion(region);
+            if (txrs != null) {
+              txState.applyPendingOperation(entry, lockFlags, txrs, region,
+                  baseRegion, eventTemplate, true, Boolean.TRUE, this);
             }
           }
-          if (txState.isCoordinator()) {
-            region.waitForData();
-          }
-          txrs = txState.writeRegion(region);
-          if (txrs != null) {
-            txState.applyPendingOperation(entry, lockFlags, txrs, region,
-                baseRegion, eventTemplate, true, Boolean.TRUE, this);
+        } finally {
+          int index = 0;
+          for (LocalRegion r : pendingOpsRegions) {
+            if (locked[index])
+              r.getImageState().unlockPendingTXRegionStates(true);
+            index++;
           }
         }
       } finally {

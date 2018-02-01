@@ -157,9 +157,10 @@ public final class TXRegionState extends ReentrantLock {
     // check if lock already taken by the same thread
     // in that case don't take lock
     ImageState imgState = r.getImageState();
+    boolean alreadyLocked = (imgState.isPendingTXRegionStatesWriteLocked()
+        &&  imgState.getPendingTXRegionStatesLockOwner().getId() == Thread.currentThread().getId());
     if (!r.isInitialized()
-        && ((imgState.isPendingTXRegionStatesWriteLocked()
-        &&  imgState.getPendingTXRegionStatesLockOwner().getId() == Thread.currentThread().getId())
+        && (alreadyLocked
         ||  imgState.lockPendingTXRegionStates(true, false))) {
       try {
         if (!r.getImageState().addPendingTXRegionState(this)) {
@@ -170,7 +171,8 @@ public final class TXRegionState extends ReentrantLock {
           this.pendingTXLockFlags = new TIntArrayList();
         }
       } finally {
-        r.getImageState().unlockPendingTXRegionStates(true);
+        if (!alreadyLocked)
+          r.getImageState().unlockPendingTXRegionStates(true);
       }
     } else {
       this.pendingTXOps = null;
