@@ -159,12 +159,10 @@ public final class TXBatchMessage extends TXMessage {
         final int numOps = this.pendingOps.size();
         // take pendingTXRegionStates lock first so that
         // GII thread doesn't block on TXRegionState.
-        boolean[] locked = new boolean[pendingOpsRegions.size()];
-        int lockedIndex = 0;
+        ArrayList<LocalRegion> lockedRegions = new ArrayList<>();
         for (LocalRegion r : pendingOpsRegions) {
-          if (!r.isInitialized()) {
-            locked[lockedIndex] = r.getImageState().lockPendingTXRegionStates(true, false);
-            lockedIndex++;
+          if (!r.isInitialized() && r.getImageState().lockPendingTXRegionStates(true, false)) {
+            lockedRegions.add(r);
           }
         }
         try {
@@ -189,10 +187,8 @@ public final class TXBatchMessage extends TXMessage {
           }
         } finally {
           int index = 0;
-          for (LocalRegion r : pendingOpsRegions) {
-            if (locked[index])
-              r.getImageState().unlockPendingTXRegionStates(true);
-            index++;
+          for (LocalRegion r : lockedRegions) {
+            r.getImageState().unlockPendingTXRegionStates(true);
           }
         }
       } finally {
