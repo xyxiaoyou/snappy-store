@@ -106,14 +106,14 @@ public class FabricServerImpl extends FabricServiceImpl implements FabricServer 
     if (missingBuckets != null && missingBuckets.isEmpty() && membersToWaitFor.isEmpty()) {
       if (GemFireXDUtils.TraceFabricServiceBoot) {
         logger.info("Accepting WAITING notification" +
-            (message != null ? ": " + message : ""), new Exception("SKSK notifyWaiting " + regionPath));
+            (message != null ? ": " + message : ""));
       }
       // only notify the FabricDataBase.postCreateDDLReplay
       notifyTableWait(regionPath);
     } else {
       if (GemFireXDUtils.TraceFabricServiceBoot) {
         logger.info("Accepting WAITING notification" +
-            (message != null ? ": " + message : ""), new Exception("SKSK notifyWaiting " + regionPath));
+            (message != null ? ": " + message : ""));
       }
       if (this.serverstatus != State.WAITING) {
         this.previousServerStatus = this.serverstatus;
