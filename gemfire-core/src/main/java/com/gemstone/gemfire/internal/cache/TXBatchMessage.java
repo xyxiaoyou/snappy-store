@@ -186,7 +186,6 @@ public final class TXBatchMessage extends TXMessage {
             }
           }
         } finally {
-          int index = 0;
           for (LocalRegion r : lockedRegions) {
             r.getImageState().unlockPendingTXRegionStates(true);
           }

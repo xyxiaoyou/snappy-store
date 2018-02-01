@@ -438,10 +438,6 @@ public class UnsharedImageState implements ImageState {
     if (!force && this.pendingTXRegionStates == null) {
       return false;
     }
-    if (this.pendingTXRegionStatesLockOwner == Thread.currentThread()) {
-      return true;
-    }
-
     if (TXStateProxy.LOG_FINE) {
       final LogWriterI18n logger = InternalDistributedSystem.getLoggerI18n();
       if (logger != null) {
