@@ -1341,8 +1341,6 @@ public final class FabricDatabase implements ModuleControl,
           }
         }
 
-        // Next exceptions will be after WAIT.
-
         int index = 0;
         for (Future<Boolean> f : results) {
           try {
