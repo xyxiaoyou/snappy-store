@@ -159,7 +159,7 @@ public final class TXBatchMessage extends TXMessage {
         final int numOps = this.pendingOps.size();
         // take pendingTXRegionStates lock first so that
         // GII thread doesn't block on TXRegionState.
-        boolean[] locked = new boolean[pendingOpsRegion.size()];
+        boolean[] locked = new boolean[pendingOpsRegions.size()];
         int lockedIndex = 0;
         for (LocalRegion r : pendingOpsRegions) {
           if (!r.isInitialized()) {
