@@ -1320,7 +1320,6 @@ public final class FabricDatabase implements ModuleControl,
               try {
                 f.get();
               } catch (ExecutionException failure) {
-                // ignore at this point and retry once more
                 if (logger.warningEnabled()) {
                   logger.warning(
                       "FabricDatabase: error in initialization of container: " +
