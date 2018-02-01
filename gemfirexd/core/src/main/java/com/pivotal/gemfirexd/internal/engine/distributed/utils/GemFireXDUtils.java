@@ -3310,8 +3310,8 @@ public final class GemFireXDUtils {
         .TRACE_ON(GfxdConstants.TRACE_STATEMENT_MATCHING);
 
     // following trace can be switched on anytime with info level logging.
-    TraceFabricServiceBoot = true;//SanityManager
-        //.TRACE_ON(GfxdConstants.TRACE_FABRIC_SERVICE_BOOT);
+    TraceFabricServiceBoot = SanityManager
+        .TRACE_ON(GfxdConstants.TRACE_FABRIC_SERVICE_BOOT);
 
     TraceConnectionSignaller = SanityManager
         .TRACE_ON(GfxdConstants.TRACE_CONNECTION_SIGNALLER);

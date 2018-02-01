@@ -1300,15 +1300,12 @@ public final class FabricDatabase implements ModuleControl,
               if (observer != null)
                 observer.regionPreInitialized(container);
 
-              Misc.getGemFireCache().getLoggerI18n().info(LocalizedStrings.DEBUG, "Going to initialize " +
-                  container.getTableName());
               container.initializeRegion();
               initialized = true;
             } finally {
               if (service instanceof FabricServerImpl) {
-                Misc.getGemFireCache().getLoggerI18n().info(LocalizedStrings.DEBUG, "Going to Notify for " +
-                    container.getTableName() + " Initialize: " + initialized);
-                ((FabricServerImpl)service).notifyTableInitialized(initialized, container.getRegion().getFullPath());
+                ((FabricServerImpl)service).notifyTableInitialized(initialized,
+                    container.getRegion().getFullPath());
               }
             }
             return true;

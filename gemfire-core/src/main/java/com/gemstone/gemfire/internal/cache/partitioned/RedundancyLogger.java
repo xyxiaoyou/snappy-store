@@ -172,10 +172,6 @@ public class RedundancyLogger extends RecoveryRunnable implements PersistentStat
         if(this.membershipChanged) {
           this.membershipChanged = false;
           for(RegionStatus region : regions) {
-            GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
-            if (cache != null) {
-              cache.getLoggerI18n().info(LocalizedStrings.DEBUG, "For regionstatus " + region.region + " Goign to log");
-            }
             region.logWaitingForMembers();
           }
           warningLogged = true;
@@ -364,10 +360,6 @@ public class RedundancyLogger extends RecoveryRunnable implements PersistentStat
       /*
        * Log any offline members the region is waiting for.
        */
-
-      GemFireCacheImpl.getInstance().getLoggerI18n().info(LocalizedStrings.DEBUG,
-          "The info are offline Members : " + offlineMembers + " allmembersToWaitFor " + allMembersToWaitFor
-      + " thereAreBucketsTobeRecovered : " + thereAreBucketsToBeRecovered);
 
       if (firstNotification) {
         if (sysCb != null) {
