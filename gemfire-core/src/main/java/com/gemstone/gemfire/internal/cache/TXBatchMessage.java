@@ -171,6 +171,9 @@ public final class TXBatchMessage extends TXMessage {
           if (txState.isCoordinator()) {
             region.waitForData();
           }
+          if(!region.isInitialized()) {
+            region.waitForData();
+          }
           txrs = txState.writeRegion(region);
           if (txrs != null) {
             txState.applyPendingOperation(entry, lockFlags, txrs, region,
