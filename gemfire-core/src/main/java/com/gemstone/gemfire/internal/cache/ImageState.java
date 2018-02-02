@@ -188,4 +188,6 @@ public interface ImageState /* extends Lock */ {
     public long getRegionVersion();
   }
 
+  public boolean isWriteLockedBySameThread();
+
 }
