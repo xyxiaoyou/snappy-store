@@ -133,6 +133,7 @@ public class PersistenceRecoveryOrderDUnit extends DistributedSQLTestBase {
     } catch (Exception e) {
 
     }
+    stopVMNums(-1,-2);
     //restartVMNums(-2);
 
     /*t = new Thread(new SerializableRunnable("Create persistent table ") {
