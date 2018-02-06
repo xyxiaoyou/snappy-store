@@ -581,7 +581,9 @@ public final class TXState implements TXStateInterface {
           // miss receiving commit messages later
           // send back a valid TXRegionState for operation to continue in normal
           // flow but it will be discarded at the end of operation
-          result.setNewValueCreated(false);
+          if (result != null) {
+            result.setNewValueCreated(false);
+          }
           addAffectedRegion = false;
           if (doLog) {
             final LogWriterI18n logger = txState.getTxMgr().getLogger();
@@ -590,6 +592,7 @@ public final class TXState implements TXStateInterface {
                 + r.getFullPath() + '[' + ArrayUtils.objectRefString(r)
                 + "], to tx: " + txState.getProxy());
           }
+          txr = null;
         }
         else if (doLog) {
           final LogWriterI18n logger = txState.getTxMgr().getLogger();
@@ -636,7 +639,7 @@ public final class TXState implements TXStateInterface {
    */
   public final TXRegionState writeRegion(LocalRegion r)
       throws TransactionException {
-    return this.regions.create(r, txRegionCreator, this, Boolean.TRUE);
+    return writeRegion(r, Boolean.TRUE);
   }
 
   /**
@@ -648,7 +651,18 @@ public final class TXState implements TXStateInterface {
    */
   public final TXRegionState writeRegion(final LocalRegion r,
       final Boolean checkForTXFinish) throws TransactionException {
-    return this.regions.create(r, txRegionCreator, this, checkForTXFinish);
+    TXRegionState txr = this.regions.get(r);
+    if (txr == null) {
+      txr = txRegionCreator.newValue(r, this, checkForTXFinish, null);
+      if (txr != null) {
+        Object old = this.regions.addKey(txr);
+        return old != null ? (TXRegionState)old : txr;
+      } else {
+        return null;
+      }
+    } else {
+      return txr;
+    }
   }
 
   /**
@@ -660,7 +674,7 @@ public final class TXState implements TXStateInterface {
    */
   public final TXRegionState writeRegionForRead(LocalRegion r)
       throws TransactionException {
-    return this.regions.create(r, txRegionCreatorForRead, this, Boolean.TRUE);
+    return writeRegionForRead(r, Boolean.TRUE);
   }
 
   /**
@@ -672,8 +686,18 @@ public final class TXState implements TXStateInterface {
    */
   public final TXRegionState writeRegionForRead(final LocalRegion r,
       final Boolean checkForTXFinish) throws TransactionException {
-    return this.regions.create(r, txRegionCreatorForRead, this,
-        checkForTXFinish);
+    TXRegionState txr = this.regions.get(r);
+    if (txr == null) {
+      txr = txRegionCreatorForRead.newValue(r, this, checkForTXFinish, null);
+      if (txr != null) {
+        Object old = this.regions.addKey(txr);
+        return old != null ? (TXRegionState)old : txr;
+      } else {
+        return null;
+      }
+    } else {
+      return txr;
+    }
   }
 
   public final long getBeginTime() {
