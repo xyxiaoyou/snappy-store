@@ -90,8 +90,8 @@ public final class TXRegionState extends ReentrantLock {
   private transient boolean isRemoteVersionSource;
 
   /** holds the ops for uninitialized regions */
-  private final ArrayList<Object> pendingTXOps;
-  private final TIntArrayList pendingTXLockFlags;
+  private ArrayList<Object> pendingTXOps;
+  private TIntArrayList pendingTXLockFlags;
   private List<Object> pendingGIITXOps;
   private int pendingGIILockFlag;
   private volatile boolean pendingGIITXLocked;
@@ -149,12 +149,15 @@ public final class TXRegionState extends ReentrantLock {
     this.entryMods = new THashMapWithCreate(4);
     this.expiryReadLock = r.getTxEntryExpirationReadLock();
     this.isValid = true;
+  }
 
+  boolean initialize(LocalRegion r) {
     if (!r.isInitialized() && r.getImageState().lockPendingTXRegionStates(true, false)) {
       try {
         if (!r.getImageState().addPendingTXRegionState(this)) {
           this.pendingTXOps = null;
           this.pendingTXLockFlags = null;
+          return false;
         } else {
           this.pendingTXOps = new ArrayList<Object>();
           this.pendingTXLockFlags = new TIntArrayList();
@@ -162,11 +165,11 @@ public final class TXRegionState extends ReentrantLock {
       } finally {
         r.getImageState().unlockPendingTXRegionStates(true);
       }
-
     } else {
       this.pendingTXOps = null;
       this.pendingTXLockFlags = null;
     }
+    return true;
   }
 
   /**
