@@ -32,12 +32,7 @@ import com.gemstone.gemfire.internal.Assert;
  */
 public class StoppableReentrantReadWriteLock implements /* ReadWriteLock, */ java.io.Serializable  {
   private static final long serialVersionUID = -1185707921434766946L;
-
-  /**
-   * The underlying read/write lock
-   */
-  transient private final ReadWriteLock lock;
-
+  
   /**
    * The underlying read lock
    */
@@ -51,7 +46,7 @@ public class StoppableReentrantReadWriteLock implements /* ReadWriteLock, */ jav
   /**
    * This is how often waiters will wake up to check for cancellation
    */
-  private static final long RETRY_TIME = 5 * 1000; // milliseconds
+  private static final long RETRY_TIME = 15 * 1000; // milliseconds
 
   /**
    * Create a new instance
@@ -77,6 +72,7 @@ public class StoppableReentrantReadWriteLock implements /* ReadWriteLock, */ jav
   public StoppableReentrantReadWriteLock(boolean countbased, boolean fair,
       CancelCriterion stopper) {
     Assert.assertTrue(stopper != null);
+    ReadWriteLock lock;
     if (countbased) {
       lock = new SemaphoreReadWriteLock(fair);
     }
@@ -93,7 +89,7 @@ public class StoppableReentrantReadWriteLock implements /* ReadWriteLock, */ jav
    */
   public StoppableReentrantReadWriteLock(CancelCriterion stopper) {
     Assert.assertTrue(stopper != null);
-    this.lock = new ReentrantReadWriteLock();
+    ReadWriteLock lock = new ReentrantReadWriteLock();
     this.readLock = new StoppableReadLock(lock, stopper);
     this.writeLock = new StoppableWriteLock(lock, stopper);
   }
@@ -111,15 +107,7 @@ public class StoppableReentrantReadWriteLock implements /* ReadWriteLock, */ jav
   public StoppableWriteLock writeLock() {
     return writeLock;
   }
-
-  public int getReadLockCount() {
-    if (this.lock instanceof ReentrantReadWriteLock) {
-      return ((ReentrantReadWriteLock)this.lock).getReadLockCount();
-    } else {
-      return -1;
-    }
-  }
-
+  
   /**
    * read locks that are stoppable
    * @author jpenney

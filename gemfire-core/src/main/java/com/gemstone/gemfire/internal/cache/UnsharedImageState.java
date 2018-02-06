@@ -23,6 +23,7 @@ import com.gemstone.gemfire.i18n.LogWriterI18n;
 import com.gemstone.gemfire.internal.Assert;
 import com.gemstone.gemfire.internal.util.concurrent.StoppableNonReentrantLock;
 import com.gemstone.gemfire.internal.util.concurrent.StoppableReentrantReadWriteLock;
+import com.gemstone.gemfire.internal.cache.locks.NonReentrantReadWriteLock;
 import com.gemstone.gemfire.internal.cache.versions.RegionVersionVector;
 import com.gemstone.gemfire.internal.cache.versions.VersionSource;
 import com.gemstone.gemfire.internal.cache.versions.VersionTag;
@@ -74,7 +75,8 @@ public class UnsharedImageState implements ImageState {
    * GII is complete
    */
   private volatile THashMapWithCreate pendingTXRegionStates;
-  private final StoppableReentrantReadWriteLock pendingTXRegionStatesLock;
+  private final NonReentrantReadWriteLock pendingTXRegionStatesLock;
+  private volatile Thread pendingTXRegionStatesLockOwner;
   private final AtomicInteger pendingTXOrder;
   private volatile TObjectIntHashMap finishedTXIdOrders;
 
@@ -99,7 +101,7 @@ public class UnsharedImageState implements ImageState {
     this.failedEvents = new ConcurrentTHashSet<EventID>(2);
     this.pendingTXRegionStates = isLocal ? null : new THashMapWithCreate();
     this.pendingTXRegionStatesLock = isLocal ? null
-        : new StoppableReentrantReadWriteLock(stopper);
+        : new NonReentrantReadWriteLock(stopper);
     this.pendingTXOrder = new AtomicInteger(0);
   }
 
@@ -399,7 +401,12 @@ public class UnsharedImageState implements ImageState {
     }
     TXRegionState txrs = null;
     if (lock) {
-      this.pendingTXRegionStatesLock.readLock().lock();
+      if (Thread.currentThread() != this.pendingTXRegionStatesLockOwner) {
+        this.pendingTXRegionStatesLock.attemptReadLock(-1);
+      }
+      else {
+        lock = false;
+      }
     }
     try {
       if (this.pendingTXRegionStates != null) {
@@ -414,7 +421,7 @@ public class UnsharedImageState implements ImageState {
       }
     } finally {
       if (lock) {
-        this.pendingTXRegionStatesLock.readLock().unlock();
+        this.pendingTXRegionStatesLock.releaseReadLock();
       }
     }
     return txrs;
@@ -438,9 +445,11 @@ public class UnsharedImageState implements ImageState {
       }
     }
     if (forWrite) {
-      this.pendingTXRegionStatesLock.writeLock().lock();
-    } else {
-      this.pendingTXRegionStatesLock.readLock().lock();
+      this.pendingTXRegionStatesLock.attemptWriteLock(-1);
+      this.pendingTXRegionStatesLockOwner = Thread.currentThread();
+    }
+    else {
+      this.pendingTXRegionStatesLock.attemptReadLock(-1);
     }
     if (this.pendingTXRegionStates != null) {
       if (TXStateProxy.LOG_FINE) {
@@ -455,9 +464,11 @@ public class UnsharedImageState implements ImageState {
     }
     else {
       if (forWrite) {
-        this.pendingTXRegionStatesLock.writeLock().unlock();
-      } else {
-        this.pendingTXRegionStatesLock.readLock().unlock();
+        this.pendingTXRegionStatesLockOwner = null;
+        this.pendingTXRegionStatesLock.releaseWriteLock();
+      }
+      else {
+        this.pendingTXRegionStatesLock.releaseReadLock();
       }
       return false;
     }
@@ -470,10 +481,11 @@ public class UnsharedImageState implements ImageState {
   public void unlockPendingTXRegionStates(final boolean forWrite) {
     if (this.pendingTXRegionStatesLock != null) {
       if (forWrite) {
-        this.pendingTXRegionStatesLock.writeLock().unlock();
+        this.pendingTXRegionStatesLockOwner = null;
+        this.pendingTXRegionStatesLock.releaseWriteLock();
       }
       else {
-        this.pendingTXRegionStatesLock.readLock().unlock();
+        this.pendingTXRegionStatesLock.releaseReadLock();
       }
       if (TXStateProxy.LOG_FINE) {
         final LogWriterI18n logger = InternalDistributedSystem.getLoggerI18n();
@@ -517,7 +529,7 @@ public class UnsharedImageState implements ImageState {
     if (this.pendingTXRegionStatesLock != null) {
       TObjectIntHashMap finishedOrders;
       // assume read lock on pendingTXRegionStates is already held
-      Assert.assertTrue(this.pendingTXRegionStatesLock.getReadLockCount() > 0);
+      Assert.assertTrue(this.pendingTXRegionStatesLock.numReaders() > 0);
       if ((finishedOrders = this.finishedTXIdOrders) != null) {
         int order = finishedOrders.get(txrs.getTXState().getTransactionId());
         if (order != 0) {
@@ -551,7 +563,7 @@ public class UnsharedImageState implements ImageState {
       final Collection<TXId> txIds) {
     final THashMapWithCreate pendingTXRS = this.pendingTXRegionStates;
     if (pendingTXRS != null) {
-      this.pendingTXRegionStatesLock.writeLock().lock();
+      this.pendingTXRegionStatesLock.attemptWriteLock(-1);
       try {
         // first get the ordering for finished transactions from TX manager;
         // this is deliberately invoked under the lock to sync against
@@ -585,7 +597,7 @@ public class UnsharedImageState implements ImageState {
         this.pendingTXOrder.addAndGet(increment);
         this.finishedTXIdOrders = txIdOrders;
       } finally {
-        this.pendingTXRegionStatesLock.writeLock().unlock();
+        this.pendingTXRegionStatesLock.releaseWriteLock();
       }
     }
   }
