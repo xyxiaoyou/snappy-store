@@ -581,9 +581,7 @@ public final class TXState implements TXStateInterface {
           // miss receiving commit messages later
           // send back a valid TXRegionState for operation to continue in normal
           // flow but it will be discarded at the end of operation
-          if (result != null) {
-            result.setNewValueCreated(false);
-          }
+          result.setNewValueCreated(false);
           addAffectedRegion = false;
           if (doLog) {
             final LogWriterI18n logger = txState.getTxMgr().getLogger();
@@ -592,7 +590,6 @@ public final class TXState implements TXStateInterface {
                 + r.getFullPath() + '[' + ArrayUtils.objectRefString(r)
                 + "], to tx: " + txState.getProxy());
           }
-          txr = null;
         }
         else if (doLog) {
           final LogWriterI18n logger = txState.getTxMgr().getLogger();
@@ -630,27 +627,6 @@ public final class TXState implements TXStateInterface {
   private static final TXRegionCreator txRegionCreatorForRead =
       new TXRegionCreator(true);
 
-  private TXRegionState getOrCreateRegion(LocalRegion r,
-      TXRegionCreator creator, Boolean checkForTXFinish) {
-    TXRegionState txr = this.regions.get(r);
-    if (txr == null) {
-      txr = creator.newValue(r, this, checkForTXFinish, null);
-      if (txr != null) {
-        Object old = this.regions.addKey(txr);
-        if (old != null) {
-          return (TXRegionState)old;
-        } else {
-          txr.initialize(r);
-          return txr;
-        }
-      } else {
-        return null;
-      }
-    } else {
-      return txr;
-    }
-  }
-
   /**
    * Used by transaction operations that are doing a write operation on the
    * specified region.
@@ -660,7 +636,7 @@ public final class TXState implements TXStateInterface {
    */
   public final TXRegionState writeRegion(LocalRegion r)
       throws TransactionException {
-    return getOrCreateRegion(r, txRegionCreator, Boolean.TRUE);
+    return this.regions.create(r, txRegionCreator, this, Boolean.TRUE);
   }
 
   /**
@@ -672,7 +648,7 @@ public final class TXState implements TXStateInterface {
    */
   public final TXRegionState writeRegion(final LocalRegion r,
       final Boolean checkForTXFinish) throws TransactionException {
-    return getOrCreateRegion(r, txRegionCreator, checkForTXFinish);
+    return this.regions.create(r, txRegionCreator, this, checkForTXFinish);
   }
 
   /**
@@ -684,7 +660,7 @@ public final class TXState implements TXStateInterface {
    */
   public final TXRegionState writeRegionForRead(LocalRegion r)
       throws TransactionException {
-    return getOrCreateRegion(r, txRegionCreatorForRead, Boolean.TRUE);
+    return this.regions.create(r, txRegionCreatorForRead, this, Boolean.TRUE);
   }
 
   /**
@@ -696,7 +672,8 @@ public final class TXState implements TXStateInterface {
    */
   public final TXRegionState writeRegionForRead(final LocalRegion r,
       final Boolean checkForTXFinish) throws TransactionException {
-    return getOrCreateRegion(r, txRegionCreatorForRead, checkForTXFinish);
+    return this.regions.create(r, txRegionCreatorForRead, this,
+        checkForTXFinish);
   }
 
   public final long getBeginTime() {
@@ -786,7 +763,7 @@ public final class TXState implements TXStateInterface {
         if (re != null) {
           // flags are not used by NULL_READER below so can stuff in
           // conflictWithEX without worrying for possible overlaps
-          lockEntryForRead(this.lockPolicy, re, key, region, this.txId, this,
+          lockEntryForRead(this.lockPolicy, re, key, region, txrs, this.txId, this,
               lockFlags, false, false, checkForTXFinish,
               LockingPolicy.NULL_READER);
         }
@@ -1824,7 +1801,7 @@ public final class TXState implements TXStateInterface {
             }
             final RegionEntry entry = (RegionEntry)lockObj;
             addReadLock(entry, entry.getKey(),
-                (LocalRegion)tssLocks[2].get(index), batchingEnabled,
+                (LocalRegion)tssLocks[2].get(index), null, batchingEnabled,
                 Boolean.TRUE);
           }
         }
@@ -2120,7 +2097,7 @@ public final class TXState implements TXStateInterface {
       final Object key, final LocalRegion dataRegion, final int iContext,
       final boolean allowTombstones, final ReadEntryUnderLock reader) {
     final LockingPolicy lockPolicy = getLockingPolicy();
-    return lockEntryForRead(lockPolicy, entry, key, dataRegion, this.txId,
+    return lockEntryForRead(lockPolicy, entry, key, dataRegion, null, this.txId,
         this, iContext, false, allowTombstones, Boolean.TRUE, reader);
   }
 
@@ -2456,7 +2433,7 @@ public final class TXState implements TXStateInterface {
    */
   static final Object lockEntryForRead(final LockingPolicy lockPolicy,
       RegionEntry entry, final Object key, final LocalRegion dataRegion,
-      final TXId txId, final TXState txState, final int iContext,
+      TXRegionState txr, final TXId txId, final TXState txState, int iContext,
       final boolean markPending, final boolean allowTombstones,
       final Boolean checkForTXFinish, final ReadEntryUnderLock reader) {
     final LockMode mode = lockPolicy.getReadLockMode();
@@ -2476,7 +2453,8 @@ public final class TXState implements TXStateInterface {
     }
     // adding the lock to the pending list
     // we need a local TXState; create a TXRegionState and add to that
-    txState.addReadLock(entry, key, dataRegion, markPending, checkForTXFinish);
+    txState.addReadLock(entry, key, dataRegion, txr, markPending,
+        checkForTXFinish);
     return reader.readEntry(entry, dataRegion, iContext, allowTombstones);
   }
 
@@ -2497,13 +2475,15 @@ public final class TXState implements TXStateInterface {
   }
 
   final boolean addReadLock(final RegionEntry entry, final Object key,
-      final LocalRegion dataRegion, final boolean markPending,
+      final LocalRegion dataRegion, TXRegionState txr, boolean markPending,
       final Boolean checkForTXFinish) {
     // mark TXStateProxy as having read operations
     this.proxy.markHasReadOps();
     // adding the lock to the pending list
     // we need a local TXState; create a TXRegionState and add to that
-    final TXRegionState txr = writeRegionForRead(dataRegion, checkForTXFinish);
+    if (txr == null) {
+      txr = writeRegionForRead(dataRegion, checkForTXFinish);
+    }
     if (txr == null) {
       return false;
     }

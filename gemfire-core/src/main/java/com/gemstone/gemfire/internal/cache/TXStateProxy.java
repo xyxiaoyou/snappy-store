@@ -4061,7 +4061,7 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
       final Object key, final LocalRegion dataRegion, final int iContext,
       final boolean allowTombstones, final ReadEntryUnderLock reader) {
     final LockingPolicy lockPolicy = getLockingPolicy();
-    return TXState.lockEntryForRead(lockPolicy, entry, key, dataRegion,
+    return TXState.lockEntryForRead(lockPolicy, entry, key, dataRegion, null,
         this.txId, getTXStateForRead(), iContext, batchingEnabled(),
         allowTombstones, Boolean.TRUE, reader);
   }
