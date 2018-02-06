@@ -2452,7 +2452,7 @@ public final class TXState implements TXStateInterface {
       return lockResult;
     }
     // adding the lock to the pending list
-    // we need a local TXState; create a TXRegionState and add to that
+    // we need a local TXState; create a TXRegionState if required and add to that
     txState.addReadLock(entry, key, dataRegion, txr, markPending,
         checkForTXFinish);
     return reader.readEntry(entry, dataRegion, iContext, allowTombstones);
