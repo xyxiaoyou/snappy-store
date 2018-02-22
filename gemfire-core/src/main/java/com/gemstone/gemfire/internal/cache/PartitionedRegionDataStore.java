@@ -1735,15 +1735,10 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
       writeLock.lock();
       try {
         if (!forceRemovePrimary && bucketAdvisor.isPrimary()) {
-          // instead of returning here we should make sure that
-          // 1. If I am child bucket.
-          // 2. There are parent buckets available on this node
-          // 3. Make sure that parent is also primary
-          // 4. And if we are returning false then parent removal should also fail.
           if (logger.fineEnabled()) {
             getLogWriter()
-                    .fine(
-                            "Returning false from removeBucket for bucket  " + bucketRegion);
+                .fine(
+                    "Returning false from removeBucket for bucket  " + bucketRegion);
           }
           return false;
         }
@@ -1753,8 +1748,8 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
         if (!childBucketRemoved) {
           if (logger.fineEnabled()) {
             getLogWriter()
-                    .fine(
-                            "Returning false from removeBucket because we couldn't remove one the child bucket.");
+                .fine(
+                    "Returning false from removeBucket because we couldn't remove one the child bucket.");
           }
           return false;
         }
