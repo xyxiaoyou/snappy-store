@@ -142,6 +142,7 @@ public class Status {
       writeString(exceptionStr, out);
       out.flush();
       stream.write(bos.toByteArray());
+      stream.flush();
     }
   }
 
@@ -211,7 +212,7 @@ public class Status {
         // try again - the status might have been read in the middle of it
         // being written by the server resulting in an EOFException here
         try {
-          Thread.sleep(500);
+          Thread.sleep(100);
         } catch (InterruptedException ie) {
           Thread.currentThread().interrupt();
           status = null;

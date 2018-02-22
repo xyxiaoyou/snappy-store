@@ -743,6 +743,12 @@ public class LocalRegion extends AbstractRegion
         StoreCallbacks.SHADOW_TABLE_SUFFIX);
     this.parentRegion = parentRegion;
     this.fullPath = calcFullPath(regionName, parentRegion);
+    // cannot support patterns like "..._/..." due to ambiguity in encoding
+    // of bucket regions
+    if (this.fullPath.contains("_/")) {
+      throw new IllegalArgumentException("Region path " + this.fullPath +
+          " cannot have trailing slash in a parent region");
+    }
     final GemFireCacheImpl.StaticSystemCallbacks sysCb =
         GemFireCacheImpl.FactoryStatics.systemCallbacks;
     if (sysCb == null) {
@@ -14518,9 +14524,17 @@ public class LocalRegion extends AbstractRegion
     }
   }
 
-  private void throwLowMemoryException(long size) {
+  public static LowMemoryException lowMemoryException(GemFireCacheImpl cache,
+      long size) {
+    if (cache == null) {
+      cache = GemFireCacheImpl.getExisting();
+    }
     Set<DistributedMember> sm = Collections.singleton(cache.getMyId());
-    throw new LowMemoryException("Could not obtain memory of size " + size, sm);
+    return new LowMemoryException("Could not obtain memory of size " + size, sm);
+  }
+
+  private void throwLowMemoryException(long size) {
+    throw lowMemoryException(cache, size);
   }
 
   public void freePoolMemory(long oldSize, boolean withEntryOverHead) {
