@@ -1455,9 +1455,9 @@ public class GfxdSystemProcedures extends SystemProcedures {
     // get partitioning columns
     GfxdPartitionByExpressionResolver resolver =
         (GfxdPartitionByExpressionResolver)region.getPartitionResolver();
-    StringBuffer stringBuffer = new StringBuffer();
+    StringBuilder stringBuffer = new StringBuilder();
     for (String col : resolver.getColumnNames()) {
-      stringBuffer.append(col + ":");
+      stringBuffer.append(col).append(':');
     }
     partColumns[0] = stringBuffer.toString();
 
@@ -1474,7 +1474,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
     Map<InternalDistributedMember, String> mbrToServerMap = GemFireXDUtils
         .getGfxdAdvisor().getAllNetServersWithMembers();
 
-    StringBuffer stringBuffer = new StringBuffer();
+    StringBuilder stringBuffer = new StringBuilder();
     if (GemFireXDUtils.getMyVMKind().isStore()) {
       owners.add(Misc.getGemFireCache().getMyId());
     }
@@ -1482,7 +1482,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
     for (InternalDistributedMember node : owners) {
       String netServer = mbrToServerMap.get(node);
       if ( netServer != null) {
-        stringBuffer.append(netServer + ";");
+        stringBuffer.append(netServer).append(';');
       }
     }
     if (stringBuffer.length() > 0) {

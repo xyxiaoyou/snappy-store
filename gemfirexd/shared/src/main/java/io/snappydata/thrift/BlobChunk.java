@@ -77,12 +77,15 @@ public class BlobChunk implements org.apache.thrift.TBase<BlobChunk, BlobChunk._
 
   public BlobChunk(ByteBufferReference reference, boolean last) {
     this();
-    // Increment the reference immediately. Release should be done
-    // by holder once done (ClientBlob or ThriftRow).
-    this.chunk = reference.getBufferRetain();
-    this.chunkReference = reference;
+    assignChunkReference(reference);
     this.last = last;
     setLastIsSet(true);
+  }
+
+  private void assignChunkReference(ByteBufferReference reference) {
+    // chunkReference will be incremented and released at the time of write
+    this.chunk = ClientSharedData.NULL_BUFFER;
+    this.chunkReference = reference;
   }
 
   public int size() {
@@ -92,7 +95,9 @@ public class BlobChunk implements org.apache.thrift.TBase<BlobChunk, BlobChunk._
   public void free() {
     final ByteBufferReference reference = this.chunkReference;
     if (reference != null) {
-      reference.release();
+      if (this.chunk != ClientSharedData.NULL_BUFFER) {
+        reference.release();
+      }
       this.chunkReference = null;
     } else {
       UnsafeHolder.releaseIfDirectBuffer(this.chunk);
@@ -214,8 +219,7 @@ public class BlobChunk implements org.apache.thrift.TBase<BlobChunk, BlobChunk._
     __isset_bitfield = other.__isset_bitfield;
     ByteBufferReference reference = other.chunkReference;
     if (reference != null) {
-      this.chunk = reference.getBufferRetain();
-      this.chunkReference = reference;
+      assignChunkReference(reference);
     } else if (other.chunk != null) {
       // always own the chunk
       if (other.chunk.isDirect()) {
@@ -236,6 +240,7 @@ public class BlobChunk implements org.apache.thrift.TBase<BlobChunk, BlobChunk._
 
   @Override
   public void clear() {
+    free();
     this.chunk = null;
     setLastIsSet(false);
     this.last = false;
@@ -252,12 +257,14 @@ public class BlobChunk implements org.apache.thrift.TBase<BlobChunk, BlobChunk._
   }
 
   public BlobChunk setChunk(byte[] chunk) {
+    free();
     this.chunk = chunk == null ? (ByteBuffer)null : ByteBuffer.wrap(Arrays.copyOf(chunk, chunk.length));
     return this;
   }
 
   public BlobChunk setChunk(ByteBuffer chunk) {
-    this.chunk = ByteBuffer.wrap(ThriftUtils.toBytes(chunk));
+    free();
+    this.chunk = chunk != null ? ByteBuffer.wrap(ThriftUtils.toBytes(chunk)) : null;
     return this;
   }
 
@@ -276,6 +283,7 @@ public class BlobChunk implements org.apache.thrift.TBase<BlobChunk, BlobChunk._
 
   public void setChunkIsSet(boolean value) {
     if (!value) {
+      free();
       this.chunk = null;
     }
   }
@@ -461,15 +469,20 @@ public class BlobChunk implements org.apache.thrift.TBase<BlobChunk, BlobChunk._
 
   private ByteBuffer getCompressedBuffer(org.apache.thrift.protocol.TProtocol oprot) {
     // compress if sending to remote else send as is
-    if (isSetChunkReference()) {
+    final ByteBufferReference reference = this.chunkReference;
+    if (reference != null) {
+      // release already held reference count
+      if (this.chunk != ClientSharedData.NULL_BUFFER) {
+        reference.release();
+        this.chunk = ClientSharedData.NULL_BUFFER;
+      }
       TTransport transport = oprot.getTransport();
-      if (!(transport instanceof SocketTimeout) ||
-          !((SocketTimeout)transport).isSocketToSameHost()) {
-        ByteBufferReference compressed = this.chunkReference.getValueRetain(
-            false, true);
-        this.chunkReference.release();
-        this.chunkReference = compressed;
-        this.chunk = compressed.getBuffer();
+      if (transport instanceof SocketTimeout) {
+        boolean sameHost = ((SocketTimeout)transport).isSocketToSameHost();
+        this.chunkReference = reference.getValueRetain(sameHost, !sameHost);
+        this.chunk = this.chunkReference.getBuffer();
+      } else {
+        this.chunk = reference.getBufferRetain();
       }
     }
     return this.chunk;
@@ -790,9 +803,9 @@ public class BlobChunk implements org.apache.thrift.TBase<BlobChunk, BlobChunk._
     @Override
     public void write(org.apache.thrift.protocol.TProtocol oprot, BlobChunk struct)
         throws org.apache.thrift.TException {
+      struct.validate();
+      final ByteBuffer chunk = struct.getCompressedBuffer(oprot);
       try {
-        struct.validate();
-        final ByteBuffer chunk = struct.getCompressedBuffer(oprot);
         writeData(oprot, struct, chunk);
       } finally {
         // free the blob once written
@@ -843,8 +856,8 @@ public class BlobChunk implements org.apache.thrift.TBase<BlobChunk, BlobChunk._
     @Override
     public void write(org.apache.thrift.protocol.TProtocol prot,
         BlobChunk struct) throws org.apache.thrift.TException {
+      final ByteBuffer buffer = struct.getCompressedBuffer(prot);
       try {
-        final ByteBuffer buffer = struct.getCompressedBuffer(prot);
         writeData(prot, struct,
             buffer != null ? buffer : ClientSharedData.NULL_BUFFER);
       } finally {

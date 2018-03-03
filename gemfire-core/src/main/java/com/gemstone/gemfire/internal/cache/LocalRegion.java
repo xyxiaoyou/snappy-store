@@ -13552,6 +13552,12 @@ public class LocalRegion extends AbstractRegion
     }
 
     @Override
+    public void incDecompressedReplaced() {
+      stats.incLong(compressionDecompressedReplacedId, 1);
+      cachePerfStats.stats.incLong(compressionDecompressedReplacedId, 1);
+    }
+
+    @Override
     public void incDecompressedReplaceSkipped() {
       stats.incLong(compressionDecompressedReplaceSkippedId, 1);
       cachePerfStats.stats.incLong(compressionDecompressedReplaceSkippedId, 1);
@@ -14528,9 +14534,10 @@ public class LocalRegion extends AbstractRegion
   public static LowMemoryException lowMemoryException(GemFireCacheImpl cache,
       long size) {
     if (cache == null) {
-      cache = GemFireCacheImpl.getExisting();
+      cache = GemFireCacheImpl.getInstance();
     }
-    Set<DistributedMember> sm = Collections.singleton(cache.getMyId());
+    Set<DistributedMember> sm = cache != null
+        ? Collections.singleton(cache.getMyId()) : Collections.emptySet();
     return new LowMemoryException("Could not obtain memory of size " + size, sm);
   }
 
