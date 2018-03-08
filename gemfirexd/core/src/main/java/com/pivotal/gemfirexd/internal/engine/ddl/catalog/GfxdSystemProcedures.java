@@ -48,8 +48,11 @@ import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedM
 import com.gemstone.gemfire.internal.NanoTimer;
 import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.cache.control.InternalResourceManager;
+import com.gemstone.gemfire.internal.cache.persistence.query.CloseableIterator;
 import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
+import com.gemstone.gemfire.internal.snappy.ColumnTableEntry;
 import com.gemstone.gnu.trove.THashSet;
+import com.gemstone.gnu.trove.TIntArrayList;
 import com.pivotal.gemfirexd.Attribute;
 import com.pivotal.gemfirexd.auth.callback.UserAuthenticator;
 import com.pivotal.gemfirexd.internal.catalog.AliasInfo;
@@ -121,6 +124,7 @@ import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.snappy.LeadNodeSmartConnectorOpContext;
 import com.pivotal.gemfirexd.load.Import;
 import io.snappydata.thrift.ServerType;
+import io.snappydata.thrift.internal.ClientBlob;
 
 /**
  * GemFireXD built-in system procedures that will get executed on every
@@ -1504,16 +1508,15 @@ public class GfxdSystemProcedures extends SystemProcedures {
       throws StandardException {
     GemFireContainer container = (GemFireContainer)region.getUserAttribute();
     TableDescriptor td = container.getTableDescriptor();
-    String cols = null;
+    StringBuilder cols = new StringBuilder();
     if (td != null) {
       String[] baseColumns = td.getColumnNamesArray();
       GfxdIndexManager im = container.getIndexManager();
-      if ((im != null) && (im.getIndexConglomerateDescriptors() != null)) {
-        Iterator<ConglomerateDescriptor> itr = im.getIndexConglomerateDescriptors().iterator();
-        while (itr.hasNext()) {
+      if (im != null && im.getIndexConglomerateDescriptors() != null) {
+        for (ConglomerateDescriptor cd : im.getIndexConglomerateDescriptors()) {
           // first column of index has to be present in filter to be usable
-          int[] indexCols = itr.next().getIndexDescriptor().baseColumnPositions();
-          cols += baseColumns[indexCols[0] - 1] + ":";
+          int[] indexCols = cd.getIndexDescriptor().baseColumnPositions();
+          cols.append(baseColumns[indexCols[0] - 1]).append(':');
         }
       }
       // also add primary key
@@ -1522,11 +1525,16 @@ public class GfxdSystemProcedures extends SystemProcedures {
         // first column of primary key has to be present in filter to be usable
         int[] pkCols = primaryKey.getKeyColumns();
         if (pkCols != null && pkCols.length > 0) {
-          cols += baseColumns[pkCols[0] - 1];
+          cols.append(baseColumns[pkCols[0] - 1]);
         }
       }
     }
-    indexColumns[0] = cols;
+    int len = cols.length();
+    if (len > 0 && cols.charAt(len - 1) == ':') {
+      indexColumns[0] = cols.substring(0, len - 1);
+    } else {
+      indexColumns[0] = cols.toString();
+    }
   }
 
   public static void getPKColumns(String[] pkColumns,
@@ -2999,6 +3007,72 @@ public class GfxdSystemProcedures extends SystemProcedures {
           "GET_COLUMN_TABLE_SCHEMA table=" + table + " schema=" + schemaString);
     }
     schemaAsJson[0] = new HarmonySerialClob(schemaString);
+  }
+
+  private static final SharedUtils.CSVVisitor<TIntArrayList, Void> projectionAgg =
+      (str, projection, context) -> projection.add(Integer.parseInt(str.trim()));
+
+  private static final ResultColumnDescriptor[] columnScanInfo = {
+      EmbedResultSetMetaData.getResultColumnDescriptor("UUID",
+          Types.BIGINT, false),
+      EmbedResultSetMetaData.getResultColumnDescriptor("BUCKETID",
+          Types.INTEGER, false),
+      EmbedResultSetMetaData.getResultColumnDescriptor("COLUMNPOSITION",
+          Types.INTEGER, false),
+      EmbedResultSetMetaData.getResultColumnDescriptor("DATA",
+          Types.BLOB, false)
+  };
+
+  public static void COLUMN_TABLE_SCAN(String columnTable, String projection,
+      Blob filters, ResultSet[] result) throws SQLException {
+    try {
+      // split the projection into column indexes (1-based)
+      final TIntArrayList columns = new TIntArrayList(4);
+      SharedUtils.splitCSV(projection, projectionAgg, columns, null);
+      byte[] batchFilters = filters != null
+          ? filters.getBytes(1, (int)filters.length()) : null;
+      Set<Integer> bucketIds = ConnectionUtil.getCurrentLCC()
+          .getBucketIdsForLocalExecution();
+      final CloseableIterator<ColumnTableEntry> iter =
+          CallbackFactoryProvider.getStoreCallbacks().columnTableScan(
+              columnTable, columns.toNativeArray(), batchFilters, bucketIds);
+      if (GemFireXDUtils.TraceExecution) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_EXECUTION,
+            "COLUMN_TABLE_SCAN table=" + columnTable +
+                " projection=" + projection);
+      }
+      result[0] = new CustomRowsResultSet(new CustomRowsResultSet.FetchDVDRows() {
+        @Override
+        public boolean getNext(DataValueDescriptor[] template)
+            throws SQLException, StandardException {
+          if (iter.hasNext()) {
+            ColumnTableEntry entry = iter.next();
+            template[0].setValue(entry.uuid);
+            template[1].setValue(entry.bucketId);
+            template[2].setValue(entry.columnPosition);
+            ClientBlob blob = new ClientBlob(entry.columnValue);
+            // mark chunk as having a reference set from outside (columnTableScan)
+            if (!blob.getCurrentChunk().initChunkFromReference()) {
+              throw StandardException.newException(SQLState.DATA_UNEXPECTED_EXCEPTION,
+                  new IllegalStateException("failed to increment reference count"));
+            }
+            template[3].setValue(blob);
+            return true;
+          } else {
+            return false;
+          }
+        }
+
+        @Override
+        public void close() throws SQLException {
+          iter.close();
+        }
+      }, columnScanInfo);
+    } catch (SQLException se) {
+      throw se;
+    } catch (Throwable t) {
+      throw TransactionResourceImpl.wrapInSQLException(t);
+    }
   }
 
   /**

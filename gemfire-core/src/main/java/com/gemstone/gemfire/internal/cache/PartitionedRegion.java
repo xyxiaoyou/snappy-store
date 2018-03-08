@@ -7345,6 +7345,7 @@ public class PartitionedRegion extends LocalRegion implements
                 }
               }
               // no more buckets need to be visited
+              close();
               this.bucketEntriesIter = null;
               this.moveNext = false;
               return false;
