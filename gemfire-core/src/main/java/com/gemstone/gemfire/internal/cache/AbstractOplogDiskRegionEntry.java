@@ -58,7 +58,7 @@ public abstract class AbstractOplogDiskRegionEntry
   @Override
   protected final void initDiskIdForOffHeap(RegionEntryContext context,
       Object value) {
-    // copy DiskId to value if required
+    // copy self to value if required
     if (value instanceof SerializedDiskBuffer) {
       ((SerializedDiskBuffer)value).setDiskEntry(this, context);
     }
