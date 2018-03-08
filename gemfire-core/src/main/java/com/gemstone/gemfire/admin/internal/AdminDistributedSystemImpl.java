@@ -2478,9 +2478,12 @@ implements com.gemstone.gemfire.admin.AdminDistributedSystem,
     FlushToDiskRequest.send(dm, recipients);
     Map<DistributedMember, Set<PersistentID>> existingDataStores 
         = PrepareBackupRequest.send(dm, recipients);
-    Map<DistributedMember, Set<PersistentID>> successfulMembers 
-        = FinishBackupRequest.send(dm, recipients, targetDir, baselineDir);
-    
+    Map<DistributedMember, Set<PersistentID>> successfulMembers1
+        = FinishBackupRequest.send(dm, recipients, targetDir, baselineDir, FinishBackupRequest.DISKSTORE_DD);
+    Map<DistributedMember, Set<PersistentID>> successfulMembers2
+        = FinishBackupRequest.send(dm, recipients, targetDir, baselineDir, FinishBackupRequest.DISKSTORE_ALL_BUT_DD);
+    Map<DistributedMember, Set<PersistentID>> successfulMembers =
+        getAllSuccessfulMembers(successfulMembers1, successfulMembers2);
     // It's possible that when calling getMissingPersistentMembers, some members are 
     // still creating/recovering regions, and at FinishBackupRequest.send, the 
     // regions at the members are ready. Logically, since the members in successfulMembers
@@ -2496,7 +2499,12 @@ implements com.gemstone.gemfire.admin.AdminDistributedSystem,
     
     return new BackupStatusImpl(successfulMembers, missingMembers);
   }
-  
+
+  private static Map<DistributedMember, Set<PersistentID>> getAllSuccessfulMembers(
+      Map<DistributedMember, Set<PersistentID>> first, Map<DistributedMember, Set<PersistentID>> second) {
+    return null;
+  }
+
   public Map<DistributedMember, Set<PersistentID>> compactAllDiskStores() throws AdminException {
     connectAdminDS();
     DM dm = getDistributionManager();

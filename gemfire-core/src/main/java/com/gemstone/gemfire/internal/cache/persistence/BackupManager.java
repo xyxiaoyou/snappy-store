@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
 import com.gemstone.gemfire.InternalGemFireError;
+import com.gemstone.gemfire.admin.internal.FinishBackupRequest;
 import com.gemstone.gemfire.cache.persistence.PersistentID;
 import com.gemstone.gemfire.distributed.DistributedSystem;
 import com.gemstone.gemfire.distributed.internal.DM;
@@ -166,7 +167,7 @@ public class BackupManager implements MembershipListener {
     return baselineDir;
   }
   
-  public HashSet<PersistentID> finishBackup(File targetDir, File baselineDir) throws IOException {
+  public HashSet<PersistentID> finishBackup(File targetDir, File baselineDir, byte diskStoresToBackup) throws IOException {
     try {
       File backupDir = getBackupDir(targetDir);
       
@@ -198,7 +199,10 @@ public class BackupManager implements MembershipListener {
         store.releaseBackupLock();
       }
 
-      allowDestroys.countDown();
+      if (diskStoresToBackup == FinishBackupRequest.DISKSTORE_ALL_BUT_DD
+          || diskStoresToBackup == FinishBackupRequest.DISKSTORE_ALL) {
+        allowDestroys.countDown();
+      }
 
       for(DiskStoreImpl store : diskStores) {
         store.finishBackup(this);
