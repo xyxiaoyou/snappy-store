@@ -20,13 +20,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Stream;
 
 import com.gemstone.gemfire.InternalGemFireError;
 import com.gemstone.gemfire.admin.internal.FinishBackupRequest;
@@ -166,8 +162,29 @@ public class BackupManager implements MembershipListener {
     
     return baselineDir;
   }
-  
-  public HashSet<PersistentID> finishBackup(File targetDir, File baselineDir, byte diskStoresToBackup) throws IOException {
+
+  private Collection<DiskStoreImpl> getDiskStoresToBackUp(byte diskStoresToBackup) {
+    Collection<DiskStoreImpl> allDses = cache.listDiskStoresIncludingRegionOwned();
+    switch (diskStoresToBackup) {
+      case FinishBackupRequest.DISKSTORE_ALL:
+        return allDses;
+
+      case FinishBackupRequest.DISKSTORE_ALL_BUT_DD:
+        allDses.removeIf(ds -> ds.getName().equals("GFXD-DD-DISKSTORE"));
+        return allDses;
+
+      case FinishBackupRequest.DISKSTORE_DD:
+        Optional<DiskStoreImpl> ods = allDses.stream().filter
+            (ds -> ds.getName().equals("GFXD-DD-DISKSTORE")).findFirst();
+        if (ods.isPresent()) {
+          return Collections.singletonList(ods.get());
+        }
+    }
+    return Collections.emptyList();
+  }
+
+  public HashSet<PersistentID> finishBackup(File targetDir,
+      File baselineDir, byte diskStoresToBackup) throws IOException {
     try {
       File backupDir = getBackupDir(targetDir);
       
@@ -180,13 +197,16 @@ public class BackupManager implements MembershipListener {
       File storesDir = new File(backupDir, DATA_STORES);
       RestoreScript restoreScript = new RestoreScript();
       HashSet<PersistentID> persistentIds = new HashSet<PersistentID>();
-      Collection<DiskStoreImpl> diskStores = new ArrayList<DiskStoreImpl>(cache.listDiskStoresIncludingRegionOwned());
+      // Collection<DiskStoreImpl> diskStores = new ArrayList<DiskStoreImpl>(cache.listDiskStoresIncludingRegionOwned());
+      Collection<DiskStoreImpl> diskStores = getDiskStoresToBackUp(diskStoresToBackup);
 
       boolean foundPersistentData = false;
       for(Iterator<DiskStoreImpl> itr = diskStores.iterator(); itr.hasNext();) {
         DiskStoreImpl store = itr.next();
         if(store.hasPersistedData()) {
-          if(!foundPersistentData) {
+          if(!foundPersistentData &&
+              ((diskStoresToBackup == FinishBackupRequest.DISKSTORE_ALL) ||
+                  (diskStoresToBackup == FinishBackupRequest.DISKSTORE_DD))) {
             createBackupDir(backupDir);
             foundPersistentData = true;
           }
@@ -225,7 +245,10 @@ public class BackupManager implements MembershipListener {
       return persistentIds;
 
     } finally {
-      cleanup();
+      if (diskStoresToBackup == FinishBackupRequest.DISKSTORE_ALL_BUT_DD
+          || diskStoresToBackup == FinishBackupRequest.DISKSTORE_ALL) {
+        cleanup();
+      }
     }
   }
   

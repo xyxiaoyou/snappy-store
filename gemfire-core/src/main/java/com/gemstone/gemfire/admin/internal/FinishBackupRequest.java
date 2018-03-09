@@ -52,7 +52,7 @@ public class FinishBackupRequest  extends AdminRequest {
 
   public static final byte DISKSTORE_DD = 1;
   public static final byte DISKSTORE_ALL_BUT_DD = 2;
-  public static final byte DISKSTORE_ALL = 1;
+  public static final byte DISKSTORE_ALL = 3;
 
   private File targetDir;
   private File baselineDir;

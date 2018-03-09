@@ -20,17 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.StringTokenizer;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
@@ -2501,8 +2491,15 @@ implements com.gemstone.gemfire.admin.AdminDistributedSystem,
   }
 
   private static Map<DistributedMember, Set<PersistentID>> getAllSuccessfulMembers(
-      Map<DistributedMember, Set<PersistentID>> first, Map<DistributedMember, Set<PersistentID>> second) {
-    return null;
+      final Map<DistributedMember, Set<PersistentID>> first, final Map<DistributedMember, Set<PersistentID>> second) {
+    second.forEach((dm, idset) -> {
+      Set<PersistentID> val1 = first.get(dm);
+      if (val1 != null) {
+        idset.addAll(val1);
+      }
+      first.put(dm, idset);
+    } );
+    return first;
   }
 
   public Map<DistributedMember, Set<PersistentID>> compactAllDiskStores() throws AdminException {
