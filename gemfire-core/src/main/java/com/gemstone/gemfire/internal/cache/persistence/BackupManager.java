@@ -80,6 +80,7 @@ public class BackupManager implements MembershipListener {
   private void cleanup() {
     isCancelled = true;
     allowDestroys.countDown();
+    this.incompleteRestoreScript = null;
     Collection<DiskStoreImpl> diskStores = cache.listDiskStoresIncludingRegionOwned();
     for(DiskStoreImpl store : diskStores) {
       store.releaseBackupLock();
