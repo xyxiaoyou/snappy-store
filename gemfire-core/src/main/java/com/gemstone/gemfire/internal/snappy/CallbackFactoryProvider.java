@@ -83,7 +83,7 @@ public abstract class CallbackFactoryProvider {
 
     @Override
     public CloseableIterator<ColumnTableEntry> columnTableScan(
-        String columnTable, int[] projection, byte[] serializedBatchFilters,
+        String columnTable, int[] projection, byte[] serializedFilters,
         Set<Integer> bucketIds) throws SQLException {
       throw new UnsupportedOperationException("unexpected invocation for "
           + toString());

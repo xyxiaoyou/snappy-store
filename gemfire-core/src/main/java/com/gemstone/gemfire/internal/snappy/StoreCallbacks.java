@@ -56,7 +56,7 @@ public interface StoreCallbacks {
    * will have reference count incremented, so caller should decrement once done.
    */
   CloseableIterator<ColumnTableEntry> columnTableScan(String qualifiedTable,
-      int[] projection, byte[] serializedBatchFilters,
+      int[] projection, byte[] serializedFilters,
       Set<Integer> bucketIds) throws SQLException;
 
   void registerRelationDestroyForHiveStore();
