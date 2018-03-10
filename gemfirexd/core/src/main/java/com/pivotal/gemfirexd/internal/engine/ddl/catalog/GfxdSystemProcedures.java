@@ -90,17 +90,13 @@ import com.pivotal.gemfirexd.internal.iapi.error.PublicAPI;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.internal.iapi.jdbc.AuthenticationService;
 import com.pivotal.gemfirexd.internal.iapi.reference.Property;
+import com.pivotal.gemfirexd.internal.iapi.services.io.FormatableBitSet;
 import com.pivotal.gemfirexd.internal.iapi.services.property.PropertyUtil;
 import com.pivotal.gemfirexd.internal.iapi.sql.ResultColumnDescriptor;
+import com.pivotal.gemfirexd.internal.iapi.sql.conn.Authorizer;
 import com.pivotal.gemfirexd.internal.iapi.sql.conn.ConnectionUtil;
 import com.pivotal.gemfirexd.internal.iapi.sql.conn.LanguageConnectionContext;
-import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.AliasDescriptor;
-import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.ConglomerateDescriptor;
-import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.DataDictionary;
-import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.ReferencedKeyConstraintDescriptor;
-import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.SchemaDescriptor;
-import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.StatementRoutinePermission;
-import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.TableDescriptor;
+import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.*;
 import com.pivotal.gemfirexd.internal.iapi.store.access.TransactionController;
 import com.pivotal.gemfirexd.internal.iapi.types.DataValueDescriptor;
 import com.pivotal.gemfirexd.internal.iapi.types.HarmonySerialBlob;
@@ -3029,10 +3025,44 @@ public class GfxdSystemProcedures extends SystemProcedures {
       // split the projection into column indexes (1-based)
       final TIntArrayList columns = new TIntArrayList(4);
       SharedUtils.splitCSV(projection, projectionAgg, columns, null);
+
+      // check authorization for given columns of the table
+      LanguageConnectionContext lcc = ConnectionUtil.getCurrentLCC();
+      if (lcc.usesSqlAuthorization()) {
+        final int numColumns = columns.size();
+        ArrayList<StatementPermission> permissions = new ArrayList<>(
+            numColumns + 1);
+        String rowBufferTable = GemFireContainer.getRowBufferTableName(columnTable);
+        GemFireContainer rowContainer = (GemFireContainer)Misc.getRegionForTable(
+            rowBufferTable, true).getUserAttribute();
+        TableDescriptor td = rowContainer.getTableDescriptor();
+        if (td == null) {
+          throw PublicAPI.wrapStandardException(StandardException.newException(
+              SQLState.LANG_TABLE_NOT_FOUND, rowBufferTable));
+        }
+        permissions.add(new StatementTablePermission(td.getUUID(),
+            Authorizer.SELECT_PRIV));
+        if (numColumns > 0) {
+          FormatableBitSet bitSet = new FormatableBitSet(td.getNumberOfColumns());
+          for (int i = 0; i < numColumns; i++) {
+            int col = columns.getQuick(i);
+            ColumnDescriptor cd = td.getColumnDescriptor(col);
+            if (cd == null) {
+              throw PublicAPI.wrapStandardException(StandardException.newException(
+                  SQLState.LANG_COLUMN_NOT_FOUND, rowBufferTable + '.' + col));
+            }
+            bitSet.set(col - 1);
+          }
+          permissions.add(new StatementColumnPermission(td.getUUID(),
+              Authorizer.SELECT_PRIV, bitSet));
+        }
+        lcc.getAuthorizer().authorize(lcc.getLastActivation(), null, permissions,
+            Authorizer.SQL_SELECT_OP);
+      }
+
       byte[] batchFilters = filters != null
           ? filters.getBytes(1, (int)filters.length()) : null;
-      Set<Integer> bucketIds = ConnectionUtil.getCurrentLCC()
-          .getBucketIdsForLocalExecution();
+      Set<Integer> bucketIds = lcc.getBucketIdsForLocalExecution();
       final CloseableIterator<ColumnTableEntry> iter =
           CallbackFactoryProvider.getStoreCallbacks().columnTableScan(
               columnTable, columns.toNativeArray(), batchFilters, bucketIds);

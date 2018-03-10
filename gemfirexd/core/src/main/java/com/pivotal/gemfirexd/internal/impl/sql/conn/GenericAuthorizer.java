@@ -116,7 +116,7 @@ implements Authorizer
 	public void authorize( int operation) throws StandardException
 	{
 // GemStone changes BEGIN
-	  authorize(null, null, operation);
+	  authorize(null, null, null, operation);
 	  /* (original code)
 		authorize( (Activation) null, operation);
 	  */
@@ -131,12 +131,12 @@ implements Authorizer
 	public final void authorize(final Activation activation,
 	    final int operation) throws StandardException {
 	  authorize(activation, activation != null ? activation
-	      .getPreparedStatement() : null, operation);
+	      .getPreparedStatement() : null, null, operation);
 	}
 
 	public final void authorize(final Activation activation,
-	    ExecPreparedStatement ps, final int operation)
-	    throws StandardException
+	    ExecPreparedStatement ps, List<StatementPermission> perms,
+	    final int operation) throws StandardException
 	/* (original code)
 	public void authorize( Activation activation, int operation) throws StandardException
 	*/
@@ -225,7 +225,7 @@ implements Authorizer
 				SanityManager.THROWASSERT("Bad operation code "+operation);
 		}
 // GemStone changes BEGIN
-	if (activation != null && (ps != null
+	if (activation != null && (ps != null || perms != null
 	    || (ps = activation.getPreparedStatement()) != null)) {
 	/* (original code)
         if( activation != null)
@@ -237,7 +237,7 @@ implements Authorizer
             try {
               // check if ps is uptodate
               activation.checkStatementValidity();
-              List requiredPermissionsList = ps.getRequiredPermissionsList();
+              List requiredPermissionsList = perms != null ? perms : ps.getRequiredPermissionsList();
               /*[originally]
                 List requiredPermissionsList = activation.getPreparedStatement().getRequiredPermissionsList();
                 DataDictionary dd = lcc.getDataDictionary();
