@@ -3060,8 +3060,11 @@ public class GfxdSystemProcedures extends SystemProcedures {
             Authorizer.SQL_SELECT_OP);
       }
 
-      byte[] batchFilters = filters != null
-          ? filters.getBytes(1, (int)filters.length()) : null;
+      byte[] batchFilters = null;
+      if (filters != null) {
+        batchFilters = filters.getBytes(1, (int)filters.length());
+        filters.free();
+      }
       Set<Integer> bucketIds = lcc.getBucketIdsForLocalExecution();
       final CloseableIterator<ColumnTableEntry> iter =
           CallbackFactoryProvider.getStoreCallbacks().columnTableScan(
@@ -3084,7 +3087,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
             // mark chunk as having a reference set from outside (columnTableScan)
             if (!blob.getCurrentChunk().initChunkFromReference()) {
               throw StandardException.newException(SQLState.DATA_UNEXPECTED_EXCEPTION,
-                  new IllegalStateException("failed to increment reference count"));
+                  new IllegalStateException("failed to initialize chunk with buffer"));
             }
             template[3].setValue(blob);
             return true;
