@@ -2309,7 +2309,7 @@ public class LocalRegion extends AbstractRegion
 
       // Rahul: this has to be an update.
       // so executing it as an update.
-      boolean forceUpdateForDelta = event.hasDelta();
+      boolean forceUpdateForDelta = event.hasDelta() && !isInternalColumnTable();
       // Gfxd Changes end.
       if (basicPut(event, false, // ifNew
           forceUpdateForDelta, // ifOld
@@ -14613,6 +14613,7 @@ public class LocalRegion extends AbstractRegion
     }
   }
 
+  @Override
   public boolean isInternalColumnTable() {
     return isInternalColumnTable;
   }
