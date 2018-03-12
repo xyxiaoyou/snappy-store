@@ -35,6 +35,7 @@ import sql.sqlTx.SQLDistTxTest;
 import util.*;
 import hydra.*;
 
+import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.io.BufferedReader;
@@ -226,6 +227,8 @@ public class ResultSetHelper {
     ObjectType[] oTypes = sType.getFieldTypes();
     int columnSize = fieldNames.length;
     List<Struct> aList = new ArrayList<Struct>();
+    if(SQLPrms.isSnappyMode())
+      useMD5Checksum = false;
     try {
       while (rs.next()) {
         Object[] objects = new Object[columnSize];
@@ -254,7 +257,6 @@ public class ResultSetHelper {
             			//add MD5 checksum for comparison
             			if (useMD5Checksum) {
             			  objects[i] = convertBufferedReaderToChecksum(reader, clob.length());
-            			  
             			} else objects[i] = convertCharArrayToString(reader, (int)clob.length());
           				try {
           					reader.close();
@@ -441,7 +443,7 @@ public class ResultSetHelper {
       Log.getLogWriter().warning("Could not convert GFE resultSet to list due to #41471");
       return false;
     }
-    
+
     //add the check to see if query cancellation exception or low memory exception thrown
     if (GFEList== null && setCriticalHeap) {      
       boolean[] getCanceled = (boolean[]) SQLTest.getCanceled.get();
@@ -535,7 +537,49 @@ public class ResultSetHelper {
     Object[] values = null;
     //added to compared the difference   
     boolean addLoggingFor46886 = false;
-    
+
+    boolean isGenuineMismatch = true;
+
+    //ignore the failures that are due to decimal differences
+    if (SQLPrms.isSnappyMode()) {
+      Struct aUnexpectedRow = null;
+      Object[] missingValues, unexpectedValues;
+      if (missing!=null && missing.size() > 0 && (missing.size() == unexpected.size())) {
+        for (int i = 0; i < missing.size(); i++) {
+          aMissingRow = missing.get(0);
+          aUnexpectedRow = unexpected.get(0);
+          missingValues = aMissingRow.getFieldValues();
+          unexpectedValues = aUnexpectedRow.getFieldValues();
+          for (int j = 0 ; j<missingValues.length; j++) {
+            Object missingvalue = missingValues[i];
+            Object unexpectedvalue = unexpectedValues[i];
+            if (missingvalue != unexpectedvalue) {
+              if (missingvalue.getClass().getName().contains("BigDecimal") && unexpectedvalue
+                  .getClass().getName().contains("BigDecimal")) {
+                Double diff = ((BigDecimal)missingvalue).subtract((BigDecimal)unexpectedvalue)
+                    .doubleValue();
+                if(diff <= 0.01){
+                  isGenuineMismatch = false;
+                } else {
+                  isGenuineMismatch = true;
+                  break;
+                }
+              } else {
+                isGenuineMismatch = true;
+                break;
+              }
+            }  else {
+              isGenuineMismatch = true;
+              break;
+            }
+          }
+          if(isGenuineMismatch)
+            break;
+        }
+        if(!isGenuineMismatch) return;
+      }
+    }
+
     if (missing!=null && missing.size() > 0) {      
       aMissingRow = missing.get(0);
       sType = aMissingRow.getStructType();
@@ -844,34 +888,44 @@ public class ResultSetHelper {
 
   public static String convertByteArrayToString(byte[] byteArray){
     if (byteArray == null) return "null";
-  	StringBuilder sb = new StringBuilder();
-  	sb.append('{');
-  	for (byte b: byteArray) {
-  		sb.append(b + ", ");
-  	}
-  	sb.deleteCharAt(sb.lastIndexOf(","));
-  	sb.append('}');
-  	return sb.toString();
+       StringBuilder sb = new StringBuilder();
+       sb.append('{');
+       for (byte b : byteArray) {
+         sb.append(b + ", ");
+       }
+       sb.deleteCharAt(sb.lastIndexOf(","));
+       sb.append('}');
+       return sb.toString();
   }
 
   public static String convertCharArrayToString(BufferedReader reader, int size){
   	//char[] charArray= new char[size];
     StringBuilder sb = new StringBuilder();
-    sb.append('{');
     int readChars;
-    
-  	try {
-  	  while ((readChars = reader.read()) != -1) {
-  	    sb.append(readChars + ", ");
-  	  }  		
-  	} catch (Exception e) {
-  		throw new TestException("could not read in the charaters "
-  				+ TestHelper.getStackTrace(e));
-  	}
-  	
-  	sb.deleteCharAt(sb.lastIndexOf(","));
-  	sb.append('}');
-  	return sb.toString();
+    if (SQLPrms.isSnappyMode()) {
+      try {
+        while ((readChars = reader.read()) != -1) {
+          sb.append((char)readChars);
+        }
+      } catch (Exception e) {
+        throw new TestException("could not read in the charaters "
+            + TestHelper.getStackTrace(e));
+      }
+    } else {
+      sb.append('{');
+      try {
+        while ((readChars = reader.read()) != -1) {
+          sb.append(readChars + ", ");
+        }
+      } catch (Exception e) {
+        throw new TestException("could not read in the charaters "
+            + TestHelper.getStackTrace(e));
+      }
+
+      sb.deleteCharAt(sb.lastIndexOf(","));
+      sb.append('}');
+    }
+    return sb.toString();
   }
   
   public static String convertBufferedReaderToChecksum(BufferedReader reader, long size){

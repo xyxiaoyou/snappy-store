@@ -68,7 +68,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
 import java.util.Stack;
@@ -76,26 +75,22 @@ import java.util.Vector;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import rollingupgrade.RollingUpgradeBB;
 import splitBrain.SplitBrainBB;
 import splitBrain.SplitBrainPrms;
-import sql.datagen.DataGeneratorClient;
 import sql.ddlStatements.DDLStmtIF;
 import sql.ddlStatements.FunctionDDLStmt;
 import sql.ddlStatements.IndexDDLStmt;
 import sql.ddlStatements.Procedures;
-import sql.dmlStatements.AbstractDMLStmt;
 import sql.dmlStatements.TradeCustomersDMLStmt;
 import sql.dmlStatements.DMLStmtIF;
 import sql.generic.SQLOldTest;
-import sql.generic.ddl.Executor;
-import sql.generic.ddl.TableInfoGenerator;
 import sql.hdfs.HDFSSqlTest;
 import sql.hdfs.HDFSTestPrms;
 import sql.hdfs.TriggerQueryObserver;
 import sql.mbeans.listener.CallBackListener;
 import sql.rollingUpgrade.SQLRollingUpgradeBB;
 import sql.rollingUpgrade.SQLRollingUpgradePrms;
+import sql.snappy.SnappyTest;
 import sql.sqlutil.DDLStmtsFactory;
 import sql.sqlutil.DMLStmtsFactory;
 import sql.sqlutil.JoinTableStmtsFactory;
@@ -125,7 +120,6 @@ import com.gemstone.gemfire.internal.cache.PartitionedRegion;
 import com.gemstone.gemfire.internal.cache.wan.AbstractGatewaySender;
 import com.gemstone.gemfire.internal.cache.wan.parallel.ParallelGatewaySenderImpl;
 import com.gemstone.gemfire.internal.cache.wan.serial.SerialGatewaySenderImpl;
-import com.gemstone.org.jgroups.util.LinkedListQueue;
 import com.pivotal.gemfirexd.Attribute;
 import com.pivotal.gemfirexd.FabricServer;
 import com.pivotal.gemfirexd.FabricService;
@@ -196,6 +190,7 @@ public class SQLTest {
   public static boolean hasPersistentTables = TestConfig.tab().booleanAt(GfxdHelperPrms.persistTables, false);
   public static boolean isWanTest = TestConfig.tab().booleanAt(SQLWanPrms.isWanTest, false);
   public static boolean isSnappyTest = TestConfig.tab().booleanAt(SQLPrms.isSnappyTest, false);
+  public static boolean isSnappyMode = false;
   protected static boolean useWriterForWriteThrough = TestConfig.tab().booleanAt(SQLPrms.useWriterForWriteThrough, false);
   protected static boolean testLoaderCreateRandomRow = TestConfig.tab().booleanAt(SQLPrms.testLoaderCreateRandomRow, false);  
   public static boolean hasTx = TestConfig.tab().booleanAt(SQLPrms.hasTx, false);
@@ -400,6 +395,13 @@ public class SQLTest {
     HydraTask_initializeGFXD();
   }
   
+  public static synchronized void HydraTask_initializeForSnappy(){
+    if (sqlTest == null) {
+      sqlTest = new SQLTest();
+    }
+    isSnappyMode = SQLPrms.isSnappyMode();
+    sqlTest.initialize();
+  }
 
   public static synchronized void HydraTask_initializeGFXD() {
     if (sqlTest == null) {
@@ -423,8 +425,6 @@ public class SQLTest {
     }
     sqlTest.initialize();
   }
-
-   
 
   protected void initialize() {
     hasDerbyServer = TestConfig.tab().booleanAt(Prms.manageDerbyServer, false);
@@ -719,11 +719,12 @@ public class SQLTest {
   //use gfe conn to create schemas
   protected void createGFESchemas() {
     ddlThread = getMyTid();
-    Connection conn = getGFEConnection();  
+    Connection conn = getGFEConnection();
+
     Log.getLogWriter().info("testServerGroupsInheritence is set to " + testServerGroupsInheritence);
     Log.getLogWriter().info("creating schemas in gfe.");
     if (!testServerGroupsInheritence) createSchemas(conn);
-    else { 
+    else {
       String[] schemas = SQLPrms.getGFESchemas(); //with server group
       createSchemas(conn, schemas);
     }
@@ -874,7 +875,8 @@ public class SQLTest {
   }
 
   public static void HydraTask_createGFETables(){
-    sqlTest.createFuncMonth();  //partition by expression
+    if(!SQLPrms.isSnappyMode())
+      sqlTest.createFuncMonth();  //partition by expression
     if(useGenericSQL) sqlGen.createGFETables();
     else sqlTest.createGFETables();
     if (supportDuplicateTables) {
@@ -1007,19 +1009,21 @@ public class SQLTest {
     tables.add("trade.networth");
     tables.add("trade.customers");
     tables.add("trade.securities");
-    
+
     boolean testDropTableIfExists = SQLTest.random.nextBoolean();
     if (testDropTableIfExists)
       sql = "drop table if exists ";
     else
       sql = "drop table ";
+
     try {
       for (String table: tables) {
         Statement s = conn.createStatement();
         s.execute(sql + table);
       }
     } catch (SQLException se) {
-      if (se.getSQLState().equalsIgnoreCase("42Y55") && !testDropTableIfExists) {
+      if ((se.getSQLState().equalsIgnoreCase("42Y55") || se.getSQLState().equalsIgnoreCase
+          ("42000")) && !testDropTableIfExists) {
         Log.getLogWriter().info("Got expected table not exists exception, continuing tests");
       } else {
         SQLHelper.handleSQLException(se);
@@ -1068,6 +1072,7 @@ public class SQLTest {
     String driver;
     //gfe and derby use same drivers, it could be used when client server driver is used in gfe.
     String url;
+
     try {
       driver = conn.getMetaData().getDriverName();
       url = conn.getMetaData().getURL();
@@ -2292,46 +2297,64 @@ public class SQLTest {
       conn = getGFXDClientConnection();
       return conn;
     }
-    
-    if (!hasTx && setTx) {
-      //TODO to be modified once default isolation changed to Connection.TRANSACTION_READ_COMMITTED
-      //and set Connection.TRANSACTION_NONE explicitly for the original non txn testing
-      Properties p = new Properties();
-      if (!reproduceTicket51628) {
-        p.put(Attribute.TX_SYNC_COMMITS, "true");
-        log().info("using connection property : " + Attribute.TX_SYNC_COMMITS 
-            + " set to true");
-      }
+    if(SQLPrms.isSnappyMode()) {
       try {
-        conn = GFEDBManager.getConnection(p);
-        executeListener("CREATE", "NETWORK_STATE");
-        
-        //conn.setAutoCommit(false);
-        //conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-        //after r50570 product has default Connection.TRANSACTION_READ_COMMITTED
-        Log.getLogWriter().info("using product default isolation Connection.TRANSACTION_READ_COMMITTED " );
+        conn = getSnappyConnection();
       } catch (SQLException se) {
-        SQLHelper.printSQLException(se);
-        throw new TestException ("Not able to get connection " + TestHelper.getStackTrace(se));
+        throw new TestException("Got exception while getting snappy data connection.", se);
       }
-    } else {
-      try {
-        conn = GFEDBManager.getConnection();
-        
-        conn.setTransactionIsolation(Connection.TRANSACTION_NONE); 
-        //use none txn isolation when setTx is false
-        log().info("Connection isolation is set to " + Connection.TRANSACTION_NONE
-            + " and getTransactionIsolation() is "+ conn.getTransactionIsolation());
-        
-        executeListener("CREATE", "NETWORK_STATE");
-      } catch (SQLException e) {
-        SQLHelper.printSQLException(e);
-        throw new TestException ("Not able to get connection " + TestHelper.getStackTrace(e));
+
+    }
+    else {
+      if (!hasTx && setTx) {
+        //TODO to be modified once default isolation changed to Connection.TRANSACTION_READ_COMMITTED
+        //and set Connection.TRANSACTION_NONE explicitly for the original non txn testing
+        Properties p = new Properties();
+        if (!reproduceTicket51628) {
+          p.put(Attribute.TX_SYNC_COMMITS, "true");
+          log().info("using connection property : " + Attribute.TX_SYNC_COMMITS
+              + " set to true");
+        }
+        try {
+          conn = GFEDBManager.getConnection(p);
+          executeListener("CREATE", "NETWORK_STATE");
+
+          //conn.setAutoCommit(false);
+          //conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+          //after r50570 product has default Connection.TRANSACTION_READ_COMMITTED
+          Log.getLogWriter().info("using product default isolation Connection.TRANSACTION_READ_COMMITTED ");
+        } catch (SQLException se) {
+          SQLHelper.printSQLException(se);
+          throw new TestException("Not able to get connection " + TestHelper.getStackTrace(se));
+        }
+      } else {
+        try {
+          conn = GFEDBManager.getConnection();
+
+          conn.setTransactionIsolation(Connection.TRANSACTION_NONE);
+          //use none txn isolation when setTx is false
+          log().info("Connection isolation is set to " + Connection.TRANSACTION_NONE
+              + " and getTransactionIsolation() is " + conn.getTransactionIsolation());
+
+          executeListener("CREATE", "NETWORK_STATE");
+        } catch (SQLException e) {
+          SQLHelper.printSQLException(e);
+          throw new TestException("Not able to get connection " + TestHelper.getStackTrace(e));
+        }
       }
     }
-    
     return conn;
   }
+
+  /**
+   * Gets Client connection.
+   */
+  public static Connection getSnappyConnection() throws SQLException {
+    Connection conn = null;
+    conn = SnappyTest.getLocatorConnection();
+    return conn;
+  }
+
 
   //provide connection to gfxd/GFE -- used to set up dataStore in server groups
   //TODO may need to provide both non_transactional vs default read committed isolation level support
@@ -3249,6 +3272,7 @@ public class SQLTest {
     for (String[] table: tables) {
       try {
         Log.getLogWriter().info("verifyResultSets-verifyResultSets-schema " + table[0] + " and table " + table[1]);
+        if(SQLPrms.isSnappyMode() && !(table[0].equalsIgnoreCase("SNAPPY_HIVE_METASTORE")))
         verifyResultSets(dConn, gConn, table[0], table[1]);
       }catch (TestException te) {
         if (verifyUsingOrderBy) throw te; //avoid OOME on accessor due to failure with large resultset 
@@ -3431,7 +3455,7 @@ public class SQLTest {
       return;
     }
       
-    select = "select count (*) from " + schema + "." + table;
+    select = "select CAST(count (*) as integer) as numRows from " + schema + "." + table;
     if ( (verifyByTid && getMyTid() == 0 ) || (!verifyByTid) ) 
     verifyResultSets(dConn, gConn, schema, table, select, hasHdfs);
     
@@ -7435,6 +7459,7 @@ public class SQLTest {
   }
   
   protected void createUDTPriceFunction(Connection conn) {
+
     String getLowPrice = "create function trade.getLowPrice(DP1 trade.UDTPrice) " +
     "RETURNS NUMERIC " +
     "PARAMETER STYLE JAVA " +
@@ -7448,7 +7473,7 @@ public class SQLTest {
     "LANGUAGE JAVA " +
     "NO SQL " +
     "EXTERNAL NAME 'sql.sqlutil.UDTPrice.getHighPrice'";
-   
+
     try {
       log().info("xecuting " + getLowPrice);
       executeStatement(conn, getLowPrice);          

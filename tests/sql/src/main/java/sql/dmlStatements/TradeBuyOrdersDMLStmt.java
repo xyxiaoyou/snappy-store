@@ -38,6 +38,7 @@ import com.gemstone.gemfire.cache.query.Struct;
 
 import sql.SQLBB;
 import sql.SQLHelper;
+import sql.SQLPrms;
 import sql.SQLTest;
 import sql.security.SQLSecurityTest;
 import sql.sqlutil.ResultSetHelper;
@@ -380,12 +381,17 @@ public class TradeBuyOrdersDMLStmt extends AbstractDMLStmt {
           SQLHelper.closeResultSet(gfeRS, gConn); //for single hop, result set needs to be closed instead of fully consumed
           
           String offsetClause = " OFFSET 3 ROWS FETCH NEXT 2 ROWS ONLY";
-        
-          String sql = select[5] + offsetClause;
+          String sql = select[5];
+          if(!SQLPrms.isSnappyMode()) {
+            sql = sql + offsetClause;
+          }
           
           try {
-            Log.getLogWriter().info("Derby - querying trade.buyorders QUERY: " + sql );
-            PreparedStatement dps = dConn.prepareStatement(sql);
+            String derbysql =sql;
+            if(SQLPrms.isSnappyMode())
+              derbysql = sql + "FETCH FIRST 5 ROWS ONLY";
+            Log.getLogWriter().info("Derby - querying trade.buyorders QUERY: " + derbysql );
+            PreparedStatement dps = dConn.prepareStatement(derbysql);
             dps.setString(1, status);
             dps.setInt(2, tid);
             discRS = dps.executeQuery();
@@ -399,6 +405,8 @@ public class TradeBuyOrdersDMLStmt extends AbstractDMLStmt {
           } 
           
           try {
+            if(SQLPrms.isSnappyMode())
+              sql = sql + " LIMIT 5";
             Log.getLogWriter().info("gemfirexd - querying trade.buyorders QUERY: " + sql );
             PreparedStatement sps = gConn.prepareStatement(sql);
             sps.setString(1, status);
@@ -1723,7 +1731,8 @@ public class TradeBuyOrdersDMLStmt extends AbstractDMLStmt {
   //*** for delete ***//  
   /**
    * get data inserted by this thread or some random data 
-   * @param conn -- connection used to find the record inserted by this thread, when testUniqueKey is true.
+   * @param regConn -- connection used to find the record inserted by this thread, when
+   *              testUniqueKey is true.
    * @param cid -- array of cid to be populated
    * @param sid -- array lf sid to be populated
    * @return the number of array elements populated or -1 is none is available

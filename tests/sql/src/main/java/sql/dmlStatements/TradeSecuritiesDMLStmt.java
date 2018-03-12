@@ -96,7 +96,7 @@ public class TradeSecuritiesDMLStmt extends AbstractDMLStmt {
                                     " CASE when exchange ='" + exchanges[4] + "' then sec_id END desc, " + 
                                     " CASE when exchange ='" + exchanges[5] + "' then symbol END asc, " + 
                                     " CASE when exchange ='" + exchanges[6] + "' then symbol END desc " +
-                                    " fetch first 10 rows only":
+                                    (!SQLPrms.isSnappyMode() ? " fetch first 10 rows only)" : ""):
                                     ""),
                                     "select sec_id, symbol, price, " +
                                     (isEdge? "cast " : "") +
@@ -128,6 +128,7 @@ public class TradeSecuritiesDMLStmt extends AbstractDMLStmt {
                                      "select price, symbol, exchange from trade.securities where (price<? or price >=?) ",
                                      "select sec_id, symbol, price, exchange from trade.securities  where (price >=? and price<?) and exchange =?"
                                      };
+
   protected static String[] delete = {"delete from trade.securities where (sec_id = ? or price = ? ) and tid = ?",
                                      "delete from trade.securities where (symbol= ? and exchange = ? ) and tid = ?",
                                      "delete from trade.securities where sec_id=?" //for concTest w/ non unique keys
@@ -398,7 +399,7 @@ public class TradeSecuritiesDMLStmt extends AbstractDMLStmt {
         SQLHelper.handleDerbySQLException(se, exceptionList);
       }
       try {
-        gfeRS = query (gConn, whichQuery, sec_id, symbol, price, exchange, tid); 
+        gfeRS = query (gConn, whichQuery, sec_id, symbol, price, exchange, tid);
         if (gfeRS == null) {
           if (isHATest) {
             Log.getLogWriter().info("Testing HA and did not get GFXD result set after retry");
@@ -1536,12 +1537,26 @@ public class TradeSecuritiesDMLStmt extends AbstractDMLStmt {
     success[0] = true;
     String txId =  SQLDistTxTest.curTxId.get() == null ? "" : "TXID:" + (Integer)SQLDistTxTest.curTxId.get() + " ";
     String database = SQLHelper.isDerbyConn(conn)?"Derby - " :"gemfirexd - " + txId;
-    String query = " QUERY: " + select[whichQuery];
+    String query, query1;
+    query1 = select[whichQuery];
+    /*
+    boolean isSnappyConnection = SQLHelper.isDerbyConn(conn)? false : true;
+    if (SQLPrms.isSnappyMode()) {
+      if (whichQuery == 2) {
+        if (isSnappyConnection) {
+          query1 = query1 + " LIMIT 10";
+        } else
+          query1 = query1 + " fetch first 10 rows only";
+      }
+    }
+    */
+
+    query = " QUERY: " + query1;
     //Log.getLogWriter().info("data will be used in the query sec_id:" +sec_id + " symbol: " + symbol 
     //    + " exchang: " + exchange + " first price: " + price + " second price: " + price1 );     
 
     try {
-      stmt = conn.prepareStatement(select[whichQuery]);
+      stmt = conn.prepareStatement(query1);
       /*
       stmt = getStmt(conn, select[whichQuery]);  
       if (setCriticalHeap && stmt == null) {

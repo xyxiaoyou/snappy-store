@@ -226,6 +226,23 @@ public class SQLPrms extends BasePrms{
 
   public static Long createDiskStore;
 
+  public static Long snappyDDLExtension;
+
+  public static boolean isSnappyMode() {
+    return TestConfig.tab().booleanAt(SQLPrms.snappyMode, false);
+  }
+
+  public static String[] getSnappyDDLExtension(String[] tables){
+    Vector snappyExtn = TestConfig.tab().vecAt(SQLPrms.snappyDDLExtension, new HydraVector());
+    if (snappyExtn.size() == 0)
+      return tables;
+    String[] strArr = new String[snappyExtn.size()];
+    for (int i = 0; i < snappyExtn.size(); i++) {
+      strArr[i] = tables[i] + " " + (String)snappyExtn.elementAt(i);
+    }
+    return strArr;
+  }
+
   //combines create table statemensts with gfe DDL extensions
   public static String[] getGFEDDL() {
     String[] tables = getCreateTablesStatements(false);
@@ -244,8 +261,6 @@ public class SQLPrms extends BasePrms{
                tables[i]+=" , json_details json )";
        }        
     }
-    
-    
     if (AbstractDMLStmt.byTidList)
       finalDDL =  getGFEDDLByTidList(tables);
     else if (AbstractDMLStmt.byCidRange)
@@ -985,7 +1000,12 @@ public class SQLPrms extends BasePrms{
    *
    */
   public static Long isSnappyTest;
-  
+
+  /**
+   * (boolean) whether the test should be run in a snappy cluster or gemfireXD cluster.
+   */
+  public static Long snappyMode;
+
   /** (boolean) whether the test eviction use heap percentage
   *
   */

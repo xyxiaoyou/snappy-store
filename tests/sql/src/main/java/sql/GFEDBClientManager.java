@@ -44,6 +44,8 @@ import hydra.gemfirexd.NetworkServerHelper.Endpoint;
 public class GFEDBClientManager {
   protected static String driver = "com.pivotal.gemfirexd.jdbc.ClientDriver";
   protected static String protocol = Attribute.DNC_PROTOCOL;
+  protected static String snappyThriftProtocol = Attribute.SNAPPY_THRIFT_PROTOCOL;
+  protected static String snappyProtocol = Attribute.SNAPPY_DNC_PROTOCOL;
   //private static String dbName = "";
   private static String userPrefix = "thr_";
   protected static boolean useGemFireXDHA = TestConfig.tab().booleanAt(SQLPrms.
@@ -292,6 +294,8 @@ public class GFEDBClientManager {
   }
 
   public static String getProtocol() {
+    if(SQLPrms.isSnappyMode())
+      return snappyThriftProtocol;
     return protocol;
   }
 
