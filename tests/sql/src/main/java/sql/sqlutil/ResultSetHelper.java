@@ -426,7 +426,7 @@ public class ResultSetHelper {
    * convert two resultSets to two lists using their own StuctType 
    * and compare their values
    * @param derbyResultSet -- resultSet from derby
-   * @param GFEResultSet -- resultSet from GFE
+   * @param gfxdResultSet -- resultSet from GFE
    * @return false if we got processing query error on derby, we abort
    */
   public static boolean compareResultSets(ResultSet derbyResultSet, ResultSet gfxdResultSet) {
@@ -437,6 +437,8 @@ public class ResultSetHelper {
     StructTypeImpl gfxdsti = null;
     if (SQLDAPTest.cidByRange || SQLDAPTest.tidByList) gfxdsti = sti; //reuse derby structure to work around #46311 
     else gfxdsti = getStructType(gfxdResultSet);
+    Log.getLogWriter().info("[Sonal]Derby sti is : " + sti.toString());
+    Log.getLogWriter().info("[Sonal]Snappy sti is :" + gfxdsti.toString());
     List<Struct> GFEList = asList(gfxdResultSet, gfxdsti, false);
     if (GFEList == null && SQLTest.isHATest) {
       //due to #41471 in HA && possible #42443 for offline exception test coverage
@@ -538,27 +540,31 @@ public class ResultSetHelper {
     //added to compared the difference   
     boolean addLoggingFor46886 = false;
 
-    boolean isGenuineMismatch = true;
-
     //ignore the failures that are due to decimal differences
     if (SQLPrms.isSnappyMode()) {
       Struct aUnexpectedRow = null;
-      Object[] missingValues, unexpectedValues;
-      if (missing!=null && missing.size() > 0 && (missing.size() == unexpected.size())) {
-        for (int i = 0; i < missing.size(); i++) {
-          aMissingRow = missing.get(0);
-          aUnexpectedRow = unexpected.get(0);
-          missingValues = aMissingRow.getFieldValues();
-          unexpectedValues = aUnexpectedRow.getFieldValues();
-          for (int j = 0 ; j<missingValues.length; j++) {
-            Object missingvalue = missingValues[i];
-            Object unexpectedvalue = unexpectedValues[i];
-            if (missingvalue != unexpectedvalue) {
-              if (missingvalue.getClass().getName().contains("BigDecimal") && unexpectedvalue
+      Object[] missingFieldValues, unexpectedFieldValues;
+      if (missing != null && missing.size() > 0 && (missing.size() == unexpected.size())) {
+        boolean isGenuineMismatch = false;
+        for (int row = 0; row < missing.size(); row++) {
+          isGenuineMismatch = false;
+          aMissingRow = missing.get(row);
+          aUnexpectedRow = unexpected.get(row);
+          missingFieldValues = aMissingRow.getFieldValues();
+          unexpectedFieldValues = aUnexpectedRow.getFieldValues();
+          for (int col = 0; col < missingFieldValues.length; col++) {
+            Object missingCol = missingFieldValues[col];
+            Object unexpectedCol = unexpectedFieldValues[col];
+            if (!missingCol.equals(unexpectedCol)) {
+              Log.getLogWriter().info("[Sonal] class name is " + missingCol.getClass().getName() +
+                  " and " + unexpectedCol.getClass().getName());
+              Log.getLogWriter().info("[Sonal] object values are " + missingCol + " " +
+                  unexpectedCol);
+              if (missingCol.getClass().getName().contains("BigDecimal") && unexpectedCol
                   .getClass().getName().contains("BigDecimal")) {
-                Double diff = ((BigDecimal)missingvalue).subtract((BigDecimal)unexpectedvalue)
-                    .doubleValue();
-                if(diff <= 0.01){
+                Double diff = (((BigDecimal)missingCol).subtract((BigDecimal)unexpectedCol)).doubleValue();
+                Log.getLogWriter().info("diff is " + diff);
+                if (diff <= 0.01) {
                   isGenuineMismatch = false;
                 } else {
                   isGenuineMismatch = true;
@@ -568,17 +574,15 @@ public class ResultSetHelper {
                 isGenuineMismatch = true;
                 break;
               }
-            }  else {
-              isGenuineMismatch = true;
-              break;
             }
           }
-          if(isGenuineMismatch)
+          if (isGenuineMismatch)
             break;
         }
-        if(!isGenuineMismatch) return;
+        if (!isGenuineMismatch) return;
       }
     }
+
 
     if (missing!=null && missing.size() > 0) {      
       aMissingRow = missing.get(0);

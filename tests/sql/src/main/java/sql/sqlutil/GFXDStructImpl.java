@@ -25,6 +25,7 @@ import com.gemstone.gemfire.cache.query.internal.types.StructTypeImpl;
 import com.gemstone.gemfire.cache.query.types.ObjectType;
 import com.gemstone.gemfire.cache.query.types.StructType;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
+import hydra.Log;
 import sql.SQLPrms;
 
 public class GFXDStructImpl extends StructImpl implements Serializable {
@@ -48,8 +49,8 @@ public class GFXDStructImpl extends StructImpl implements Serializable {
     Struct s = (Struct)obj;
     if(!SQLPrms.isSnappyMode()) {
       if (!Arrays.equals(getFieldTypes(), s.getStructType().getFieldTypes())) return false;
+      if (!Arrays.equals(getFieldNames(), s.getStructType().getFieldNames())) return false;
     }
-    if (!Arrays.equals(getFieldNames(), s.getStructType().getFieldNames())) return false;
     if (!Arrays.equals(getFieldValues(), s.getFieldValues())) return false;
     return true;
   }
