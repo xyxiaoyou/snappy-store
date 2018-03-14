@@ -47,6 +47,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.HashSet;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -58,6 +60,8 @@ import com.gemstone.gemfire.internal.cache.persistence.DiskRecoveryStore;
 import com.gemstone.gemfire.internal.cache.persistence.DiskRegionView;
 import com.gemstone.gemfire.internal.cache.persistence.DiskStoreFilter;
 import com.gemstone.gemfire.internal.cache.persistence.OplogType;
+import com.gemstone.gemfire.internal.cache.persistence.PRPersistentConfig;
+
 import com.gemstone.gemfire.internal.cache.versions.RegionVersionVector;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.sequencelog.EntryLogger;
@@ -360,7 +364,117 @@ public class PersistentOplogSet implements OplogSet {
       }
     }
   }
-  
+
+  private static class ValidateModeColocationChecker {
+    // Each element of the list will be one colocation map
+    // Each such map will have colocated prnames as the key and a list of bucket ids
+    private final List<Map<String, List<VdrBucketId>>> prSetsWithBuckets = new ArrayList<>();
+    private final DiskInitFile dif;
+
+    public ValidateModeColocationChecker(DiskInitFile dif) {
+      this.dif = dif;
+    }
+
+    private static class VdrBucketId {
+      private final ValidatingDiskRegion vdr;
+      private final int bucketId;
+      VdrBucketId(ValidatingDiskRegion vdr, int bid) {
+        this.bucketId = bid;
+        this.vdr = vdr;
+      }
+    }
+
+    public void add(ValidatingDiskRegion vdr) {
+      assert vdr.isBucket();
+      final String prName = vdr.getPrName();
+      final PRPersistentConfig prPersistentConfig = this.dif.getPersistentPR(prName);
+      final String colocateWith = prPersistentConfig != null ? prPersistentConfig.getColocatedWith() : null;
+      final int bucketId = PartitionedRegionHelper.getBucketId(vdr.getName());
+      VdrBucketId vdb = new VdrBucketId(vdr, bucketId);
+      Iterator<Map<String, List<VdrBucketId>>> itr = prSetsWithBuckets.iterator();
+      boolean added = false;
+      while (itr.hasNext()) {
+        Map<String, List<VdrBucketId>> m = itr.next();
+        if (m.containsKey(prName)) {
+          List<VdrBucketId> s = m.get(prName);
+          if ( s != null ) {
+            s = new ArrayList<>(10);
+            m.put(prName, s);
+          }
+          s.add(vdb);
+          added = true;
+          break;
+        } else if (colocateWith != null && m.containsKey(colocateWith)) {
+          // add an entry for prName
+          List<VdrBucketId> s = new ArrayList<>(10);
+          m.put(prName, s);
+          s.add(vdb);
+          added = true;
+          break;
+        }
+      }
+      if (!added) {
+        Map<String, List<VdrBucketId>> m = new HashMap<>();
+        List<VdrBucketId> s = new ArrayList<>(10);
+        s.add(vdb);
+        m.put(prName, s);
+      }
+    }
+
+    public void printInconsistency() {
+      prSetsWithBuckets.forEach(x -> printInconsistencyInternal(x));
+    }
+
+    private void printInconsistencyInternal(Map<String, List<VdrBucketId>> oneSet) {
+      if (oneSet.size() > 1) {
+        findSmallestAndPrintMissing(oneSet);
+      }
+    }
+
+    private List<VdrBucketId> findSmallestAndPrintMissing(Map<String, List<VdrBucketId>> oneSet) {
+      List<VdrBucketId> smallest = null;
+      String rootRegion = null;
+      boolean allSizesEqual = true;
+      Iterator<Map.Entry<String, List<VdrBucketId>>> itr = oneSet.entrySet().iterator();
+      while (itr.hasNext()) {
+        Map.Entry<String, List<VdrBucketId>> e = itr.next();
+        List<VdrBucketId> currlist = e.getValue();
+        if (smallest == null) {
+          smallest = currlist;
+          rootRegion = e.getKey();
+        }
+        else {
+          if (currlist.size() < smallest.size()) {
+            smallest = currlist;
+            rootRegion = e.getKey();
+            allSizesEqual = false;
+          }
+        }
+      }
+      if (!allSizesEqual) {
+        // get all the bucket ids of the smallest in a Set
+        assert smallest != null;
+        final Set<Integer> sane_buckets = new HashSet<>();
+        smallest.forEach(x -> sane_buckets.add(x.bucketId));
+
+        System.out.println("###### Start Root region = " + rootRegion + " ######");
+        oneSet.entrySet().forEach(x -> {
+          if (x.getValue().size() != sane_buckets.size()) {
+            x.getValue().forEach(vdr -> {
+              if (!sane_buckets.contains(vdr.bucketId)) {
+                System.out.print(vdr.vdr.getName());
+                System.out.print(' ');
+              }
+            });
+            System.out.println();
+          }
+        });
+        System.out.println("###### End Root region = " + rootRegion + " ######");
+      }
+      return smallest;
+    }
+  }
+
   public final void recoverRegionsThatAreReady(boolean initialRecovery) {
     // The following sync also prevents concurrent recoveries by multiple regions
     // which is needed currently.
@@ -402,6 +516,7 @@ public class PersistentOplogSet implements OplogSet {
       } finally {
         Map<String, Integer> prSizes = null;
         Map<String, Integer> prBuckets = null;
+        ValidateModeColocationChecker vchkr = new ValidateModeColocationChecker(parent.getDiskInitFile());
         if (parent.isValidating()) {
           prSizes = new HashMap<String, Integer>();
           prBuckets = new HashMap<String, Integer>();
@@ -424,6 +539,7 @@ public class PersistentOplogSet implements OplogSet {
                 vdr.dump(System.out);
               }
               if (vdr.isBucket()) {
+                vchkr.add(vdr);
                 String prName = vdr.getPrName();
                 if (prSizes.containsKey(prName)) {
                   int oldSize = prSizes.get(prName);
@@ -449,6 +565,9 @@ public class PersistentOplogSet implements OplogSet {
             System.out.println(me.getKey() + " entryCount=" + me.getValue()
                                + " bucketCount=" + prBuckets.get(me.getKey()));
           }
+
+          // print the details
+          vchkr.printInconsistency();
         }
         parent.getStats().endRecovery(start, byteCount);
         this.alreadyRecoveredOnce.set(true);
