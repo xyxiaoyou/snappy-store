@@ -397,7 +397,7 @@ public class PersistentOplogSet implements OplogSet {
         Map<String, List<VdrBucketId>> m = itr.next();
         if (m.containsKey(prName)) {
           List<VdrBucketId> s = m.get(prName);
-          if ( s != null ) {
+          if ( s == null ) {
             s = new ArrayList<>(10);
             m.put(prName, s);
           }
@@ -431,7 +431,7 @@ public class PersistentOplogSet implements OplogSet {
       }
     }
 
-    private List<VdrBucketId> findSmallestAndPrintMissing(Map<String, List<VdrBucketId>> oneSet) {
+    private void findSmallestAndPrintMissing(Map<String, List<VdrBucketId>> oneSet) {
       List<VdrBucketId> smallest = null;
       String rootRegion = null;
       boolean allSizesEqual = true;
@@ -447,6 +447,9 @@ public class PersistentOplogSet implements OplogSet {
           if (currlist.size() < smallest.size()) {
             smallest = currlist;
             rootRegion = e.getKey();
+            allSizesEqual = false;
+          }
+          if (currlist.size() > smallest.size()) {
             allSizesEqual = false;
           }
         }
@@ -471,7 +474,6 @@ public class PersistentOplogSet implements OplogSet {
         });
         System.out.println("###### End Root region = " + rootRegion + " ######");
       }
-      return smallest;
     }
   }
 
