@@ -4181,6 +4181,10 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     }
     System.out.println("Total number of region entries in this disk store is: "
         + getLiveEntryCount());
+    String r = getDiskInitFile().getInconsistencyReport();
+    if (r != null) {
+      System.out.println(r);
+    }
   }
 
   private int liveEntryCount;

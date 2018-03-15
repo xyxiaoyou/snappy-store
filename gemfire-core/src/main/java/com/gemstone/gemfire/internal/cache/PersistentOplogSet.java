@@ -370,7 +370,7 @@ public class PersistentOplogSet implements OplogSet {
     // Each such map will have colocated prnames as the key and a list of bucket ids
     private final List<Map<String, List<VdrBucketId>>> prSetsWithBuckets = new ArrayList<>();
     private final DiskInitFile dif;
-
+    private boolean inconsistent = false;
     public ValidateModeColocationChecker(DiskInitFile dif) {
       this.dif = dif;
     }
@@ -378,9 +378,16 @@ public class PersistentOplogSet implements OplogSet {
     private static class VdrBucketId {
       private final ValidatingDiskRegion vdr;
       private final int bucketId;
-      VdrBucketId(ValidatingDiskRegion vdr, int bid) {
+      private final boolean rootPR;
+
+      VdrBucketId(ValidatingDiskRegion vdr, int bid, boolean isRootPR) {
         this.bucketId = bid;
         this.vdr = vdr;
+        this.rootPR = isRootPR;
+      }
+
+      public String toString() {
+        return "VdrBucketId: " + vdr.getName() + "(" + bucketId + ") rootPR - " + rootPR;
       }
     }
 
@@ -390,7 +397,8 @@ public class PersistentOplogSet implements OplogSet {
       final PRPersistentConfig prPersistentConfig = this.dif.getPersistentPR(prName);
       final String colocateWith = prPersistentConfig != null ? prPersistentConfig.getColocatedWith() : null;
       final int bucketId = PartitionedRegionHelper.getBucketId(vdr.getName());
-      VdrBucketId vdb = new VdrBucketId(vdr, bucketId);
+      VdrBucketId vdb = new VdrBucketId(vdr, bucketId, ((colocateWith == null) || colocateWith.isEmpty()));
+      // System.out.println(vdb);
       Iterator<Map<String, List<VdrBucketId>>> itr = prSetsWithBuckets.iterator();
       boolean added = false;
       while (itr.hasNext()) {
@@ -418,61 +426,81 @@ public class PersistentOplogSet implements OplogSet {
         List<VdrBucketId> s = new ArrayList<>(10);
         s.add(vdb);
         m.put(prName, s);
+        this.prSetsWithBuckets.add(m);
       }
     }
 
-    public void printInconsistency() {
-      prSetsWithBuckets.forEach(x -> printInconsistencyInternal(x));
+    public void findInconsistencies() {
+      StringBuffer sb = new StringBuffer();
+      sb.append("\n");
+      sb.append("--- Child buckets with no parent buckets\n");
+      sb.append("\n");
+      prSetsWithBuckets.forEach(x -> printInconsistencyInternal(x, sb));
+      sb.append("\n");
+      if (inconsistent) {
+        this.dif.setInconsistent(sb.toString());
+      }
     }
 
-    private void printInconsistencyInternal(Map<String, List<VdrBucketId>> oneSet) {
+    private void printInconsistencyInternal(Map<String, List<VdrBucketId>> oneSet,
+                                            final StringBuffer sb) {
       if (oneSet.size() > 1) {
-        findSmallestAndPrintMissing(oneSet);
+        findInconsistencyInternal(oneSet, sb);
       }
     }
 
-    private void findSmallestAndPrintMissing(Map<String, List<VdrBucketId>> oneSet) {
+    private void findInconsistencyInternal(Map<String, List<VdrBucketId>> oneSet, final StringBuffer sb) {
       List<VdrBucketId> smallest = null;
       String rootRegion = null;
       boolean allSizesEqual = true;
       Iterator<Map.Entry<String, List<VdrBucketId>>> itr = oneSet.entrySet().iterator();
+      // find root PR
+      int numbuckets_of_root = 0;
+      String rootPR = "";
+      String prn = "";
+      Set<Integer> bucketIdsOfRoot = new HashSet<>();
       while (itr.hasNext()) {
         Map.Entry<String, List<VdrBucketId>> e = itr.next();
         List<VdrBucketId> currlist = e.getValue();
-        if (smallest == null) {
-          smallest = currlist;
-          rootRegion = e.getKey();
-        }
-        else {
-          if (currlist.size() < smallest.size()) {
-            smallest = currlist;
-            rootRegion = e.getKey();
-            allSizesEqual = false;
+        if (currlist.size() > 0) {
+          prn = currlist.get(0).vdr.getPrName();
+          String colocatedwith = this.dif.getPersistentPR(prn).getColocatedWith();
+          if (colocatedwith == null || colocatedwith.length() == 0) {
+            numbuckets_of_root = currlist.size();
+            rootPR = prn;
+            currlist.forEach(x -> bucketIdsOfRoot.add(x.bucketId));
+            break;
           }
-          if (currlist.size() > smallest.size()) {
-            allSizesEqual = false;
+          else {
+            // sb.append("\n#### Colocated PR " + prn + " ####\n");
           }
         }
       }
-      if (!allSizesEqual) {
-        // get all the bucket ids of the smallest in a Set
-        assert smallest != null;
-        final Set<Integer> sane_buckets = new HashSet<>();
-        smallest.forEach(x -> sane_buckets.add(x.bucketId));
 
-        System.out.println("###### Start Root region = " + rootRegion + " ######");
-        oneSet.entrySet().forEach(x -> {
-          if (x.getValue().size() != sane_buckets.size()) {
-            x.getValue().forEach(vdr -> {
-              if (!sane_buckets.contains(vdr.bucketId)) {
-                System.out.print(vdr.vdr.getName());
-                System.out.print(' ');
+      // sb.append("\n#### Root PR " + rootPR + " ####\n");
+
+      final HashSet<VdrBucketId> badBuckets = new HashSet<>();
+      final Boolean printedRootPR = Boolean.FALSE;
+      itr = oneSet.entrySet().iterator();
+      while (itr.hasNext()) {
+        Map.Entry<String, List<VdrBucketId>> e = itr.next();
+        List<VdrBucketId> currlist = e.getValue();
+        if (currlist.size() > numbuckets_of_root) {
+          currlist.forEach(x -> {
+            if (!bucketIdsOfRoot.contains(x.bucketId)) {
+              badBuckets.add(x);
+              if (!this.inconsistent) {
+                this.inconsistent = true;
               }
-            });
-            System.out.println();
-          }
-        });
-        System.out.println("###### End Root region = " + rootRegion + " ######");
+            }
+          });
+        }
+      }
+
+      if (badBuckets.size() > 0) {
+        sb.append("In " + rootPR + " co-location set, parent bucket is missing for these buckets\n");
+        badBuckets.forEach(x -> sb.append(x.vdr.getName() + " "));
+        sb.append("\n");
       }
     }
   }
@@ -567,9 +595,7 @@ public class PersistentOplogSet implements OplogSet {
             System.out.println(me.getKey() + " entryCount=" + me.getValue()
                                + " bucketCount=" + prBuckets.get(me.getKey()));
           }
-
-          // print the details
-          vchkr.printInconsistency();
+          vchkr.findInconsistencies();
         }
         parent.getStats().endRecovery(start, byteCount);
         this.alreadyRecoveredOnce.set(true);
