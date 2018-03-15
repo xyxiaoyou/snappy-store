@@ -436,7 +436,6 @@ public class PersistentOplogSet implements OplogSet {
           findInconsistencyInternal(x, sb);
         }
       });
-      sb.append("\n");
       if (inconsistent) {
         this.dif.setInconsistent(sb.toString());
       }
@@ -491,8 +490,8 @@ public class PersistentOplogSet implements OplogSet {
       }
 
       if (badBuckets.size() > 0) {
-        sb.append("In " + rootPR + " co-location set, parent bucket is missing for these buckets\n");
-        badBuckets.forEach(x -> sb.append(x.vdr.getName() + " "));
+        sb.append("In " + rootPR + " co-location group, parent bucket is missing for these buckets\n");
+        badBuckets.forEach(x -> sb.append(x.vdr.getName() + "\n"));
         sb.append("\n");
       }
     }
