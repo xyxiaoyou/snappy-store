@@ -3050,7 +3050,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
     return this.deletedIndexIds;
   }
 
-  // These will be set only when DiskInitFile is
+  // This will be set only when DiskInitFile is
   // created during validation of disk store
   private transient String inconsistencyReport = null;
 

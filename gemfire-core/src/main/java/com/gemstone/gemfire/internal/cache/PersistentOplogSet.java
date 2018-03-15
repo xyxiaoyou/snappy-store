@@ -405,10 +405,6 @@ public class PersistentOplogSet implements OplogSet {
         Map<String, List<VdrBucketId>> m = itr.next();
         if (m.containsKey(prName)) {
           List<VdrBucketId> s = m.get(prName);
-          if ( s == null ) {
-            s = new ArrayList<>(10);
-            m.put(prName, s);
-          }
           s.add(vdb);
           added = true;
           break;
@@ -435,17 +431,14 @@ public class PersistentOplogSet implements OplogSet {
       sb.append("\n");
       sb.append("--- Child buckets with no parent buckets\n");
       sb.append("\n");
-      prSetsWithBuckets.forEach(x -> printInconsistencyInternal(x, sb));
+      prSetsWithBuckets.forEach(x -> {
+        if (x.size() > 1) {
+          findInconsistencyInternal(x, sb);
+        }
+      });
       sb.append("\n");
       if (inconsistent) {
         this.dif.setInconsistent(sb.toString());
-      }
-    }
-
-    private void printInconsistencyInternal(Map<String, List<VdrBucketId>> oneSet,
-                                            final StringBuffer sb) {
-      if (oneSet.size() > 1) {
-        findInconsistencyInternal(oneSet, sb);
       }
     }
 
