@@ -1093,8 +1093,10 @@ public class SQLTest {
           Log.getLogWriter().info("about to create table " + derbyTables[i]);
           s.execute(derbyTables[i]);
         }
+
       } else if (url.equals(GFEDBManager.getUrl())
           || url.startsWith(GFEDBClientManager.getProtocol())
+          || url.startsWith(GFEDBClientManager.getSnappyThriftProtocol())
           || url.startsWith(GFEDBClientManager.getDRDAProtocol())) {
 
         if (hasHdfs) {
@@ -1241,6 +1243,7 @@ public class SQLTest {
       }
     } else if (url.equals(GFEDBManager.getUrl())
         || url.startsWith(GFEDBClientManager.getProtocol())
+        || url.startsWith(GFEDBClientManager.getSnappyThriftProtocol())
         || url.startsWith(GFEDBClientManager.getDRDAProtocol())) {
       for (int i = 0; i < gfeDDL.length; i++) {
         aStr.append(gfeDDL[i] + "\n");
@@ -8769,8 +8772,8 @@ public class SQLTest {
   
   /**
    * Copy diskstore directory sourcePath into directory destPath
-   * @param sourcePath Directory to copy
-   * @param destPath Directory to copy into
+   *  sourcePath Directory to copy
+   *  destPath Directory to copy into
    * @throws IOException If copying failed.
    */
   public static void HydraTask_copyDiskstore() throws IOException {

@@ -86,8 +86,9 @@ public class GFEDBClientManager {
   
   @SuppressWarnings("unchecked")
   public static synchronized void initAvailHostPort() {
+    Log.getLogWriter().info("[Sonal] Inside initAvailHostPort method");
   if (map == null) map = (HashMap <String, ArrayList<Integer>>)SQLBB.getBB().getSharedMap().get("serverPorts");  
-  hostNames = (String[])(map.keySet().toArray(new String[0])); 
+  hostNames = (String[])(map.keySet().toArray(new String[0]));
   }
   
   /**
@@ -295,8 +296,12 @@ public class GFEDBClientManager {
 
   public static String getProtocol() {
     if(SQLPrms.isSnappyMode())
-      return snappyThriftProtocol;
+      return snappyProtocol;
     return protocol;
+  }
+
+  public static String getSnappyThriftProtocol(){
+      return snappyThriftProtocol;
   }
 
   public static String getDRDAProtocol() {
