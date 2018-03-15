@@ -4183,7 +4183,7 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
         + getLiveEntryCount());
     String r = getDiskInitFile().getInconsistencyReport();
     if (r != null) {
-      System.out.println(r);
+      System.out.print(r);
     }
   }
 
