@@ -422,6 +422,10 @@ public class PersistentOplogSet implements OplogSet {
         List<VdrBucketId> s = new ArrayList<>(10);
         s.add(vdb);
         m.put(prName, s);
+        if (colocateWith != null && colocateWith.length() > 0) {
+          List<VdrBucketId> sc = new ArrayList<>(10);
+          m.put(colocateWith, sc);
+        }
         this.prSetsWithBuckets.add(m);
       }
     }
