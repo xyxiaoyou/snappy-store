@@ -143,7 +143,7 @@ public class TradeSellOrdersDMLStmt extends AbstractDMLStmt {
     "where ((status =? and ask <?) OR (status =? and ask >?))  and cid IN (?, ?, ?, ?, ?) ",
     //add the trim function to work around #46998
     "select oid, sid, ask, cid, " + 
-    (RemoteTestModule.getMyVmid()%2 ==0 ? "order_time": "trim(char(order_time))" ) +
+    (RemoteTestModule.getMyVmid()%2 ==0  || SQLPrms.isSnappyMode()  ? "order_time": "trim(char(order_time))" ) +
     ", status from trade.sellorders  " +
     "where ((order_time >? and ask <?) and (status =? and ask >?))  OR cid IN (?, ?, ?, ?, ?)",
     "select oid, cid, order_time, sid from trade.sellorders where (order_time < ?)",
