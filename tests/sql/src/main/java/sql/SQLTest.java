@@ -4838,7 +4838,11 @@ public class SQLTest {
       }
       
       String currentTable = tables[i].substring(0,tables[i].indexOf("(")).toLowerCase();
-      if (SQLTest.hasJSON && ( currentTable.contains("trade.securities") || currentTable.contains("trade.buyorders") || currentTable.contains("trade.networth") || currentTable.contains("trade.customers") )) {
+      if (SQLTest.hasJSON &&
+          ( currentTable.contains("trade.securities")
+              || currentTable.contains("trade.buyorders")
+              || currentTable.contains("trade.networth")
+              || currentTable.contains("trade.customers") )) {
       tables[i]=tables[i].trim().substring(0,tables[i].trim().length() - 1);
       //customer table is used for multiple json objects in table testing and json with array and json with-in json testing
       if ( currentTable.contains("trade.customers"))
