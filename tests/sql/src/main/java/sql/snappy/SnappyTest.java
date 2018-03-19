@@ -1687,6 +1687,7 @@ public class SnappyTest implements Serializable {
           //threadDumpForAllServers();
         }
       }
+      SnappyBB.getBB().getSharedCounters().decrement(SnappyBB.snappyClusterStarted);
     } catch (IOException e) {
       String s = "problem occurred while retriving destination logFile path " + log;
       throw new TestException(s, e);

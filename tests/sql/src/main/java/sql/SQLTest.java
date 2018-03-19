@@ -3047,6 +3047,13 @@ public class SQLTest {
   protected void createIndex(Connection conn) {
     //createIndex will be independent
     if (createIndex) {
+      if(SQLPrms.isSnappyMode()) {
+        try {
+          conn.createStatement().execute("set schema TRADE");
+        } catch(SQLException se){
+          Log.getLogWriter().info("Got exception while setting trade schema");
+        }
+      }
       sql.ddlStatements.IndexDDLStmt indexStmt = new sql.ddlStatements.IndexDDLStmt();
       indexStmt.doDDLOp(null, conn);
     }
