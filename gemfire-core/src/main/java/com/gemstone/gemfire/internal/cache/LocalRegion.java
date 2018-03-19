@@ -14613,7 +14613,7 @@ public class LocalRegion extends AbstractRegion
     }
   }
 
-  @Override
+  // TODO VB: Check in master @Override
   public boolean isInternalColumnTable() {
     return isInternalColumnTable;
   }
