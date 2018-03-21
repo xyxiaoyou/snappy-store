@@ -81,7 +81,7 @@ public class TradeSecuritiesDMLStmt extends AbstractDMLStmt {
   protected static String[] select = {"select sec_id, symbol, price, exchange, tid from trade.securities where tid = ? ",                                    
                                    (reproduceTicket48725 ? "select cast(avg( distinct price) as decimal (30, 20)) as avg_distinct_price from trade.securities where tid=? and symbol >?"
                                        : "select cast(avg( price) as decimal (30, 20)) as avg_price from trade.securities where tid=? and symbol >?"),
-                                    "select " + (addSecidInProjection? "sec_id, " : "") + "price, symbol, exchange from trade.securities where (price<? or price >=?) and tid =? " +
+                                    /*"select " + (addSecidInProjection? "sec_id, " : "") + "price, symbol, exchange from trade.securities where (price<? or price >=?) and tid =? " +
                                     (RemoteTestModule.getCurrentThread().getThreadId() %2 ==0?
                                     " order by  " +
                                     " CASE when exchange ='" + exchanges[0] + "' then symbol END desc, " + 
@@ -97,7 +97,8 @@ public class TradeSecuritiesDMLStmt extends AbstractDMLStmt {
                                     " CASE when exchange ='" + exchanges[5] + "' then symbol END asc, " + 
                                     " CASE when exchange ='" + exchanges[6] + "' then symbol END desc " +
                                     (!SQLPrms.isSnappyMode() ? " fetch first 10 rows only)" : ""):
-                                    ""),
+                                    ""),*/
+                                    "select sec_id from trade.securities where tid=?",
                                     "select sec_id, symbol, price, " +
                                     (isEdge? "cast " : "") +
                                     "(case  " +
@@ -1580,9 +1581,9 @@ public class TradeSecuritiesDMLStmt extends AbstractDMLStmt {
         //"select price, symbol, exchange from trade.securities where (price<? or price >=?) and tid =?"
         Log.getLogWriter().info(database + "querying trade.securities with 1_PRICE:" + price 
             + ",2_PRICE:" + price1 + ",TID:" +tid + query);   
-        stmt.setBigDecimal(1, price);
-        stmt.setBigDecimal(2, price1);
-        stmt.setInt(3, tid);
+        //stmt.setBigDecimal(1, price);
+        //stmt.setBigDecimal(2, price1);
+        stmt.setInt(1, tid);
         break;
       case 3:
         //"select sec_id, symbol, price, exchange from trade.securities  where (price >=? and price<?) and exchagne =? and tid =?"

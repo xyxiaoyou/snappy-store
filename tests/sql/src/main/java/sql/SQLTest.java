@@ -2296,17 +2296,17 @@ public class SQLTest {
   //provide connection to gfxd/GFE
   public Connection getGFEConnection() {
     Connection conn = null;
-    if (isEdge) {
-      conn = getGFXDClientConnection();
-      return conn;
-    }
     if(SQLPrms.isSnappyMode()) {
       try {
         conn = getSnappyConnection();
+        return conn;
       } catch (SQLException se) {
         throw new TestException("Got exception while getting snappy data connection.", se);
       }
-
+    }
+    if (isEdge) {
+      conn = getGFXDClientConnection();
+      return conn;
     }
     else {
       if (!hasTx && setTx) {
