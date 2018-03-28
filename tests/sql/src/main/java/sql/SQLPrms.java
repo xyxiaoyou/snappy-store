@@ -38,6 +38,7 @@ import sql.dmlStatements.AbstractDMLStmt;
 import sql.hdfs.HDFSSqlTest;
 import sql.sqlutil.DDLStmtsFactory;
 import sql.sqlutil.DMLStmtsFactory;
+import util.TestException;
 
 
 /**
@@ -261,17 +262,21 @@ public class SQLPrms extends BasePrms{
                tables[i]+=" , json_details json )";
        }        
     }
-    if (AbstractDMLStmt.byTidList)
-      finalDDL =  getGFEDDLByTidList(tables);
-    else if (AbstractDMLStmt.byCidRange)
-      finalDDL =  getGFEDDLByCidRange(tables);
-    else
+    if(isSnappyMode())
       finalDDL = getGFEDDL(tables);
-    
-    if (SQLTest.isOffheap) {
-      for (int i = 0; i < finalDDL.length; i++) {
-        if (finalDDL[i].toLowerCase().indexOf(SQLTest.OFFHEAPCLAUSE.toLowerCase()) < 0) { // don't add twice
-          finalDDL[i] = finalDDL[i] + SQLTest.OFFHEAPCLAUSE;
+    else {
+      if (AbstractDMLStmt.byTidList)
+        finalDDL = getGFEDDLByTidList(tables);
+      else if (AbstractDMLStmt.byCidRange)
+        finalDDL = getGFEDDLByCidRange(tables);
+      else
+        finalDDL = getGFEDDL(tables);
+
+      if (SQLTest.isOffheap) {
+        for (int i = 0; i < finalDDL.length; i++) {
+          if (finalDDL[i].toLowerCase().indexOf(SQLTest.OFFHEAPCLAUSE.toLowerCase()) < 0) { // don't add twice
+            finalDDL[i] = finalDDL[i] + SQLTest.OFFHEAPCLAUSE;
+          }
         }
       }
     }
@@ -293,12 +298,16 @@ public class SQLPrms extends BasePrms{
  
   @SuppressWarnings("unchecked")
   private static String[] getGFEDDL(String[] tables) {
-    Vector statements = TestConfig.tab().vecAt(SQLPrms.gfeDDLExtension, new HydraVector());
+    Vector<String> statements = TestConfig.tab().vecAt(SQLPrms.gfeDDLExtension, new HydraVector());
     if (statements.size() == 0)
       return tables;
 
     String[] strArr = new String[statements.size()];
     for (int i = 0; i < statements.size(); i++) {
+      if(SQLPrms.isSnappyMode() && !statements.elementAt(i).contains("USING ROW")) {
+        throw new TestException("GFXD syntax for create table is not supported, please use snappy" +
+            " syntax");
+      }
       strArr[i] = tables[i] + " " + (String)statements.elementAt(i);
     }
     return strArr;

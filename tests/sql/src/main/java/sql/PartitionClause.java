@@ -75,8 +75,8 @@ public class PartitionClause {
 
   protected static String[] customersPartitionClauseForSnappy = {
       " ",
-      " partition by (month(since)) ",
-      " partition by column (cust_name) ",
+      " partition_by 'since' ",
+      " partition_by 'cust_name' ",
       " replicate "
   };
 
@@ -212,7 +212,7 @@ public class PartitionClause {
 
   protected static String[] securitiesPartitionClauseForSnappy = {
       " ",
-      " partition by column (sec_id, price) ",
+      " partition_by 'sec_id,price' ",
       " replicate "  ,
   };
 
@@ -346,8 +346,8 @@ public class PartitionClause {
 
   protected static String[] networthPartitionClauseForSnappy = {
       " ", //default
-      " partition by column (cash) ",
-      " partition by column(loanLimit, availloan)",
+      " partition_by 'cash' ",
+      " partition_by 'loanLimit,availloan' ",
       " replicate ",
   };
 
@@ -472,8 +472,8 @@ public class PartitionClause {
 
   protected static String[] portfolioPartitionClauseForSnappy = {
       " ",
-      " partition by column (qty) ",
-      " partition by column (qty, availQty) ",
+      " partition_by 'qty' ",
+      " partition_by 'qty, availQty' ",
       " replicate "  ,
   };
 
@@ -642,10 +642,10 @@ public class PartitionClause {
 
   protected static String[] sellordersPartitionClauseForSnappy = {
       " ",
-      " partition by column (qty) ",
-      " partition by column (ask, status) ",
-      " partition by column (order_time, status) ",
-      " partition by column (sid, order_time, ask) ",
+      " partition_by 'qty' ",
+      " partition_by 'ask, status' ",
+      " partition_by 'order_time, status' ",
+      " partition_by 'sid, order_time, ask' ",
       " replicate ",
   };
 
@@ -811,8 +811,8 @@ public class PartitionClause {
 
   protected static String[] buyordersPartitionClauseForSnappy = {
       " ",
-      " partition by column (bid, ordertime) ",
-      " partition by column (ordertime, status) ",
+      " partition_by 'bid,ordertime' ",
+      " partition_by 'ordertime,status' ",
       " replicate "  ,
   };
   @SuppressWarnings("unchecked")
@@ -1078,14 +1078,14 @@ public class PartitionClause {
 
   protected static String[] companiesPartitionClauseForSnappy = {
       " ",
-      " partition by column (uid) ",
-      " partition by column(histprice)",
-      " partition by column (companyname) ",
-      " partition by column(companyinfo)" ,
-      " partition by column (note) ",
-      " partition by column(asset, companytype)" ,
-      " partition by column(logo)" ,
-      " partition by column(uuid)" ,
+      " partition_by 'uid' ",
+      " partition_by 'histprice'",
+      " partition_by 'companyname' ",
+      " partition_by 'companyinfo'" ,
+      " partition_by 'note' ",
+      " partition_by 'asset, companytype'" ,
+      " partition_by 'logo'" ,
+      " partition_by 'uuid'" ,
       " replicate "  ,
   };
 
@@ -1234,6 +1234,11 @@ public class PartitionClause {
   @SuppressWarnings("unchecked")
   public static String getPartitionClause(String tableInfo){
     String partitionClause = null;
+    if(SQLPrms.isSnappyMode()){
+      Log.getLogWriter().info("[Sonal] parClause is " + tableInfo);
+      tableInfo = tableInfo.substring(tableInfo.indexOf("(") + 1, tableInfo.indexOf(")"));
+      Log.getLogWriter().info("[Sonal] parClause is " + tableInfo);
+    }
     String[] strArray = tableInfo.split(":");
     String tableName = strArray[0];
     String partition = strArray[1]; //parse in the partition key
@@ -1769,7 +1774,12 @@ public class PartitionClause {
       if (partition.equals("replicate"))
         partitionClause = " replicate ";
       else {
-        partitionClause = " partition by column (eid) "; //TODO need to modify when the tables are used
+        {
+          if(SQLPrms.isSnappyMode())
+            partitionClause = " partition_by 'eid' ";
+          else
+            partitionClause = " partition by column (eid) "; //TODO need to modify when the tables are used
+        }
         
         ArrayList<String> partitionKey = new ArrayList<String>();
         partitionKey.add("eid");

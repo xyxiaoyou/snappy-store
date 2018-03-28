@@ -1110,34 +1110,35 @@ public class SQLTest {
           Log.getLogWriter().info("creating hdfs extn...");
           gfeDDL = SQLPrms.getHdfsDDL(gfeDDL);
         }
-        
-        // enable offheap
-        if (isOffheap && randomizeOffHeap) {
-          throw new TestException("SqlPrms.isOffheap and SqlPrms.randomizeOffHeap are both set to true");
-        }
-        if (isOffheap){
-          Log.getLogWriter().info("enabling offheap." );
-          for (int i =0; i<gfeDDL.length; i++) {
-            if (gfeDDL[i].toLowerCase().indexOf(SQLTest.OFFHEAPCLAUSE.toLowerCase()) < 0) { // don't add twice
-              gfeDDL[i] += OFFHEAPCLAUSE;
-            }
-          }          
-        }
-        if (randomizeOffHeap) {
-          Log.getLogWriter().info("Randomizing off-heap in some tables but not others");
-          for (int i =0; i<gfeDDL.length; i++) {
-            if (gfeDDL[i].toLowerCase().indexOf(SQLTest.OFFHEAPCLAUSE.toLowerCase()) < 0) { // don't add twice
-              if (TestConfig.tab().getRandGen().nextInt(1, 100) <= 50) {
+        if(!isSnappyMode) {
+          // enable offheap
+          if (isOffheap && randomizeOffHeap) {
+            throw new TestException("SqlPrms.isOffheap and SqlPrms.randomizeOffHeap are both set to true");
+          }
+          if (isOffheap) {
+            Log.getLogWriter().info("enabling offheap.");
+            for (int i = 0; i < gfeDDL.length; i++) {
+              if (gfeDDL[i].toLowerCase().indexOf(SQLTest.OFFHEAPCLAUSE.toLowerCase()) < 0) { // don't add twice
                 gfeDDL[i] += OFFHEAPCLAUSE;
               }
             }
           }
-        }
+          if (randomizeOffHeap) {
+            Log.getLogWriter().info("Randomizing off-heap in some tables but not others");
+            for (int i = 0; i < gfeDDL.length; i++) {
+              if (gfeDDL[i].toLowerCase().indexOf(SQLTest.OFFHEAPCLAUSE.toLowerCase()) < 0) { // don't add twice
+                if (TestConfig.tab().getRandGen().nextInt(1, 100) <= 50) {
+                  gfeDDL[i] += OFFHEAPCLAUSE;
+                }
+              }
+            }
+          }
 
-        if (enableConcurrencyCheck) {
-          for (int i =0; i<gfeDDL.length; i++) {
-            gfeDDL[i] += ENABLECONCURRENCYCHECKS;
-          }   
+          if (enableConcurrencyCheck) {
+            for (int i = 0; i < gfeDDL.length; i++) {
+              gfeDDL[i] += ENABLECONCURRENCYCHECKS;
+            }
+          }
         }
 
         for (int i =0; i<gfeDDL.length; i++) {
@@ -4832,9 +4833,12 @@ public class SQLTest {
       vecAt(SQLPrms.redundancyClause, new HydraVector());
     if (statements.size() == 0)
       return tables;
-    
     String[] strArr = new String[statements.size()];
     for (int i = 0; i < statements.size(); i++) {
+      if(SQLPrms.isSnappyMode() && !statements.elementAt(i).contains("USING ROW")) {
+        throw new TestException("GFXD syntax for create table is not supported, please use snappy" +
+            " syntax");
+      }
       if (testUniqIndex) {
         tables[0] = "create table trade.securities (sec_id int not null, " +
                         "symbol varchar(10) not null, price decimal (30, 20), " +
@@ -4862,31 +4866,50 @@ public class SQLTest {
       // when alter table is ready, this can be conver to alter table remove constraint
       String tableName = statements.elementAt(i);
       String partition = getTablePartition(tableName);
+      String redundClause = "";
       if (redundancyClause.size()>0) {
-        strArr[i] = tables[i] + " " + partition + getRedundancyClause(partition, redundancyClause.elementAt(i));
+        redundClause = getRedundancyClause(partition, redundancyClause.elementAt(i));
         //following setting is used for gfxd tx with batching test case
         //assume all tables will be using redundancy
         SQLBB.getBB().getSharedMap().put(hasRedundancy, true);
       }
       else {
-        strArr[i] = tables[i] + " " + partition;
         SQLBB.getBB().getSharedMap().put(hasRedundancy, false);
       }
+
+
 /*
       if (hasDerbyServer && populateThruLoader && i==5) {
         strArr[i] += " LOADER (sql.loader.BuyOrdersLoader.createRowLoader) ";
       } // table[5] is buyorder and for loader test, this can be removed when loader, writer trigger tests are ready
 */
-    }
 
     //add persistent table clause
-    for (int i = 0; i < statements.size(); i++) {
-      String tableName = statements.elementAt(i);
-      strArr[i] +=  /*getLoader(i) + */ getPersistence(i) + 
+      String persistClause = getPersistence(i);
+      //persistClause =  /*getLoader(i) + */ getPersistence(i) ;
+      String evictionClause =
         (useHeapPercentage? 
             (alterTableDropColumn? getEvictionHeapPercentageOverflowForAlterTable() : getEvictionHeapPercentageOverflow() )
             : getEvictionOverflow(tableName));  //loader is being taken out from the ddl
+
+      if (SQLPrms.isSnappyMode()) {
+        if(partition.trim().length()>0 && redundClause.trim().length()>0)
+          partition = partition + ", " ;
+        partition = partition + redundClause;
+        if (partition.trim().length()>0 && persistClause.trim().length()>0)
+          partition = partition + ", ";
+        partition = partition + persistClause;
+        if (partition.trim().length()>0 && evictionClause.trim().length()>0)
+          partition = partition + ", ";
+        partition = partition + evictionClause;
+        partition = tableName.replace
+            (tableName.substring(tableName.indexOf("(") + 1, tableName.indexOf(")")), partition);
+      }
+      else
+        partition = partition + " " + redundClause + " " + persistClause + " " + evictionClause;
+      strArr[i] = tables[i] + " " + partition;
     }
+
     return strArr;
   }
 
@@ -8702,7 +8725,7 @@ public class SQLTest {
       dConn = getDiscConnection();
     }  //when not test uniqueKeys and not in serial execution, only connection to gfe is provided.
     Connection gConn = getGFEConnection();
-    alterTableAlterConstraint(dConn, gConn); 
+    alterTableAlterConstraint(dConn, gConn);
     closeDiscConnection(dConn);
     closeGFEConnection(gConn);
   }
