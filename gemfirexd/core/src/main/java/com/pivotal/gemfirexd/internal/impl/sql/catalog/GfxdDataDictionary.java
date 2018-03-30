@@ -92,6 +92,7 @@ import com.pivotal.gemfirexd.internal.iapi.sql.execute.ConstantAction;
 import com.pivotal.gemfirexd.internal.iapi.store.access.ConglomerateController;
 import com.pivotal.gemfirexd.internal.iapi.store.access.TransactionController;
 import com.pivotal.gemfirexd.internal.iapi.types.DataTypeDescriptor;
+import com.pivotal.gemfirexd.internal.iapi.util.ReuseFactory;
 import com.pivotal.gemfirexd.internal.impl.sql.compile.CreateAsyncEventListenerNode;
 import com.pivotal.gemfirexd.internal.impl.sql.compile.CreateGatewayReceiverNode;
 import com.pivotal.gemfirexd.internal.impl.sql.compile.CreateGatewaySenderNode;
@@ -1499,6 +1500,13 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
           DataTypeDescriptor.getCatalogType(Types.BOOLEAN) };
       super.createSystemProcedureOrFunction("SET_TRACE_FLAG", sysUUID,
           argNames, argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null,
+          newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, true);
+    }
+
+    {
+      // void LOG_MEMORY_STATS()
+      super.createSystemProcedureOrFunction("LOG_MEMORY_STATS", sysUUID,
+          null, null, 0, 0, RoutineAliasInfo.NO_SQL, null,
           newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, true);
     }
 

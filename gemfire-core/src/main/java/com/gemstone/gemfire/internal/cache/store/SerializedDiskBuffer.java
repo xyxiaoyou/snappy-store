@@ -20,7 +20,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import javax.annotation.concurrent.GuardedBy;
 
-import com.gemstone.gemfire.internal.cache.AbstractOplogDiskRegionEntry;
+import com.gemstone.gemfire.internal.cache.AbstractRegionEntry;
 import com.gemstone.gemfire.internal.cache.RegionEntryContext;
 import com.gemstone.gemfire.internal.shared.BufferAllocator;
 import com.gemstone.gemfire.internal.shared.ByteBufferReference;
@@ -143,10 +143,16 @@ public abstract class SerializedDiskBuffer extends ByteBufferReference {
   protected abstract void releaseBuffer();
 
   /**
-   * For buffers which are stored in region, set its DiskId.
+   * For buffers which are stored in region, set its RegionEntry
+   * (that is used to obtain DiskId, for example, when required).
    */
-  public void setDiskEntry(AbstractOplogDiskRegionEntry entry,
+  public void setRegionEntry(AbstractRegionEntry entry,
       RegionEntryContext context) {
+  }
+
+  /** Return the underlying region entry, if any. */
+  public AbstractRegionEntry getRegionEntry() {
+    return null;
   }
 
   /**

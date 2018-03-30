@@ -1398,6 +1398,21 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
     _setLastModified(LOCKED_TOKEN);
   }
 
+  /**
+   * Set the RegionEntry into SerializedDiskBuffer value, if present, so that
+   * the value can access data from disk when required independently. Also acts
+   * as a flag that this value has been stored in region.
+   */
+  final boolean setBufferEntry(RegionEntryContext context,
+      Object value) {
+    if (value instanceof SerializedDiskBuffer) {
+      ((SerializedDiskBuffer)value).setRegionEntry(this, context);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   final void _setValue(RegionEntryContext context, @Unretained final Object val) {
     final StaticSystemCallbacks sysCb =
         GemFireCacheImpl.FactoryStatics.systemCallbacks;
@@ -1427,10 +1442,20 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
     Object rawOldVal = null;
     if (!isOffHeap) {
       rawOldVal = getValueField();
-      if (rawOldVal != val && rawOldVal instanceof SerializedDiskBuffer) {
+      if (rawOldVal == val) return;
+      boolean hasSerializedBuffer = setBufferEntry(context, val);
+      if (hasSerializedBuffer) {
         setValueField(val);
-        if (context != null) context.updateMemoryStats(rawOldVal, val);
+      }
+      if (rawOldVal instanceof SerializedDiskBuffer) {
+        if (!hasSerializedBuffer) {
+          setValueField(val);
+          hasSerializedBuffer = true;
+        }
         ((SerializedDiskBuffer)rawOldVal).release();
+      }
+      if (hasSerializedBuffer) {
+        if (context != null) context.updateMemoryStats(rawOldVal, val);
         return;
       }
     }

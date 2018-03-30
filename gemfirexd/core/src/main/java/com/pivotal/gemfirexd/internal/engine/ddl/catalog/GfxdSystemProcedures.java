@@ -103,6 +103,7 @@ import com.pivotal.gemfirexd.internal.iapi.types.HarmonySerialBlob;
 import com.pivotal.gemfirexd.internal.iapi.types.HarmonySerialClob;
 import com.pivotal.gemfirexd.internal.iapi.types.TypeId;
 import com.pivotal.gemfirexd.internal.iapi.util.IdUtil;
+import com.pivotal.gemfirexd.internal.iapi.util.ReuseFactory;
 import com.pivotal.gemfirexd.internal.iapi.util.StringUtil;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedConnection;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedResultSetMetaData;
@@ -2242,6 +2243,18 @@ public class GfxdSystemProcedures extends SystemProcedures {
     // then publish to other members including locators
     publishMessage(params, false,
         GfxdSystemProcedureMessage.SysProcMethod.setTraceFlag, false, true);
+  }
+
+  /**
+   * Dump memory stats on all the servers and leads.
+   */
+  public static void LOG_MEMORY_STATS() throws SQLException, StandardException {
+    // first process locally
+    GfxdSystemProcedureMessage.SysProcMethod.logMemoryStats.processMessage(
+        null, Misc.getMyId());
+    // then publish to other members including locators
+    publishMessage(ReuseFactory.getZeroLenObjectArray(), false,
+        GfxdSystemProcedureMessage.SysProcMethod.logMemoryStats, false, false);
   }
 
   /**

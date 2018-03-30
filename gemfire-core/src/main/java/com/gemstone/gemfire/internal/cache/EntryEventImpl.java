@@ -3368,6 +3368,27 @@ public class EntryEventImpl extends KeyInfo implements
   }
 
   /**
+   * Eagerly release any SerializedDiskBuffer that was not put
+   * into the region (e.g. a remote put).
+   */
+  public final void releaseBuffer() {
+    releaseBuffer(this.delta != null ? this.delta : this.newValue);
+  }
+
+  /**
+   * Eagerly release any SerializedDiskBuffer that was not put
+   * into the region (e.g. a remote put).
+   */
+  static void releaseBuffer(Object v) {
+    if (v instanceof SerializedDiskBuffer) {
+      SerializedDiskBuffer buffer = (SerializedDiskBuffer)v;
+      if (buffer.getRegionEntry() == null) {
+        buffer.release();
+      }
+    }
+  }
+
+  /**
    * Make sure that this event will never own an off-heap value.
    * Once this is called on an event it does not need to have release called.
    */

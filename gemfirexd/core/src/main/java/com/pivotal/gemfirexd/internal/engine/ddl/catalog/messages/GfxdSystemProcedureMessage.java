@@ -41,6 +41,8 @@ import com.gemstone.gemfire.internal.cache.Conflatable;
 import com.gemstone.gemfire.internal.cache.DiskStoreImpl;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
 import com.gemstone.gemfire.internal.cache.LocalRegion;
+import com.gemstone.gemfire.internal.shared.unsafe.UnsafeHolder;
+import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.pivotal.gemfirexd.Constants;
 import com.pivotal.gemfirexd.internal.catalog.SystemProcedures;
@@ -74,6 +76,7 @@ import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.RoutinePermsDescriptor
 import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.TableDescriptor;
 import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.TablePermsDescriptor;
 import com.pivotal.gemfirexd.internal.iapi.store.access.TransactionController;
+import com.pivotal.gemfirexd.internal.iapi.util.ReuseFactory;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedConnection;
 import com.pivotal.gemfirexd.internal.impl.sql.catalog.SYSROUTINEPERMSRowFactory;
 import com.pivotal.gemfirexd.internal.impl.sql.catalog.SYSTABLEPERMSRowFactory;
@@ -952,7 +955,7 @@ public final class GfxdSystemProcedureMessage extends
         return true;
       }
     },
-    
+
     setTraceFlag {
 
       @Override
@@ -1003,6 +1006,31 @@ public final class GfxdSystemProcedureMessage extends
         return sb.append("CALL SYS.SET_TRACE_FLAG('").append(params[0])
             .append("',").append((Boolean)params[1] ? '1' : '0').append(')')
             .toString();
+      }
+    },
+
+    logMemoryStats {
+      @Override
+      public void processMessage(Object[] params, DistributedMember sender) {
+        System.gc();
+        System.runFinalization();
+        UnsafeHolder.releasePendingReferences();
+        CallbackFactoryProvider.getStoreCallbacks().logMemoryStats();
+      }
+
+      @Override
+      public Object[] readParams(DataInput in, short flags) throws IOException {
+        return ReuseFactory.getZeroLenObjectArray();
+      }
+
+      @Override
+      public void writeParams(Object[] params, DataOutput out)
+          throws IOException {
+      }
+
+      @Override
+      String getSQLStatement(Object[] params) {
+        return "CALL SYS.LOG_MEMORY_STATS()";
       }
     },
 

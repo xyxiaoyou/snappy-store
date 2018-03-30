@@ -47,7 +47,6 @@ public abstract class AbstractDiskRegionEntry
   public  void setValue(RegionEntryContext context, Object v) throws RegionClearedException {
     Helper.update(this, (LocalRegion) context, v);
     setRecentlyUsed(); // fix for bug #42284 - entry just put into the cache is evicted
-    initDiskIdForOffHeap(context, v);
   }
 
   /**
@@ -58,7 +57,6 @@ public abstract class AbstractDiskRegionEntry
   @Override
   public void setValueWithContext(RegionEntryContext context, Object value) {
     _setValue(context, value);
-    initDiskIdForOffHeap(context, value);
     if (value != null && context != null && context instanceof LocalRegion
         && ((LocalRegion)context).isThisRegionBeingClosedOrDestroyed()
         && isOffHeap()) {
@@ -66,13 +64,6 @@ public abstract class AbstractDiskRegionEntry
       ((LocalRegion)context).checkReadiness();
     }
   }
-
-  /**
-   * Set the RegionEntry DiskId into SerializedDiskBuffer value, if present,
-   * so that the value can access data from disk when required independently.
-   */
-  protected abstract void initDiskIdForOffHeap(RegionEntryContext context,
-      Object value);
 
   @Override
   public void handleValueOverflow(RegionEntryContext context) {

@@ -246,18 +246,21 @@ public final class DistributedPutAllOperation extends AbstractUpdateOperation {
       };
     };
   }
-  
+
   public void freeOffHeapResources() {
     // I do not use eventIterator here because it forces the lazy creation of EntryEventImpl by calling getEventForPosition.
     for (int i=0; i < this.putAllDataSize; i++) {
       PutAllEntryData entry = this.putAllData[i];
-      if (entry != null && entry.event != null) {
-        entry.event.release();
+      if (entry != null) {
+        if (entry.event != null) {
+          entry.event.release();
+        }
+        // eagerly release any buffers that were not put into the region
+        EntryEventImpl.releaseBuffer(entry.value);
       }
     }
   }
-  
-  
+
   public EntryEventImpl getEventForPosition(int position) {
     PutAllEntryData entry = this.putAllData[position];
     if (entry == null) {

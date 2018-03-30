@@ -7298,7 +7298,8 @@ public final class Oplog implements CompactableOplog {
       Iterator<DiskRecoveryStore> itr = diskRecoveryStores.values().iterator();
       while(itr.hasNext()) {
         DiskRecoveryStore store = itr.next();
-        if(store.lruLimitExceeded()) {
+        // column tables will faultin data only as required for queries
+        if (store.lruLimitExceeded() || store.isInternalColumnTable()) {
           itr.remove();
         }
       }
@@ -7375,7 +7376,9 @@ public final class Oplog implements CompactableOplog {
         if(diskRecoveryStore == null) {
           continue;
         }
-        if(diskRecoveryStore.lruLimitExceeded()) {
+        // column tables will faultin data only as required for queries
+        if (diskRecoveryStore.lruLimitExceeded() ||
+            diskRecoveryStore.isInternalColumnTable()) {
           diskRecoveryStores.remove(diskRegionId);
           continue;
         }

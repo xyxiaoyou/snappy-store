@@ -95,6 +95,8 @@ public abstract class LauncherBase {
   public static final String LAUNCHER_UNKNOWN_ARGUMENT = "Unknown argument: {0}";
   public static final String LAUNCHER_WORKING_DIRECTORY_DOES_NOT_EXIST =
       "The input working directory does not exist:  {0}";
+  public static final String LAUNCHER_NUMACTL_DOES_NOT_EXIST =
+      "The numa option requires numactl in PATH";
   public static final String LAUNCHER_LOGS_GENERATED_IN =
       "Logs generated in {0}";
   public static final String LAUNCH_IN_PROGRESS =

@@ -1657,9 +1657,8 @@ public class LocalRegion extends AbstractRegion
         }
       }
     } finally {
-
       event.release();
-
+      event.releaseBuffer();
     }
   }
 
@@ -2329,6 +2328,7 @@ public class LocalRegion extends AbstractRegion
     } finally {
       operationCompleted();
       event.release();
+      event.releaseBuffer();
     }
   }
 
