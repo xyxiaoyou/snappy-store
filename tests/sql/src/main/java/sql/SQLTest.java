@@ -3283,8 +3283,8 @@ public class SQLTest {
     for (String[] table: tables) {
       try {
         Log.getLogWriter().info("verifyResultSets-verifyResultSets-schema " + table[0] + " and table " + table[1]);
-        if(SQLPrms.isSnappyMode() && !(table[0].equalsIgnoreCase("SNAPPY_HIVE_METASTORE")))
-        verifyResultSets(dConn, gConn, table[0], table[1]);
+        //if (SQLPrms.isSnappyMode() && !(table[0].equalsIgnoreCase("SNAPPY_HIVE_METASTORE")))
+          verifyResultSets(dConn, gConn, table[0], table[1]);
       }catch (TestException te) {
         if (verifyUsingOrderBy) throw te; //avoid OOME on accessor due to failure with large resultset 
         
@@ -3824,7 +3824,8 @@ public class SQLTest {
           .executeQuery(
               "select tableschemaname, tablename "
                   + "from sys.systables where tabletype = 'T' and tableschemaname != '"
-                  + GfxdConstants.PLAN_SCHEMA + "' ");
+                  + GfxdConstants.PLAN_SCHEMA + "' "
+                  + (SQLPrms.isSnappyMode()?" and tableschemaname != 'SNAPPY_HIVE_METASTORE'": ""));
       
       if (!setTx) {
         while (rs.next()) {
@@ -5338,7 +5339,8 @@ public class SQLTest {
     try {
       rs = conn.createStatement().executeQuery("select tableschemaname, tablename "
                   + "from sys.systables where tabletype = 'T' and tableschemaname != '"
-                  + GfxdConstants.PLAN_SCHEMA + "'");
+                  + GfxdConstants.PLAN_SCHEMA + "'"
+                  + (SQLPrms.isSnappyMode()?" and tableschemaname != 'SNAPPY_HIVE_METASTORE'":""));
       while (rs.next()) {
         String[] str = new String[2];
         str[0] = rs.getString(1);
@@ -5962,7 +5964,8 @@ public class SQLTest {
     
     try {
       rs = gConn.createStatement().executeQuery("select tableschemaname, tablename "
-          + "from sys.systables where tabletype = 'T' ");
+          + "from sys.systables where tabletype = 'T' "
+          + (SQLPrms.isSnappyMode()?" and tableschemaname != 'SNAPPY_HIVE_METASTORE'":""));
       while (rs.next()) {
         String schemaName = rs.getString(1);
         String tableName = rs.getString(2);
@@ -5999,7 +6002,8 @@ public class SQLTest {
     StringBuffer str = new StringBuffer();
     try {
       ResultSet rs = gConn.createStatement().executeQuery("select tableschemaname, tablename "
-          + "from sys.systables where tabletype = 'T' and tableschemaname not like 'SYS%'");
+          + "from sys.systables where tabletype = 'T' and tableschemaname not like 'SYS%'"
+          + (SQLPrms.isSnappyMode()?" and tableschemaname != 'SNAPPY_HIVE_METASTORE'":""));
       while (rs.next()) {
         String schemaName = rs.getString(1);
         String tableName = rs.getString(2);

@@ -77,7 +77,7 @@ public class PartitionClause {
       " ",
       " partition_by 'since' ",
       " partition_by 'cust_name' ",
-      " replicate "
+      " " //replicate
   };
 
   //writes the partition key info to BB
@@ -213,7 +213,7 @@ public class PartitionClause {
   protected static String[] securitiesPartitionClauseForSnappy = {
       " ",
       " partition_by 'sec_id,price' ",
-      " replicate "  ,
+      " "  , //replicate
   };
 
   protected static void writeSecuritiesPartitionToBB(int whichClause) {
@@ -348,7 +348,7 @@ public class PartitionClause {
       " ", //default
       " partition_by 'cash' ",
       " partition_by 'loanLimit,availloan' ",
-      " replicate ",
+      " ", //replicate
   };
 
   protected static void writeNetworthPartitionToBB(int whichClause) {
@@ -474,7 +474,7 @@ public class PartitionClause {
       " ",
       " partition_by 'qty' ",
       " partition_by 'qty, availQty' ",
-      " replicate "  ,
+      " "  , //replicate
   };
 
   @SuppressWarnings("unchecked")
@@ -646,7 +646,7 @@ public class PartitionClause {
       " partition_by 'ask, status' ",
       " partition_by 'order_time, status' ",
       " partition_by 'sid, order_time, ask' ",
-      " replicate ",
+      " ", //replicate
   };
 
   @SuppressWarnings("unchecked")
@@ -813,7 +813,7 @@ public class PartitionClause {
       " ",
       " partition_by 'bid,ordertime' ",
       " partition_by 'ordertime,status' ",
-      " replicate "  ,
+      " "  , //replicate
   };
   @SuppressWarnings("unchecked")
   protected static void writeBuyordersPartitionToBB(int whichClause) {
@@ -961,7 +961,7 @@ public class PartitionClause {
 
   protected static String[] txhistoryPartitionClauseForSnappy = {
       " ",
-      " replicate "  ,
+      " "  , //replicate
   };
 
   protected static void writeTxhistoryPartitionToBB(int whichClause) {
@@ -1086,7 +1086,7 @@ public class PartitionClause {
       " partition_by 'asset, companytype'" ,
       " partition_by 'logo'" ,
       " partition_by 'uuid'" ,
-      " replicate "  ,
+      " ", //replicate
   };
 
 
