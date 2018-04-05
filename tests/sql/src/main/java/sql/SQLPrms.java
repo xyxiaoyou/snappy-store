@@ -304,7 +304,8 @@ public class SQLPrms extends BasePrms{
 
     String[] strArr = new String[statements.size()];
     for (int i = 0; i < statements.size(); i++) {
-      if(SQLPrms.isSnappyMode() && !statements.elementAt(i).contains("USING ROW")) {
+      String extension = statements.elementAt(i);
+      if(isSnappyMode() && extension.trim().length() > 0 && !extension.contains("USING ROW")) {
         throw new TestException("GFXD syntax for create table is not supported, please use snappy" +
             " syntax");
       }
