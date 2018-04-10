@@ -556,10 +556,6 @@ public class ResultSetHelper {
             Object missingCol = missingFieldValues[col];
             Object unexpectedCol = unexpectedFieldValues[col];
             if (!missingCol.equals(unexpectedCol)) {
-              Log.getLogWriter().info("[Sonal] class name is " + missingCol.getClass().getName() +
-                  " and " + unexpectedCol.getClass().getName());
-              Log.getLogWriter().info("[Sonal] object values are " + missingCol + " " +
-                  unexpectedCol);
               if (missingCol.getClass().getName().contains("BigDecimal") && unexpectedCol
                   .getClass().getName().contains("BigDecimal")) {
                 Double diff = (((BigDecimal)missingCol).subtract((BigDecimal)unexpectedCol)).doubleValue();

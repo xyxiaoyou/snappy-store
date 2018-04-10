@@ -1234,11 +1234,8 @@ public class PartitionClause {
   @SuppressWarnings("unchecked")
   public static String getPartitionClause(String tableInfo){
     String partitionClause = null;
-    if(SQLPrms.isSnappyMode()){
-      Log.getLogWriter().info("[Sonal] parClause is " + tableInfo);
+    if(SQLPrms.isSnappyMode())
       tableInfo = tableInfo.substring(tableInfo.indexOf("(") + 1, tableInfo.indexOf(")"));
-      Log.getLogWriter().info("[Sonal] parClause is " + tableInfo);
-    }
     String[] strArray = tableInfo.split(":");
     String tableName = strArray[0];
     String partition = strArray[1]; //parse in the partition key

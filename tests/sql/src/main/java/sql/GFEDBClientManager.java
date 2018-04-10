@@ -86,9 +86,9 @@ public class GFEDBClientManager {
   
   @SuppressWarnings("unchecked")
   public static synchronized void initAvailHostPort() {
-    Log.getLogWriter().info("[Sonal] Inside initAvailHostPort method");
-  if (map == null) map = (HashMap <String, ArrayList<Integer>>)SQLBB.getBB().getSharedMap().get("serverPorts");  
-  hostNames = (String[])(map.keySet().toArray(new String[0]));
+    if (map == null)
+      map = (HashMap<String, ArrayList<Integer>>)SQLBB.getBB().getSharedMap().get("serverPorts");
+    hostNames = (String[])(map.keySet().toArray(new String[0]));
   }
   
   /**
