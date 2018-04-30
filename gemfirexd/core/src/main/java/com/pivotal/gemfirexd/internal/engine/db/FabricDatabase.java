@@ -450,7 +450,6 @@ public final class FabricDatabase implements ModuleControl,
       if (this.memStore.isSnappyStore()) {
         this.memStore.setGlobalCmdRgn(createSnappySpecificGlobalCmdRegion(
             !this.memStore.isDataDictionaryPersistent()));
-        logger.info("KN: FabricDatabase global command region created with size = " + this.memStore.getGlobalCmdRgn().size());
       }
 
       // Entry of default disk stores in sysdiskstore table
@@ -601,15 +600,7 @@ public final class FabricDatabase implements ModuleControl,
       afact.setDataPolicy(DataPolicy.REPLICATE);
     }
 
-    // Set the meta-region flag for this region (this is the convention
-    // for bypassing authorization checks, for example). Remaining flags
-    // are the same as those set by Cache#createRegion().
     InternalRegionArguments internalRegionArgs = new InternalRegionArguments();
-        // .setDestroyLockFlag(true).setRecreateFlag(false);
-        //.setSnapshotInputStream(null).setImageTarget(null)
-        // .setIsUsedForMetaRegion(true).setIsUsedForPartitionedRegionAdmin(false);
-    //final GfxdDDLRegion region = new GfxdDDLRegion(queue, regionName, afact
-      //  .create(), null, cache, internalRegionArgs);
     return cache.createVMRegion("__snappyglobalcmds__", afact.create(), internalRegionArgs);
   }
 

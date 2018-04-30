@@ -617,7 +617,7 @@ public class GenericStatement
               cc.markAsDDLForSnappyUse(true);
             }
             boolean isDDL = cc.isMarkedAsDDLForSnappyUse()
-								|| source.toLowerCase().startsWith("deploy") || source.toLowerCase().startsWith("undeploy");
+              || source.toLowerCase().startsWith("deploy") || source.toLowerCase().startsWith("undeploy");
             return getPreparedStatementForSnappy(false, statementContext, lcc,
                 isDDL, checkCancellation,
                 DML_TABLE_PATTERN.matcher(source).find());
