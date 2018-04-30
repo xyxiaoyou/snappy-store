@@ -9616,7 +9616,7 @@ public class LocalRegion extends AbstractRegion
       if (sysCb != null && sysCb.destroyExistingRegionInCreate(dsi, this)) {
         LogWriter logger = getCache().getLogger();
         if (logger.infoEnabled()) {
-          logger.info("Destroying existing region: " + this + " in create");
+          logger.info("Destroying existing region: " + getFullPath() + " in create");
         }
         dsi.destroyRegion(getFullPath(), false);
       }
