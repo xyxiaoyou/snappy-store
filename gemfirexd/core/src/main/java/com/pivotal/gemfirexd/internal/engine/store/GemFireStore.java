@@ -85,6 +85,7 @@ import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.FinalizeObject;
 import com.gemstone.gemfire.internal.shared.LauncherBase;
 import com.gemstone.gemfire.internal.shared.StringPrintWriter;
+import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gnu.trove.THashMap;
 import com.gemstone.gnu.trove.TLongHashSet;
 import com.pivotal.gemfirexd.Attribute;
@@ -201,7 +202,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
    * Hidden region that is used for DDL string puts for DDL statement replay on
    * new servers.
    */
-  public final static String DDL_STMTS_REGION = "_DDL_STMTS_META_REGION";
+  public final static String DDL_STMTS_REGION = SystemProperties.DDL_STMTS_REGION;
 
   private static final Pattern ILLEGAL_DISKDIR_CHARS_PATTERN =
       Pattern.compile("[*?<>|;]");
@@ -385,6 +386,8 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
 
   public static final ThreadLocal<Boolean> externalCatalogInitThread =
       new ThreadLocal<>();
+
+  private Region<String, String> snappyGlobalCmdRgn;
 
   /**
    *************************************************************************
@@ -3048,5 +3051,13 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
         return true;
       }
     }
+  }
+
+  public void setGlobalCmdRgn(Region gcr) {
+    this.snappyGlobalCmdRgn = gcr;
+  }
+
+  public Region<String, String> getGlobalCmdRgn() {
+    return this.snappyGlobalCmdRgn;
   }
 }

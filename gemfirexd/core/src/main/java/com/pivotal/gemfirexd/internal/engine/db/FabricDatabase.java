@@ -41,6 +41,7 @@
 
 package com.pivotal.gemfirexd.internal.engine.db;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
 import java.security.PrivilegedExceptionAction;
@@ -52,21 +53,17 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.LogWriter;
-import com.gemstone.gemfire.cache.DataPolicy;
-import com.gemstone.gemfire.cache.Region;
+import com.gemstone.gemfire.cache.*;
 import com.gemstone.gemfire.distributed.internal.DistributionManager;
 import com.gemstone.gemfire.distributed.internal.InternalDistributedSystem;
 import com.gemstone.gemfire.internal.ClassPathLoader;
 import com.gemstone.gemfire.internal.GFToSlf4jBridge;
 import com.gemstone.gemfire.internal.LogWriterImpl;
 import com.gemstone.gemfire.internal.cache.*;
-import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.gemstone.gnu.trove.THashMap;
@@ -85,10 +82,7 @@ import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.access.GemFireTransaction;
 import com.pivotal.gemfirexd.internal.engine.access.index.GfxdIndexManager;
 import com.pivotal.gemfirexd.internal.engine.access.index.MemIndex;
-import com.pivotal.gemfirexd.internal.engine.ddl.DDLConflatable;
-import com.pivotal.gemfirexd.internal.engine.ddl.GfxdDDLQueueEntry;
-import com.pivotal.gemfirexd.internal.engine.ddl.GfxdDDLRegionQueue;
-import com.pivotal.gemfirexd.internal.engine.ddl.ReplayableConflatable;
+import com.pivotal.gemfirexd.internal.engine.ddl.*;
 import com.pivotal.gemfirexd.internal.engine.ddl.catalog.messages.GfxdSystemProcedureMessage;
 import com.pivotal.gemfirexd.internal.engine.ddl.wan.messages.AbstractGfxdReplayableMessage;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdMessage;
@@ -453,6 +447,11 @@ public final class FabricDatabase implements ModuleControl,
       final GemFireTransaction tc = (GemFireTransaction)lcc
           .getTransactionExecute();
 
+      if (this.memStore.isSnappyStore()) {
+        this.memStore.setGlobalCmdRgn(createSnappySpecificGlobalCmdRegion(
+            !this.memStore.isDataDictionaryPersistent()));
+      }
+
       // Entry of default disk stores in sysdiskstore table
       UUIDFactory factory = dd.getUUIDFactory();
       addInternalDiskStore(cache.findDiskStore(
@@ -578,6 +577,31 @@ public final class FabricDatabase implements ModuleControl,
       throw StandardException.newException(SQLState.BOOT_DATABASE_FAILED, t,
           Attribute.GFXD_DBNAME);
     }
+  }
+
+  private Region createSnappySpecificGlobalCmdRegion(boolean isLead) throws IOException, ClassNotFoundException {
+    GemFireCacheImpl cache = Misc.getGemFireCache();
+    final com.gemstone.gemfire.cache.AttributesFactory<?, ?> afact
+        = new com.gemstone.gemfire.cache.AttributesFactory<>();
+    afact.setScope(Scope.DISTRIBUTED_ACK);
+
+    if (!isLead) {
+      afact.setInitialCapacity(1000);
+      afact.setConcurrencyChecksEnabled(false);
+      afact.setDiskSynchronous(true);
+      afact.setDiskStoreName(GfxdConstants.GFXD_DD_DISKSTORE_NAME);
+      afact.setDataPolicy(DataPolicy.PERSISTENT_REPLICATE);
+      // overflow this region to disk as much as possible since we don't
+      // need it to be in memory
+      afact.setEvictionAttributes(EvictionAttributes.createLRUEntryAttributes(
+          1, EvictionAction.OVERFLOW_TO_DISK));
+    }
+    else {
+      afact.setDataPolicy(DataPolicy.REPLICATE);
+    }
+
+    InternalRegionArguments internalRegionArgs = new InternalRegionArguments();
+    return cache.createVMRegion("__snappyglobalcmds__", afact.create(), internalRegionArgs);
   }
 
   private void addInternalDiskStore(DiskStoreImpl ds, UUIDFactory factory)
@@ -1157,7 +1181,6 @@ public final class FabricDatabase implements ModuleControl,
         if (previousLevel != Integer.MAX_VALUE) {
           GFToSlf4jBridge bridgeLogger = ((GFToSlf4jBridge) logger);
           bridgeLogger.setLevel(previousLevel);
-          bridgeLogger.info("Done hive meta-store initialization");
           previousLevel = Integer.MAX_VALUE;
         }
       // commenting out for snap-585

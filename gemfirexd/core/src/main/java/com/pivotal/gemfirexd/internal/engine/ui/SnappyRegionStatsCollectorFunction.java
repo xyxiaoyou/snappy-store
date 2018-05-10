@@ -103,13 +103,13 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
 
       if (Misc.reservoirRegionCreated) {
         for (SnappyRegionStats tableStats : otherStats) {
-          String rgnName = tableStats.getTableName();
+          String tableName = tableStats.getTableName();
           StoreCallbacks callback = CallbackFactoryProvider.getStoreCallbacks();
-          String columnBatchTableName = callback.columnBatchTableName(tableStats.getTableName());
+          String columnBatchTableName = callback.columnBatchTableName(tableName);
           if (cachBatchStats.containsKey(columnBatchTableName)) {
-            String reservoirRegionName = Misc.getReservoirRegionNameForSampleTable("APP", rgnName);
+            String reservoirRegionName = Misc.getReservoirRegionNameForSampleTable("APP", tableName);
             PartitionedRegion pr = Misc.getReservoirRegionForSampleTable(reservoirRegionName);
-            if (pr != null) {
+            if (managementService != null && pr != null) {
               RegionMXBean reservoirBean = managementService.getLocalRegionMBean(pr.getFullPath());
               if (reservoirBean != null) {
                 SnappyRegionStats rStats = collectDataFromBeanImpl(pr, reservoirBean, true);
@@ -158,6 +158,11 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
     boolean isColumnTable = bean.isColumnTable();
     tableStats.setColumnTable(isColumnTable);
     tableStats.setReplicatedTable(isReplicatedTable(lr.getDataPolicy()));
+    if (tableStats.isReplicatedTable()) {
+      tableStats.setBucketCount(1);
+    } else {
+      tableStats.setBucketCount(lr.getPartitionAttributes().getTotalNumBuckets());
+    }
     if (isReservoir) {
       long numLocalEntries = bean.getRowsInReservoir();
       tableStats.setRowCount(numLocalEntries);

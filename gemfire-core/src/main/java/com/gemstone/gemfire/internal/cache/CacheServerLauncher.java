@@ -85,7 +85,7 @@ public class CacheServerLauncher extends LauncherBase {
   protected PrintStream oldErr = System.err;
   protected LogWriterI18n logger = null;
   protected String offHeapSize;
-  protected String serverStartupMessage;
+  protected volatile String serverStartupMessage;
   protected final OpenHashSet<String> knownOptions;
 
   protected static CacheServerLauncher instance;
@@ -643,7 +643,9 @@ public class CacheServerLauncher extends LauncherBase {
         stat.dsMsg = null;
         stat.state = stateIfWaiting;
       } else if (stat.state == RUNNING) {
-        return;
+        if (stat.dsMsg != null) {
+          return;
+        }
       } else {
         stat.state = RUNNING;
       }
@@ -772,7 +774,11 @@ public class CacheServerLauncher extends LauncherBase {
     serverConnector.start();
     
     while(true) {
-      serverConnector.join(500);
+      try {
+        serverConnector.join(500);
+      } catch (InterruptedException ie) {
+        //ignore
+      }
       if (serverConnector.isAlive()) {
         Status s = readStatus();
         if (s.state == SHUTDOWN_PENDING || s.state == SHUTDOWN) {
@@ -1088,6 +1094,7 @@ public class CacheServerLauncher extends LauncherBase {
         this.status = createStatus(SHUTDOWN_PENDING, this.status.pid);
         writeStatus(this.status);
       }
+     ;
 
       // poll the Cache Server for a response to our shutdown request (passes through if the Cache Server
       // has already shutdown)...
