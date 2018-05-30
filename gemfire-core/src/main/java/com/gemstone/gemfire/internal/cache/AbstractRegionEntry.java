@@ -1482,7 +1482,7 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
             setContainerInfo(null, val);
           }
           if (!isOffHeap && context != null) {
-            context.updateMemoryStats(getRawKey(), rawOldVal, val);
+            context.updateMemoryStats(rawOldVal, val);
           }
           return;
         } catch (IllegalAccessException e) {
@@ -1717,14 +1717,13 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
     try {
     // update the memory stats if required
     if (owner != previousOwner && !isOffHeap()) {
-      final Object key = getRawKey();
       // set the context into the value if required
       initContextForDiskBuffer(owner, val);
       // add for new owner
-      if (owner != null) owner.updateMemoryStats(key, null, val);
+      if (owner != null) owner.updateMemoryStats(null, val);
       // reduce from previous owner
       if (previousOwner instanceof RegionEntryContext) {
-        ((RegionEntryContext)previousOwner).updateMemoryStats(key, val, null);
+        ((RegionEntryContext)previousOwner).updateMemoryStats(val, null);
       }
     }
     final StaticSystemCallbacks sysCb =
