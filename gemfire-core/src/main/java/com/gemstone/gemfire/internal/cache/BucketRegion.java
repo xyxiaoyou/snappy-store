@@ -43,6 +43,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Predicate;
 
 import com.gemstone.gemfire.*;
 import com.gemstone.gemfire.cache.*;
@@ -761,8 +762,21 @@ public class BucketRegion extends DistributedRegion implements Bucket {
         || getTotalBytes() >= pr.getColumnBatchSize());
   }
 
+  private static final Predicate<?> TRUE_CHECK = v -> true;
+
+  @SuppressWarnings("unchecked")
+  static <T> Predicate<T> TRUE_PREDICATE() {
+    return (Predicate<T>)TRUE_CHECK;
+  }
+
+  @SuppressWarnings("unchecked")
   public final boolean createAndInsertColumnBatch(TXStateInterface tx,
       boolean forceFlush) {
+    return createAndInsertColumnBatch(tx, forceFlush, TRUE_PREDICATE());
+  }
+
+  public final boolean createAndInsertColumnBatch(TXStateInterface tx,
+      boolean forceFlush, Predicate<BucketRegion> checkFlushInLock) {
     // do nothing if a flush is already in progress
     if (this.columnBatchFlushLock.isWriteLocked()) {
       return false;
@@ -771,7 +785,8 @@ public class BucketRegion extends DistributedRegion implements Bucket {
         this.columnBatchFlushLock.writeLock();
     sync.lock();
     try {
-      return internalCreateAndInsertColumnBatch(tx, forceFlush);
+      return checkFlushInLock.test(this) &&
+          internalCreateAndInsertColumnBatch(tx, forceFlush);
     } finally {
       sync.unlock();
     }
@@ -864,7 +879,8 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   // This destroy is under a lock which makes sure that there is no put into the region
   // No need to take the lock on key
   private void destroyAllEntries(Set keysToDestroy, long batchKey) {
-    for(Object key : keysToDestroy) {
+    TXStateInterface txState = getTXState();
+    for (Object key : keysToDestroy) {
       if (getCache().getLoggerI18n().fineEnabled()) {
         getCache()
             .getLoggerI18n()
@@ -878,8 +894,8 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
       event.setKey(key);
       event.setBucketId(this.getId());
+      event.setTXState(txState);
 
-      TXStateInterface txState = event.getTXState(this);
       if (txState != null) {
         event.setRegion(this);
         txState.destroyExistingEntry(event, true, null);

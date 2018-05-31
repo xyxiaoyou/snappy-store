@@ -18,6 +18,7 @@
 package io.snappydata.collection;
 
 import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 
 import com.koloboke.compile.CustomKeyEquivalence;
@@ -37,6 +38,9 @@ public abstract class ObjectObjectHashMap<K, V> implements Map<K, V> {
     m.putAll(map);
     return m;
   }
+
+  public abstract V compute(K key,
+      BiFunction<? super K, ? super V, ? extends V> remappingFunction);
 
   public abstract boolean forEachWhile(BiPredicate<? super K, ? super V> predicate);
 

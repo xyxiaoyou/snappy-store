@@ -757,8 +757,7 @@ public class ObjectSizer {
           if (value != null) {
             if (!isValueTypeEvaluated) {
               if (isColumnTable) {
-                numColumnsInColumnTable = batchKey.getNumColumnsInTable(
-                    c.getQualifiedTableName());
+                numColumnsInColumnTable = batchKey.getNumColumnsInTable(c);
               } else if (value instanceof DataValueDescriptor[]) {
                 dvdArraySize = SIZE_OF_UTIL.sizeof(value);
               } else if (value instanceof GatewaySenderEventImpl) {

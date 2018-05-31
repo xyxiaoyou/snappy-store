@@ -16,9 +16,10 @@
  */
 package com.pivotal.gemfirexd.internal.snappy;
 
-import com.gemstone.gemfire.internal.cache.AbstractRegionEntry;
+import com.gemstone.gemfire.internal.cache.RegionEntry;
 import com.gemstone.gemfire.internal.cache.lru.Sizeable;
 import com.gemstone.gemfire.internal.cache.partitioned.PREntriesIterator;
+import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
 
 /**
  * Interface for a key object in the column store.
@@ -29,11 +30,11 @@ public interface ColumnBatchKey extends Sizeable {
    * Get the number of columns defined for the given
    * column table (qualified name).
    */
-  int getNumColumnsInTable(String columnTableName);
+  int getNumColumnsInTable(GemFireContainer columnTable);
 
   /**
    * Get the number of rows in this column batch.
    */
-  int getColumnBatchRowCount(PREntriesIterator<?> itr, AbstractRegionEntry re,
+  int getColumnBatchRowCount(PREntriesIterator<?> itr, RegionEntry re,
       int numColumnsInTable);
 }

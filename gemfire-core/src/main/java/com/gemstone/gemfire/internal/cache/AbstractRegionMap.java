@@ -2298,7 +2298,7 @@ RETRY_LOOP:
         catch (RegionClearedException rce) {
           clearOccured = true;
         }
-        owner.txApplyDestroyPart2(re, key, inTokenMode,
+        owner.txApplyDestroyPart2(txState, re, key, inTokenMode,
             clearOccured /* Clear Conflciting with the operation */);
         if (cbEvent != null) {
           if (pendingCallbacks == null) {
@@ -2368,12 +2368,12 @@ RETRY_LOOP:
             EntryLogger.logTXDestroy(_getOwnerObject(), key);
           }
           owner.updateSizeOnRemove(key, oldSize);
-          owner.txApplyDestroyPart2(re, key, inTokenMode,
+          owner.txApplyDestroyPart2(txState, re, key, inTokenMode,
               false /* Clear Conflicting with the operation */);
           lruEntryDestroy(re);
         }
         catch (RegionClearedException rce) {
-          owner.txApplyDestroyPart2(re, key, inTokenMode,
+          owner.txApplyDestroyPart2(txState, re, key, inTokenMode,
               true /* Clear Conflicting with the operation */);
         }
 
@@ -3241,7 +3241,8 @@ RETRY_LOOP:
         } catch (RegionClearedException rce) {
           clearOccured = true;
         }
-        owner.txApplyInvalidatePart2(re, key, didDestroy, true, clearOccured);
+        owner.txApplyInvalidatePart2(txState, re, key, didDestroy,
+            true, clearOccured);
         // didInvalidate = true;
         if (cbEvent != null) {
           if (pendingCallbacks == null) {
