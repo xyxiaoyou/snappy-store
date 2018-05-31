@@ -2112,6 +2112,8 @@ RETRYLOOP:
 
   /* ---------------- Iterator Support -------------- */
 
+  private static final HashEntry[] EMPTY_LIST = new HashEntry<?, ?>[0];
+
   public abstract class HashIterator {
 
     int currentSegmentIndex;
@@ -2125,18 +2127,23 @@ RETRYLOOP:
 
     HashEntry<K, V> lastReturned;
 
-    private HashEntry<K, V> currentEntry;
-    private final ArrayList<HashEntry<K, V>> currentList;
+    private HashEntry<K, V>[] currentList;
 
     int currentListIndex;
 
+    @SuppressWarnings("unchecked")
     HashIterator() {
       this.currentSegmentIndex = CustomEntryConcurrentHashMap.this
           .segments.length;
       this.nextTableIndex = -1;
-      this.currentList = new ArrayList<>(4);
+      this.currentList = emptyList();
       this.currentListIndex = 0;
       advance();
+    }
+
+    @SuppressWarnings("unchecked")
+    private HashEntry<K, V>[] emptyList() {
+      return EMPTY_LIST;
     }
 
     public final int getMapTableIndex() {
@@ -2149,18 +2156,8 @@ RETRYLOOP:
 
     final void advance() {
 // GemStone changes BEGIN
-      if (this.currentListIndex == 0) {
-        if (this.currentEntry != null) {
-          this.nextEntry = this.currentEntry;
-          this.currentListIndex = 1;
-          return;
-        } else if (this.currentList.size() > 0) {
-          this.nextEntry = this.currentList.get(0);
-          this.currentListIndex = 1;
-          return;
-        }
-      } else if (this.currentListIndex < this.currentList.size()) {
-        this.nextEntry = this.currentList.get(this.currentListIndex++);
+      if (this.currentListIndex < this.currentList.length) {
+        this.nextEntry = this.currentList[this.currentListIndex++];
         return;
       }
 
@@ -2224,31 +2221,17 @@ RETRYLOOP:
      * Read lock on {@link #currentSegmentIndex}'s listUpdateLock should already be
      * acquired.
      */
-    private final void copyEntriesToList() {
+    private void copyEntriesToList() {
       assert segments[currentSegmentIndex] != null: "unexpected null currentSegment";
       assert segments[currentSegmentIndex].listUpdateLock.numReaders() > 0;
 
-      this.currentEntry = null;
-      if (this.currentList.size() > 0) {
-        this.currentList.clear();
-      }
+      final ArrayList<HashEntry<K, V>> list = new ArrayList<>(4);
       this.currentListIndex = 0;
-      boolean useEntry = true;
       for (HashEntry<K, V> p = this.nextEntry.getNextEntry(); p != null; p = p
           .getNextEntry()) {
-        if (useEntry) {
-          if (this.currentEntry == null) {
-            this.currentEntry = p;
-          } else {
-            this.currentList.add(this.currentEntry);
-            this.currentList.add(p);
-            this.currentEntry = null;
-            useEntry = false;
-          }
-        } else {
-          this.currentList.add(p);
-        }
+        list.add(p);
       }
+      this.currentList = list.toArray(emptyList());
     }
 
     public final boolean hasNext() {
