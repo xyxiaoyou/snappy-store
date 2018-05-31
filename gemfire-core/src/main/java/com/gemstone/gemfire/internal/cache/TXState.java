@@ -3907,16 +3907,7 @@ public final class TXState implements TXStateInterface {
     }
   }
 
-  /**
-   * Return either the {@link TXEntryState} if the given entry is in TXState
-   * else return the provided region entry itself.
-   */
-  public final Object getLocalEntry(final LocalRegion region,
-      LocalRegion dataRegion, final int bucketId, final AbstractRegionEntry re, boolean isWrite) {
-
-    // for local/distributed regions, the key is the RegionEntry itself
-    // getDataRegion will work correctly neverthless
-
+  private boolean checkTX(LocalRegion region, AbstractRegionEntry re) {
     // need to check in TXState only if the entry has been locked by a TX
     final boolean checkTX = getLockingPolicy().lockedForWrite(re, null, null);
     if (TXStateProxy.LOG_FINE) {
@@ -3925,7 +3916,32 @@ public final class TXState implements TXStateInterface {
           + region.getFullPath() + " RegionEntry(" + re + ") checkTX="
           + checkTX);
     }
-    if (checkTX) {
+    return checkTX;
+  }
+
+  /**
+   * Return either the {@link TXEntryState} if the given entry is in TXState
+   * else return the provided region entry itself.
+   */
+  public final Object getLocalEntry(final LocalRegion region,
+      LocalRegion dataRegion, final int bucketId, final AbstractRegionEntry re,
+      boolean isWrite) {
+
+    // for local/distributed regions, the key is the RegionEntry itself
+    // getDataRegion will work correctly nevertheless
+
+    if (!isWrite && shouldGetOldEntry(dataRegion)) {
+      final Object key = re.getKeyCopy();
+      if (dataRegion == null) {
+        dataRegion = region.getDataRegionForRead(key, null, bucketId,
+            Operation.GET_ENTRY);
+      }
+      if (dataRegion.getVersionVector() != null) {
+        if (!checkEntryInSnapshot(this, dataRegion, re)) {
+          return getOldVersionedEntry(this, dataRegion, key, re);
+        }
+      }
+    } else if (checkTX(region, re)) {
       final Object key = re.getKey();
       if (dataRegion == null) {
         dataRegion = region.getDataRegionForRead(key, null, bucketId,
@@ -3963,17 +3979,6 @@ public final class TXState implements TXStateInterface {
           }
         } finally {
           txr.unlock();
-        }
-      }
-    } else if (!isWrite && shouldGetOldEntry(dataRegion)) {
-      final Object key = re.getKeyCopy();
-      if (dataRegion == null) {
-        dataRegion = region.getDataRegionForRead(key, null, bucketId,
-            Operation.GET_ENTRY);
-      }
-      if (dataRegion.getVersionVector() != null) {
-        if (!checkEntryInSnapshot(this, dataRegion, re)) {
-          return getOldVersionedEntry(this, dataRegion, key, re);
         }
       }
     }

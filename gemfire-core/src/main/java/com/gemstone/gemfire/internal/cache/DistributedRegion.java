@@ -3666,7 +3666,8 @@ public class DistributedRegion extends LocalRegion implements
             }
           }
           RegionEntry re = (RegionEntry)this.it.next();
-          if (re.isOverflowedToDisk(this.region, dp, false)) {
+          if (re.isValueNull() &&
+              re.isOverflowedToDisk(this.region, dp, false)) {
             // add dp to sorted list
             // avoid create DiskPage everytime for lookup
             // TODO: SW: Can reduce the intermediate memory and boost

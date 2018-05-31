@@ -27,6 +27,8 @@ public abstract class IntObjectHashMap<V> {
     return new KolobokeIntObjectHashMap<>(expectedSize);
   }
 
+  public abstract V put(int key, V value);
+
   public abstract void justPut(int key, V value);
 
   public abstract V get(int key);

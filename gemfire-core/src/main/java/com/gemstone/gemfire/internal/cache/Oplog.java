@@ -118,6 +118,8 @@ import com.gemstone.gemfire.internal.offheap.annotations.Retained;
 import com.gemstone.gemfire.internal.sequencelog.EntryLogger;
 import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.NativeCalls;
+import io.snappydata.collection.IntObjectHashMap;
+import io.snappydata.collection.LongObjectHashMap;
 import io.snappydata.collection.OpenHashSet;
 import com.gemstone.gemfire.internal.shared.UnsupportedGFXDVersionException;
 import com.gemstone.gemfire.internal.shared.Version;
@@ -9012,8 +9014,10 @@ public final class Oplog implements CompactableOplog {
    * Memory is optimized by using an int[] for ids in the unsigned int range.
    */
   public static class OplogEntryIdMap {
-    private final TStatelessIntObjectHashMap ints = new TStatelessIntObjectHashMap((int)DiskStoreImpl.INVALID_ID);
-    private final TStatelessLongObjectHashMap longs = new TStatelessLongObjectHashMap(DiskStoreImpl.INVALID_ID);
+    private final IntObjectHashMap<Object> ints =
+        IntObjectHashMap.withExpectedSize(16);
+    private final LongObjectHashMap<Object> longs =
+        LongObjectHashMap.withExpectedSize(16);
 
     public Object put(long id, Object v) {
       Object result;
