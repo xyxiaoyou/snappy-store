@@ -44,6 +44,7 @@ public class ExternalTableMetaData {
     this.dependents = dependents;
     this.dataSourcePath = dataSourcePath;
     this.driverClass = driverClass;
+    this.hasPrimaryIndex = true; // TODO: VB: read from table properties
   }
 
   public String entityName;
@@ -61,6 +62,7 @@ public class ExternalTableMetaData {
   public String shortProvider;
   public String dataSourcePath;
   public String driverClass;
+  public boolean hasPrimaryIndex;
   // columns for metadata queries
   public List<Column> columns;
 
