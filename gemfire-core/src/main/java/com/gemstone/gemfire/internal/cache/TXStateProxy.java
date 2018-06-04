@@ -848,8 +848,8 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
             // recipients
             if (numRecipients > batchResponses.size()) {
               // make a copy since original is required later
-              final OpenHashSet<?> remainingRecipients =
-                  new OpenHashSet(recipients);
+              final OpenHashSet<InternalDistributedMember> remainingRecipients =
+                  new OpenHashSet<>(recipients);
               for (TXBatchResponse batchResponse : batchResponses) {
                 remainingRecipients.remove(batchResponse.recipient);
               }
