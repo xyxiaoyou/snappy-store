@@ -73,6 +73,7 @@ import com.gemstone.gnu.trove.THash;
 import com.gemstone.gnu.trove.THashMap;
 import com.gemstone.gnu.trove.TObjectHashingStrategy;
 import com.gemstone.gnu.trove.TObjectProcedure;
+import io.snappydata.collection.ObjectObjectHashMap;
 
 /**
  * TXState is the entity that tracks the transaction state on a per thread
@@ -2489,8 +2490,8 @@ public final class TXState implements TXStateInterface {
     }
     txr.lock();
     try {
-      final THashMapWithCreate entryMap = checkForTXFinish.booleanValue() ? txr
-          .getEntryMap() : txr.getInternalEntryMap();
+      final ObjectObjectHashMap<Object, Object> entryMap =
+          checkForTXFinish ? txr.getEntryMap() : txr.getInternalEntryMap();
       if (entryMap.putIfAbsent(key, entry) != null) {
         // entry exists and must be at least read locked, so release this lock
         this.lockPolicy.releaseLock(entry, this.lockPolicy.getReadLockMode(),
@@ -3038,7 +3039,7 @@ public final class TXState implements TXStateInterface {
         // replace back the read locked entry, else remove it
         if (txEntryCreated) {
           if (lockedForRead) {
-            txr.getEntryMap().put(eventKey, entry);
+            txr.getEntryMap().justPut(eventKey, entry);
           }
           else {
             txr.getEntryMap().remove(eventKey);
@@ -3931,14 +3932,14 @@ public final class TXState implements TXStateInterface {
     // getDataRegion will work correctly nevertheless
 
     if (!isWrite && shouldGetOldEntry(dataRegion)) {
-      final Object key = re.getKeyCopy();
+      final Object key = re.getKey();
       if (dataRegion == null) {
         dataRegion = region.getDataRegionForRead(key, null, bucketId,
             Operation.GET_ENTRY);
       }
       if (dataRegion.getVersionVector() != null) {
         if (!checkEntryInSnapshot(this, dataRegion, re)) {
-          return getOldVersionedEntry(this, dataRegion, key, re);
+          return getOldVersionedEntry(this, dataRegion, re.getKeyCopy(), re);
         }
       }
     } else if (checkTX(region, re)) {

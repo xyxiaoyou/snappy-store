@@ -1564,14 +1564,14 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
             // if null then create the rvv for that bucket!
             // For Initialization case, so that we have all the data before snapshot.
             br.waitForData();
-            snapshot.put(br.getFullPath(),
+            snapshot.justPut(br.getFullPath(),
                 br.getVersionVector().getSnapShotOfMemberVersion());
           }
         } else if (region.getVersionVector() != null) {
           // if null then create the rvv for that region!
           // For Initialization case, so that we have all the data before snapshot.
           region.waitForData();
-          snapshot.put(region.getFullPath(),
+          snapshot.justPut(region.getFullPath(),
               region.getVersionVector().getSnapShotOfMemberVersion());
         }
       });

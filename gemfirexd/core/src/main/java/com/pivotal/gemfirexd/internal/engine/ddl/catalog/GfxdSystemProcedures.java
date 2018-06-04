@@ -103,6 +103,7 @@ import com.pivotal.gemfirexd.internal.iapi.types.HarmonySerialBlob;
 import com.pivotal.gemfirexd.internal.iapi.types.HarmonySerialClob;
 import com.pivotal.gemfirexd.internal.iapi.types.TypeId;
 import com.pivotal.gemfirexd.internal.iapi.util.IdUtil;
+import com.pivotal.gemfirexd.internal.iapi.util.ReuseFactory;
 import com.pivotal.gemfirexd.internal.iapi.util.StringUtil;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedConnection;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedResultSetMetaData;
@@ -2783,6 +2784,20 @@ public class GfxdSystemProcedures extends SystemProcedures {
     } finally {
       conn.close();
     }
+  }
+
+  public static void PURGE_CODEGEN_CACHES() throws SQLException, StandardException {
+    if (GemFireXDUtils.TraceExecution) {
+      SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_EXECUTION,
+          "in procedure PURGE_CODEGEN_CACHES()");
+    }
+    Object[] emptyParams = ReuseFactory.getZeroLenObjectArray();
+    GfxdSystemProcedureMessage.SysProcMethod.purgeCodegenCaches
+        .processMessage(emptyParams, Misc.getMyId());
+    // then publish to other members excluding locators
+    publishMessage(emptyParams, false,
+        GfxdSystemProcedureMessage.SysProcMethod.purgeCodegenCaches, false,
+        false);
   }
 
   /**

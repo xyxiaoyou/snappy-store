@@ -186,6 +186,10 @@ public abstract class CallbackFactoryProvider {
     @Override
     public void clearConnectionPools() {
     }
+
+    @Override
+    public void clearCodegenCaches() {
+    }
   };
 
   public static void setStoreCallbacks(StoreCallbacks cb) {

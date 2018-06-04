@@ -129,4 +129,9 @@ public interface StoreCallbacks {
    * authentication service changes, for example).
    */
   void clearConnectionPools();
+
+  /**
+   * Clear all code-generation caches.
+   */
+  void clearCodegenCaches();
 }

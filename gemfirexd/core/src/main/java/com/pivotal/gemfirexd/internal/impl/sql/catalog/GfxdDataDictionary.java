@@ -2056,6 +2056,11 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
           arg_names, arg_types, 0, 1, RoutineAliasInfo.READS_SQL_DATA, null,
           newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
     }
+    {
+      super.createSystemProcedureOrFunction("PURGE_CODEGEN_CACHES", sysUUID,
+          null, null, 0, 0, RoutineAliasInfo.READS_SQL_DATA,
+          null, newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, true);
+    }
   }
 
   @SuppressWarnings({ "unchecked", "rawtypes" })

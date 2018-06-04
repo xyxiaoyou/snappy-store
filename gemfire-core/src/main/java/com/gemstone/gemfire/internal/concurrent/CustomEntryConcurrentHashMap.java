@@ -2112,8 +2112,6 @@ RETRYLOOP:
 
   /* ---------------- Iterator Support -------------- */
 
-  private static final HashEntry[] EMPTY_LIST = new HashEntry<?, ?>[0];
-
   public abstract class HashIterator {
 
     int currentSegmentIndex;
@@ -2128,22 +2126,18 @@ RETRYLOOP:
     HashEntry<K, V> lastReturned;
 
     private HashEntry<K, V>[] currentList;
-
-    int currentListIndex;
+    private int currentListIndex;
+    private int currentListLen;
 
     @SuppressWarnings("unchecked")
     HashIterator() {
       this.currentSegmentIndex = CustomEntryConcurrentHashMap.this
           .segments.length;
       this.nextTableIndex = -1;
-      this.currentList = emptyList();
+      this.currentList = new HashEntry[4];
+      this.currentListLen = 0;
       this.currentListIndex = 0;
       advance();
-    }
-
-    @SuppressWarnings("unchecked")
-    private HashEntry<K, V>[] emptyList() {
-      return EMPTY_LIST;
     }
 
     public final int getMapTableIndex() {
@@ -2156,7 +2150,7 @@ RETRYLOOP:
 
     final void advance() {
 // GemStone changes BEGIN
-      if (this.currentListIndex < this.currentList.length) {
+      if (this.currentListIndex < this.currentListLen) {
         this.nextEntry = this.currentList[this.currentListIndex++];
         return;
       }
@@ -2225,13 +2219,16 @@ RETRYLOOP:
       assert segments[currentSegmentIndex] != null: "unexpected null currentSegment";
       assert segments[currentSegmentIndex].listUpdateLock.numReaders() > 0;
 
-      final ArrayList<HashEntry<K, V>> list = new ArrayList<>(4);
+      this.currentListLen = 0;
       this.currentListIndex = 0;
       for (HashEntry<K, V> p = this.nextEntry.getNextEntry(); p != null; p = p
           .getNextEntry()) {
-        list.add(p);
+        this.currentList[this.currentListLen++] = p;
+        if (this.currentListLen >= this.currentList.length) {
+          this.currentList = Arrays.copyOf(this.currentList,
+              this.currentList.length << 1);
+        }
       }
-      this.currentList = list.toArray(emptyList());
     }
 
     public final boolean hasNext() {
