@@ -14558,6 +14558,7 @@ public class LocalRegion extends AbstractRegion
 
   public static boolean isMetaTable(String fullpath) {
     return fullpath.startsWith(SystemProperties.SNAPPY_HIVE_METASTORE_PATH) ||
+        fullpath.startsWith("/SYS/") ||
         fullpath.startsWith(PersistentUUIDAdvisor.UUID_PERSIST_REGION_PATH) ||
         fullpath.startsWith(SystemProperties.DDL_STMTS_REGION_PATH) ||
         fullpath.startsWith(ManagementConstants.MONITORING_REGION_PATH);

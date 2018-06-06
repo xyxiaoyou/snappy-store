@@ -769,8 +769,10 @@ public class ObjectSizer {
             }
             if (isColumnTable) {
               int valueSize = ((Sizeable)value).getSizeInBytes();
-              columnRowCount += batchKey.getColumnBatchRowCount(prEntryIter,
-                  re, numColumnsInColumnTable);
+              if (!re.isDestroyedOrRemoved()) {
+                columnRowCount += batchKey.getColumnBatchRowCount(prEntryIter,
+                    re, numColumnsInColumnTable);
+              }
               valInMemoryCount++;
               valInMemorySize += valueSize;
               if (valueSize > maxSize) {
