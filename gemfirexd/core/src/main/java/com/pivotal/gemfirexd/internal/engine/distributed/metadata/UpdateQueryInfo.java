@@ -172,7 +172,10 @@ public class UpdateQueryInfo extends DMLQueryInfo {
       if (container.isPartitioned()) {
         ExternalTableMetaData md = container.fetchHiveMetaData(false);
         if (md != null) {
-          isSortedColumnTable = md.hasPrimaryIndex;
+          isSortedColumnTable = md.columnTableSortOrder.equalsIgnoreCase("ASC") ||
+              md.columnTableSortOrder.equalsIgnoreCase("Ascending") ||
+              md.columnTableSortOrder.equalsIgnoreCase("DESC") ||
+              md.columnTableSortOrder.equalsIgnoreCase("Descending");
         }
       }
     }

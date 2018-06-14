@@ -31,6 +31,7 @@ public class ExternalTableMetaData {
       String dml,
       String[] dependents,
       String dataSourcePath,
+      String columnTableSorting,
       String driverClass) {
     this.entityName = entityName;
     this.schema = schema;
@@ -44,7 +45,7 @@ public class ExternalTableMetaData {
     this.dependents = dependents;
     this.dataSourcePath = dataSourcePath;
     this.driverClass = driverClass;
-    this.hasPrimaryIndex = true; // TODO: VB: read from table properties
+    this.columnTableSortOrder = columnTableSorting;
   }
 
   public String entityName;
@@ -62,7 +63,7 @@ public class ExternalTableMetaData {
   public String shortProvider;
   public String dataSourcePath;
   public String driverClass;
-  public boolean hasPrimaryIndex;
+  public String columnTableSortOrder;
   // columns for metadata queries
   public List<Column> columns;
 
