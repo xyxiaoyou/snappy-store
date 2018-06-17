@@ -96,7 +96,7 @@ public class TradeSecuritiesDMLStmt extends AbstractDMLStmt {
                                     " CASE when exchange ='" + exchanges[4] + "' then sec_id END desc, " + 
                                     " CASE when exchange ='" + exchanges[5] + "' then symbol END asc, " + 
                                     " CASE when exchange ='" + exchanges[6] + "' then symbol END desc " +
-                                    (!SQLPrms.isSnappyMode() ? " fetch first 10 rows only)" : ""):
+                                    " fetch first 10 rows only)":
                                     ""),*/
                                     "select sec_id from trade.securities where tid=?",
                                     "select sec_id, symbol, price, " +
