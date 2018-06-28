@@ -76,6 +76,7 @@ import com.gemstone.gemfire.internal.cache.partitioned.*;
 import com.gemstone.gemfire.internal.cache.tier.sockets.CacheClientNotifier;
 import com.gemstone.gemfire.internal.cache.tier.sockets.ClientTombstoneMessage;
 import com.gemstone.gemfire.internal.cache.tier.sockets.ClientUpdateMessage;
+import com.gemstone.gemfire.internal.cache.versions.RegionVersionVector;
 import com.gemstone.gemfire.internal.cache.versions.VersionSource;
 import com.gemstone.gemfire.internal.cache.versions.VersionStamp;
 import com.gemstone.gemfire.internal.cache.versions.VersionTag;
@@ -1159,7 +1160,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
     boolean lockedForPrimary = false;
     try {
-      doLockForPrimary(false);
+      doLockForPrimary(false, false);
       return (lockedForPrimary = true);
     } finally {
       if (!lockedForPrimary) {
@@ -1173,12 +1174,12 @@ public class BucketRegion extends DistributedRegion implements Bucket {
    * @param tryLock - whether to use tryLock (true) or a blocking lock (false)
    * @return true if locks were obtained and are still held
    */
-  public boolean doLockForPrimary(boolean tryLock) {
-    boolean locked = lockPrimaryStateReadLock(tryLock);
-    if(!locked) {
+  public boolean doLockForPrimary(boolean tryLock, boolean moveWriteLock) {
+    boolean locked = moveWriteLock ? lockPrimaryStateWriteLock()
+        : lockPrimaryStateReadLock(tryLock);
+    if (!locked) {
       return false;
     }
-    
     boolean isPrimary = false;
     try {
       // Throw a PrimaryBucketException if this VM is assumed to be the
@@ -1191,11 +1192,11 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
       isPrimary = true;
     } finally {
-      if(!isPrimary) {
-        doUnlockForPrimary();
+      if (!isPrimary) {
+        if (moveWriteLock) doUnlockForPrimaryMove();
+        else doUnlockForPrimary();
       }
     }
-    
     return true;
   }
 
@@ -1262,6 +1263,10 @@ public class BucketRegion extends DistributedRegion implements Bucket {
     }
   }
 
+  void doUnlockForPrimaryMove() {
+    getBucketAdvisor().getActivePrimaryMoveLock().unlock();
+  }
+
   private boolean readLockEnabled() {
     if (lockGIIForSnapshot) { // test hook
       return true;
@@ -1285,6 +1290,26 @@ public class BucketRegion extends DistributedRegion implements Bucket {
     } else {
       return false;
     }
+  }
+
+  private boolean lockPrimaryStateWriteLock() {
+    Lock activeMoveLock = this.getBucketAdvisor().getActivePrimaryMoveLock();
+    for (;;) {
+      boolean interrupted = Thread.interrupted();
+      try {
+        activeMoveLock.lockInterruptibly();
+        break; // success
+      } catch (InterruptedException e) {
+        interrupted = true;
+        cache.getCancelCriterion().checkCancelInProgress(null);
+        // don't throw InternalGemFireError to fix bug 40102
+      } finally {
+        if (interrupted) {
+          Thread.currentThread().interrupt();
+        }
+      }
+    }
+    return true;
   }
 
   private volatile Boolean rowBuffer = false;
