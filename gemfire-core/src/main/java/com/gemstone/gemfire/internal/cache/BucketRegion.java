@@ -772,15 +772,26 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   @SuppressWarnings("unchecked")
   public final boolean createAndInsertColumnBatch(TXStateInterface tx,
       boolean forceFlush) {
-    return createAndInsertColumnBatch(tx, forceFlush, TRUE_PREDICATE());
+    // first acquire the global service lock to prevent concurrent
+    // updates/deletes to change entries being rolled over
+    if (!getPartitionedRegion().lockForMaintenance(true, 0)) {
+      return false;
+    }
+    try {
+      return createAndInsertColumnBatch(tx, forceFlush, TRUE_PREDICATE());
+    } finally {
+      getPartitionedRegion().unlockForMaintenance(true);
+    }
   }
 
   public final boolean createAndInsertColumnBatch(TXStateInterface tx,
       boolean forceFlush, Predicate<BucketRegion> checkFlushInLock) {
-    // do nothing if a flush is already in progress
+    // do nothing if a flush is already in progress on this bucket
     if (this.columnBatchFlushLock.isWriteLocked()) {
       return false;
     }
+    // next acquire the bucket specific lock so that only one rollover
+    // is active on a bucket
     final ReentrantReadWriteLock.WriteLock sync =
         this.columnBatchFlushLock.writeLock();
     sync.lock();

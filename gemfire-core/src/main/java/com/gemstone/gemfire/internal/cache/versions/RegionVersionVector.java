@@ -217,8 +217,7 @@ public abstract class RegionVersionVector<T extends VersionSource<?>> implements
    * if it wants consistent view of snapshot across cache
    */
   public Map<T, RegionVersionHolder<T>> getSnapShotOfMemberVersion() {
-
-    return ((CopyOnWriteHashMap)memberToVersionSnapshot).getInnerMap();
+    return memberToVersionSnapshot.getInnerMap();
   }
 
   protected abstract RegionVersionVector<T> createCopy(T ownerId,

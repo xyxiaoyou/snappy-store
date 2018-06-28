@@ -26,6 +26,8 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
+import javax.annotation.concurrent.GuardedBy;
+
 import com.gemstone.gemfire.DataSerializable;
 import com.gemstone.gemfire.distributed.internal.InternalDistributedSystem;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
@@ -164,7 +166,7 @@ public final class RegionVersionHolder<T> implements Cloneable, DataSerializable
       if (this.bitSet != null) {
         clone.bitSet = (BitSet)this.bitSet.clone();
         clone.bitSetVersion = this.bitSetVersion;
-        clone.mergeBitSet();
+        clone.mergeBitSet2();
       }
     }/*else {
       if (this.bitSet != null) {
@@ -183,6 +185,7 @@ public final class RegionVersionHolder<T> implements Cloneable, DataSerializable
   public synchronized String toString() {
 //    mergeBitSet();
     StringBuilder sb = new StringBuilder();
+    sb.append('@').append(System.identityHashCode(this));
     sb.append("{rv").append(this.version)
       .append(" bsv").append(this.bitSetVersion)
       .append(" bs=[");
@@ -267,15 +270,22 @@ public final class RegionVersionHolder<T> implements Cloneable, DataSerializable
     }
   }
 
-
+  /*
   private synchronized void mergeBitSetWithoutException() {
     if (this.bitSet != null && this.bitSetVersion < this.version) {
       addBitSet((int)(this.version-this.bitSetVersion), this.version, null);
     }
   }
+  */
 
   /** merge bit-set exceptions into the regular exceptions list */
-  private synchronized void mergeBitSet() {
+  private void mergeBitSet() {
+    assert Thread.holdsLock(this);
+    mergeBitSet2();
+  }
+
+  /** merge bit-set exceptions into the regular exceptions list */
+  private void mergeBitSet2() {
     if (this.bitSet != null && this.bitSetVersion < this.version) {
       addBitSetExceptions((int)(this.version-this.bitSetVersion), this.version, null);
     }
@@ -343,6 +353,7 @@ public final class RegionVersionHolder<T> implements Cloneable, DataSerializable
     }
   }
 
+  /*
   private void addBitSet(int numBits, long newVersion, LogWriterI18n logger) {
     int lastSetIndex = -1;
 
@@ -393,6 +404,7 @@ public final class RegionVersionHolder<T> implements Cloneable, DataSerializable
       this.bitSetVersion = this.bitSetVersion + (long)lastSetIndex;
     }
   }
+  */
 
   synchronized void recordVersion(long version, LogWriterI18n logger) {
     updateVersion(version, logger);
@@ -509,7 +521,7 @@ public final class RegionVersionHolder<T> implements Cloneable, DataSerializable
     mergeBitSet();
     
     RegionVersionHolder<T> other = source.clone();
-    other.mergeBitSet();
+    other.mergeBitSet2();
 
     //Get a copy of the local version and exceptions
     long myVersion = this.version;
@@ -657,7 +669,7 @@ public final class RegionVersionHolder<T> implements Cloneable, DataSerializable
     // we can make one pass over both sets to see if there are overlapping
     // exceptions or exceptions I don't have that the other does
     mergeBitSet(); // dump the bit-set exceptions into the regular exceptions list
-    other.mergeBitSet();
+    other.mergeBitSet2();
     List<RVVException> mine = canonicalExceptions(this.exceptions);
     Iterator<RVVException> myIterator = mine.iterator();
     List<RVVException> his = canonicalExceptions(other.exceptions);

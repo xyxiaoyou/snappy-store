@@ -49,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
@@ -150,7 +151,9 @@ import com.gemstone.gemfire.internal.cache.execute.PartitionedRegionFunctionResu
 import com.gemstone.gemfire.internal.cache.execute.RegionFunctionContextImpl;
 import com.gemstone.gemfire.internal.cache.execute.ServerToClientFunctionResultSender;
 import com.gemstone.gemfire.internal.cache.ha.ThreadIdentifier;
+import com.gemstone.gemfire.internal.cache.locks.LockMode;
 import com.gemstone.gemfire.internal.cache.locks.LockingPolicy;
+import com.gemstone.gemfire.internal.cache.locks.ReentrantReadWriteWriteShareLock;
 import com.gemstone.gemfire.internal.cache.lru.HeapEvictor;
 import com.gemstone.gemfire.internal.cache.lru.LRUStatistics;
 import com.gemstone.gemfire.internal.cache.partitioned.Bucket;
@@ -421,6 +424,10 @@ public class PartitionedRegion extends LocalRegion implements
   /** default compression used by the column store */
   private String columnCompressionCodec;
 
+  /** Lock for blocking updates/deletes during a rollover operation. */
+  private final ReentrantReadWriteLock maintenanceLock =
+      new ReentrantReadWriteLock(true);
+
   public void setColumnBatchSizes(int size, int maxDeltaRows,
       int minDeltaRows) {
     columnBatchSize = size;
@@ -474,6 +481,31 @@ public class PartitionedRegion extends LocalRegion implements
       return this.columnCompressionCodec;
     }
     return codec;
+  }
+
+  public boolean lockForMaintenance(boolean forWrite, long msecs) {
+    try {
+      final boolean locked = forWrite
+          ? maintenanceLock.writeLock().tryLock(msecs, TimeUnit.MILLISECONDS)
+          : maintenanceLock.readLock().tryLock(msecs, TimeUnit.MILLISECONDS);
+      logger.convertToLogWriter().info("SW:0: locked " + getFullPath() + " forWrite=" + forWrite + " locked=" + locked);
+      return locked;
+    } catch (InterruptedException ie) {
+      getCancelCriterion().checkCancelInProgress(ie);
+      Thread.currentThread().interrupt();
+      logger.convertToLogWriter().info("SW:0: LOCK FAILURE on " + getFullPath() + " forWrite=" + forWrite + " due to interrupt");
+      return false;
+    }
+  }
+
+  public void unlockForMaintenance(boolean forWrite) {
+    logger.convertToLogWriter().info("SW:0: unlocking " + getFullPath() + " forWrite=" + forWrite);
+    if (forWrite) {
+      maintenanceLock.writeLock().unlock();
+    } else {
+      maintenanceLock.readLock().unlock();
+    }
+    logger.convertToLogWriter().info("SW:0: unlocked " + getFullPath() + " forWrite=" + forWrite);
   }
 
   private final long birthTime = System.currentTimeMillis();
