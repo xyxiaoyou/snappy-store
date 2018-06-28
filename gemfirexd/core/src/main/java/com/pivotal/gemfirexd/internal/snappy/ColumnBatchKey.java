@@ -16,9 +16,9 @@
  */
 package com.pivotal.gemfirexd.internal.snappy;
 
+import com.gemstone.gemfire.internal.cache.BucketRegion;
 import com.gemstone.gemfire.internal.cache.RegionEntry;
 import com.gemstone.gemfire.internal.cache.lru.Sizeable;
-import com.gemstone.gemfire.internal.cache.partitioned.PREntriesIterator;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
 
 /**
@@ -35,6 +35,6 @@ public interface ColumnBatchKey extends Sizeable {
   /**
    * Get the number of rows in this column batch.
    */
-  int getColumnBatchRowCount(PREntriesIterator<?> itr, RegionEntry re,
+  int getColumnBatchRowCount(BucketRegion bucketRegion, RegionEntry re,
       int numColumnsInTable);
 }
