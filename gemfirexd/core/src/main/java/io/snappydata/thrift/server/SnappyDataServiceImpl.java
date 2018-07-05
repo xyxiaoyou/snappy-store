@@ -79,6 +79,7 @@ import com.pivotal.gemfirexd.internal.iapi.services.io.ApplicationObjectInputStr
 import com.pivotal.gemfirexd.internal.iapi.sql.ResultColumnDescriptor;
 import com.pivotal.gemfirexd.internal.iapi.sql.StatementType;
 import com.pivotal.gemfirexd.internal.iapi.sql.conn.LanguageConnectionContext;
+import com.pivotal.gemfirexd.internal.iapi.sql.conn.StatementContext;
 import com.pivotal.gemfirexd.internal.iapi.store.access.xa.XAXactId;
 import com.pivotal.gemfirexd.internal.iapi.types.DataTypeDescriptor;
 import com.pivotal.gemfirexd.internal.iapi.types.DataTypeUtilities;
@@ -1311,8 +1312,9 @@ public final class SnappyDataServiceImpl extends LocatorServiceImpl implements
         final EmbedResultSet ers = (EmbedResultSet)rs;
         estmt = (EngineStatement)stmt;
         synchronized (conn.getConnectionSynchronization()) {
+          LanguageConnectionContext lcc = conn.getLanguageConnectionContext();
           ers.setupContextStack(false);
-          ers.pushStatementContext(conn.getLanguageConnectionContext(), true);
+          ers.pushStatementContext(lcc, true);
           try {
             // skip the first move in case cursor was already positioned by an
             // explicit call to absolute or relative
@@ -1328,7 +1330,7 @@ public final class SnappyDataServiceImpl extends LocatorServiceImpl implements
               }
               rows.add(eachRow);
               if (((++nrows) % GemFireXDUtils.DML_SAMPLE_INTERVAL) == 0) {
-                // throttle the processing and sends
+                // throttle the processing and sends if CRITICAL_UP has been reached
                 if (throttleIfCritical()) {
                   isLastBatch = false;
                   break;
@@ -1354,7 +1356,12 @@ public final class SnappyDataServiceImpl extends LocatorServiceImpl implements
                   .lightWeightPrevious();
             }
           } finally {
-            ers.popStatementContext();
+            StatementContext context = lcc.getStatementContext();
+            if (lcc.getStatementDepth() > 0) {
+              lcc.popStatementContext(context, null);
+            } else if (context != null && context.inUse()) {
+              context.clearInUse();
+            }
             ers.restoreContextStack();
           }
         }
@@ -1370,7 +1377,7 @@ public final class SnappyDataServiceImpl extends LocatorServiceImpl implements
           }
           rows.add(eachRow);
           if (((++nrows) % GemFireXDUtils.DML_SAMPLE_INTERVAL) == 0) {
-            // throttle the processing and sends
+            // throttle the processing and sends if CRITICAL_UP has been reached
             if (throttleIfCritical()) {
               isLastBatch = false;
               break;
@@ -2907,7 +2914,7 @@ public final class SnappyDataServiceImpl extends LocatorServiceImpl implements
       ByteBuffer token) throws SnappyException {
     ConnectionHolder connHolder = null;
     Statement stmt = null;
-    StatementAttrs attrs = null;
+    StatementAttrs attrs;
     RowSet rowSet = null;
     try {
       StatementHolder stmtHolder = getStatementForResultSet(token,
@@ -4211,7 +4218,13 @@ public final class SnappyDataServiceImpl extends LocatorServiceImpl implements
           if (tableTypes != null && !tableTypes.isEmpty()) {
             types = tableTypes.toArray(new String[tableTypes.size()]);
           }
-          rs = dmd.getTables(null, args.getSchema(), args.getTable(), types);
+          // check for schema fetch with ODBC SQLTables('', '%', '')
+          if (isODBC && "%".equals(args.getSchema()) &&
+              args.getTable() != null && args.getTable().isEmpty()) {
+            rs = dmd.getTableSchemas();
+          } else {
+            rs = dmd.getTables(null, args.getSchema(), args.getTable(), types);
+          }
           break;
         case TABLETYPES:
           rs = dmd.getTableTypes();

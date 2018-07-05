@@ -53,6 +53,7 @@ import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
 import com.gemstone.gemfire.CancelException;
+import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.StatisticsFactory;
 import com.gemstone.gemfire.SystemFailure;
 import com.gemstone.gemfire.cache.*;
@@ -2523,7 +2524,6 @@ public class PartitionedRegion extends LocalRegion implements
 
 
   private volatile Boolean columnBatching;
-  private volatile Boolean columnStoreTable;
   public boolean needsBatching() {
     final Boolean columnBatching = this.columnBatching;
     if (columnBatching != null) {
@@ -2543,22 +2543,6 @@ public class PartitionedRegion extends LocalRegion implements
       this.columnBatching = needsBatching;
       return needsBatching;
     }
-  }
-
-  public boolean columnTable() {
-    final Boolean columnTable = this.columnStoreTable;
-    if (columnTable != null) {
-      return columnTable;
-    }
-    // Find all the child region and see if they anyone of them has name ending
-    // with _SHADOW_
-    if (this.getName().toUpperCase().endsWith(StoreCallbacks.SHADOW_TABLE_SUFFIX)) {
-      this.columnStoreTable = true;
-      return true;
-    } else {
-      this.columnStoreTable = false;
-    }
-    return false;
   }
 
   private void handleSendOrWaitException(Exception ex,
@@ -5514,8 +5498,7 @@ public class PartitionedRegion extends LocalRegion implements
     profile.isGatewayEnabled = this.enableGateway;
     // fillInProfile MUST set serialNumber
     profile.serialNumber = getSerialNumber();
-    
-    //TODO - prpersist - this is a bit of a hack, but we're 
+    //TODO - prpersist - this is a bit of a hack, but we're
     //reusing this boolean to indicate that this member has finished disk recovery.
     profile.regionInitialized = recoveredFromDisk;
     
@@ -7133,6 +7116,7 @@ public class PartitionedRegion extends LocalRegion implements
     private final boolean includeValues;
 
     private Iterator<RegionEntry> bucketEntriesIter;
+    private DiskRegionIterator diskRegionIterator;
     private boolean remoteEntryFetched;
 
     private Object currentEntry;
@@ -7287,6 +7271,10 @@ public class PartitionedRegion extends LocalRegion implements
       if (bucketEntriesIter instanceof CloseableIterator<?>) {
         ((CloseableIterator<?>)bucketEntriesIter).close();
       }
+      if (diskRegionIterator != bucketEntriesIter &&
+          diskRegionIterator instanceof CloseableIterator<?>) {
+        ((CloseableIterator<?>)diskRegionIterator).close();
+      }
     }
 
     // For snapshot isolation, Get the iterator on the txRegionstate maps entry iterator too
@@ -7337,15 +7325,17 @@ public class PartitionedRegion extends LocalRegion implements
           for (;;) {
             if (!this.bucketIdsIter.hasNext()) {
               // check for an open disk iterator
-              if (bucketEntriesIter instanceof DiskRegionIterator) {
-                if (((DiskRegionIterator)bucketEntriesIter)
-                    .initDiskIterator()) {
+              if (this.diskRegionIterator != null) {
+                if (this.diskRegionIterator.initDiskIterator()) {
+                  this.bucketEntriesIter = this.diskRegionIterator;
                   this.diskIteratorInitialized = true;
                   break;
                 }
               }
               // no more buckets need to be visited
+              close();
               this.bucketEntriesIter = null;
+              this.diskRegionIterator = null;
               this.moveNext = false;
               return false;
             }
@@ -7395,7 +7385,7 @@ public class PartitionedRegion extends LocalRegion implements
     private void setLocalBucketEntryIterator(BucketRegion br, int bucketId) {
       this.currentBucketId = bucketId;
       this.currentBucketRegion = br;
-      if (this.bucketEntriesIter == null) {
+      if (this.diskRegionIterator == null) {
         if (this.includeValues) {
           this.bucketEntriesIter = this.createIterator.apply(br, numEntries);
         } else {
@@ -7409,20 +7399,14 @@ public class PartitionedRegion extends LocalRegion implements
             ((HDFSIterator)bucketEntriesIter).setTXState(this.txState);
           }
         }
-      } else if (this.bucketEntriesIter instanceof DiskRegionIterator) {
+        if (this.bucketEntriesIter instanceof DiskRegionIterator) {
+          this.diskRegionIterator = (DiskRegionIterator)this.bucketEntriesIter;
+        }
+      } else {
         // wait for region recovery etc.
         br.getDiskIteratorCacheSize(1.0);
-        ((DiskRegionIterator)this.bucketEntriesIter).setRegion(br);
-      } else {
-        this.bucketEntriesIter = br.entries.regionEntries().iterator();
-        if (this.bucketEntriesIter instanceof HDFSIterator) {
-          if (this.forUpdate) {
-            ((HDFSIterator)bucketEntriesIter).setForUpdate();
-          }
-          if (this.txState != null) {
-            ((HDFSIterator)bucketEntriesIter).setTXState(this.txState);
-          }
-        }
+        this.diskRegionIterator.setRegion(br);
+        this.bucketEntriesIter = this.diskRegionIterator;
       }
     }
 
@@ -10816,6 +10800,10 @@ public class PartitionedRegion extends LocalRegion implements
         final GemFireCacheImpl.StaticSystemCallbacks sysCb =
             GemFireCacheImpl.FactoryStatics.systemCallbacks;
         if (sysCb != null && sysCb.destroyExistingRegionInCreate(dsi, this)) {
+          LogWriter logger = getCache().getLogger();
+          if (logger.infoEnabled()) {
+            logger.info("Destroying existing region: " + this + " in create");
+          }
           dsi.destroyRegion(getFullPath(), false);
         }
       }

@@ -85,6 +85,15 @@ public final class SystemProperties {
       SHADOW_SCHEMA_NAME + SHADOW_SCHEMA_SEPARATOR;
 
   public static final String SNAPPY_HIVE_METASTORE = "SNAPPY_HIVE_METASTORE";
+  public static final String SNAPPY_HIVE_METASTORE_PATH =
+      "/" + SNAPPY_HIVE_METASTORE;
+
+  /**
+   * Hidden region that is used for DDL string puts for DDL statement replay on
+   * new servers in GemFireXD.
+   */
+  public final static String DDL_STMTS_REGION = "_DDL_STMTS_META_REGION";
+  public final static String DDL_STMTS_REGION_PATH = "/" + DDL_STMTS_REGION;
 
   public static final String GFXD_FACTORY_PROVIDER = "com.pivotal.gemfirexd."
       + "internal.engine.store.entry.GfxdObjectFactoriesProvider";
@@ -133,7 +142,8 @@ public final class SystemProperties {
      */
     public synchronized String getSystemProperty(String key,
         SystemProperties properties) throws PrivilegedActionException {
-      this._propertyName = this.propertyNamePrefix + key;
+      this._propertyName = key.startsWith(this.propertyNamePrefix)
+          ? key : this.propertyNamePrefix + key;
       String value = AccessController.doPrivileged(this);
       this._propertyName = null;
       return value;

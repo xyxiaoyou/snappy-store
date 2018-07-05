@@ -65,6 +65,7 @@ import com.pivotal.gemfirexd.internal.engine.diag.DiskStoreIDs;
 import com.pivotal.gemfirexd.internal.engine.diag.HdfsProcedures;
 import com.pivotal.gemfirexd.internal.engine.diag.HiveTablesVTI;
 import com.pivotal.gemfirexd.internal.engine.diag.JSONProcedures;
+import com.pivotal.gemfirexd.internal.engine.diag.SnappyTableStatsVTI;
 import com.pivotal.gemfirexd.internal.engine.diag.SortedCSVProcedures;
 import com.pivotal.gemfirexd.internal.engine.distributed.message.GfxdShutdownAllRequest;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
@@ -1663,43 +1664,55 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
 
     {
       {
-        String[] argNames = new String[]{"txId"};
-        TypeDescriptor[] argTypes = new TypeDescriptor[]{
-            DataTypeDescriptor.getCatalogType(Types.VARCHAR)};
-        super.createSystemProcedureOrFunction("START_SNAPSHOT_TXID", sysUUID,
-            argNames,argTypes, 1, 0, RoutineAliasInfo.NO_SQL, null, newlyCreatedRoutines,
-            tc, GFXD_SYS_PROC_CLASSNAME, false);
-      }
-
-      {
-        String[] argNames = new String[]{"txId"};
-        TypeDescriptor[] argTypes = new TypeDescriptor[]{
-            DataTypeDescriptor.getCatalogType(Types.VARCHAR)};
-        super.createSystemProcedureOrFunction("COMMIT_SNAPSHOT_TXID", sysUUID,
-            argNames,argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null, newlyCreatedRoutines,
-            tc, GFXD_SYS_PROC_CLASSNAME, false);
-      }
-      {
-        String[] argNames = new String[]{"txId"};
-        TypeDescriptor[] argTypes = new TypeDescriptor[]{
-            DataTypeDescriptor.getCatalogType(Types.VARCHAR)};
-        super.createSystemProcedureOrFunction("ROLLBACK_SNAPSHOT_TXID", sysUUID,
-            argNames,argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null, newlyCreatedRoutines,
-            tc, GFXD_SYS_PROC_CLASSNAME, false);
-      }
-      {
-        String[] argNames = new String[] { "txId"};
+        String[] argNames = new String[] { "delayRollover", "txId" };
         TypeDescriptor[] argTypes = new TypeDescriptor[] {
-            DataTypeDescriptor.getCatalogType(Types.VARCHAR)};
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.BOOLEAN, false).getCatalogType(),
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.VARCHAR, false).getCatalogType() };
+        super.createSystemProcedureOrFunction("START_SNAPSHOT_TXID", sysUUID,
+            argNames, argTypes, 1, 0, RoutineAliasInfo.NO_SQL, null,
+            newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
+      }
+      {
+        String[] argNames = new String[] { "txId", "rolloverTable" };
+        TypeDescriptor[] argTypes = new TypeDescriptor[] {
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.VARCHAR, false).getCatalogType(),
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.VARCHAR, false).getCatalogType() };
+        super.createSystemProcedureOrFunction("COMMIT_SNAPSHOT_TXID", sysUUID,
+            argNames, argTypes, 0, 0, RoutineAliasInfo.NO_SQL,
+            null, newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
+      }
+      {
+        String[] argNames = new String[] { "txId" };
+        TypeDescriptor[] argTypes = new TypeDescriptor[] {
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.VARCHAR, false).getCatalogType() };
+        super.createSystemProcedureOrFunction("ROLLBACK_SNAPSHOT_TXID", sysUUID,
+            argNames, argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null,
+            newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
+      }
+      {
+        String[] argNames = new String[] { "txId" };
+        TypeDescriptor[] argTypes = new TypeDescriptor[] {
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.VARCHAR, false).getCatalogType() };
         super.createSystemProcedureOrFunction("USE_SNAPSHOT_TXID", sysUUID,
             argNames, argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null,
             newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
       }
-
-      super.createSystemProcedureOrFunction("GET_SNAPSHOT_TXID", sysUUID,
-          null, null, 0, 0, RoutineAliasInfo.READS_SQL_DATA,
-          DataTypeDescriptor.getCatalogType(Types.VARCHAR), newlyCreatedRoutines,
-          tc, GFXD_SYS_PROC_CLASSNAME, false);
+      {
+        String[] argNames = new String[] { "delayRollover" };
+        TypeDescriptor[] argTypes = new TypeDescriptor[] {
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.BOOLEAN, false).getCatalogType() };
+        super.createSystemProcedureOrFunction("GET_SNAPSHOT_TXID", sysUUID,
+            argNames, argTypes, 0, 0, RoutineAliasInfo.READS_SQL_DATA,
+            DataTypeDescriptor.getCatalogType(Types.VARCHAR), newlyCreatedRoutines,
+            tc, GFXD_SYS_PROC_CLASSNAME, false);
+      }
     }
 
     {
@@ -2031,6 +2044,18 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
           newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
 
     }
+    {
+      // COLUMN_TABLE_SCAN(String,String,String,Blob,ResultSet[])
+      String[] arg_names = new String[] { "TABLE", "PROJECTION", "FILTERS" };
+      TypeDescriptor[] arg_types = new TypeDescriptor[] {
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
+          DataTypeDescriptor.getCatalogType(Types.BLOB)
+      };
+      super.createSystemProcedureOrFunction("COLUMN_TABLE_SCAN", sysUUID,
+          arg_names, arg_types, 0, 1, RoutineAliasInfo.READS_SQL_DATA, null,
+          newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
+    }
   }
 
   @SuppressWarnings({ "unchecked", "rawtypes" })
@@ -2111,6 +2136,8 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
 
   public static final String DISKSTOREIDS_TABLENAME = "DISKSTOREIDS";
 
+  public static final String SNAPPY_TABLE_STATS = "TABLESTATS";
+
   private static final String[][] VTI_TABLE_CLASSES = {
       { DIAG_MEMBERS_TABLENAME,
           "com.pivotal.gemfirexd.internal.engine.diag.DistributedMembers" },
@@ -2132,6 +2159,7 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
           "com.pivotal.gemfirexd.internal.engine.diag.SessionsVTI" },
       { HIVETABLES_TABLENAME, HiveTablesVTI.class.getName() },
       { DISKSTOREIDS_TABLENAME, DiskStoreIDs.class.getName() },
+      { SNAPPY_TABLE_STATS, SnappyTableStatsVTI.class.getName() },
   };
 
   private final HashMap<String, TableDescriptor> diagVTIMap =

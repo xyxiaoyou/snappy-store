@@ -31,6 +31,7 @@ import com.gemstone.gemfire.cache.EntryExistsException;
 import com.gemstone.gemfire.cache.Region;
 import com.gemstone.gemfire.distributed.DistributedMember;
 import com.gemstone.gemfire.distributed.internal.DistributionConfig;
+import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.internal.Assert;
 import com.gemstone.gemfire.internal.ByteArrayDataInput;
 import com.gemstone.gemfire.internal.DSCODE;
@@ -812,7 +813,12 @@ public final class RegionEntryUtils {
           break;
         }
       }
-      if (!hasPrefix) {
+      if (hasPrefix) {
+        propValue = PropertyUtil.getSystemProperty(key, null);
+        if (propValue != null) {
+          return propValue;
+        }
+      } else {
         for (String prefix : allPrefixes) {
           propValue = PropertyUtil.getSystemProperty(prefix + key, null);
           if (propValue != null) {
@@ -1590,8 +1596,7 @@ public final class RegionEntryUtils {
 
     @Override
     public Set<DistributedMember> getDataStores() {
-      // KN: TODO write implementation
-      return null;
+      return GemFireXDUtils.getGfxdAdvisor().adviseDataStores(null);
     }
 
     // assumes val to be non null

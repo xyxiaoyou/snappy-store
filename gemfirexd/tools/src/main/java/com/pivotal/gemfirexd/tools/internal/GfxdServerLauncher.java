@@ -618,7 +618,10 @@ public class GfxdServerLauncher extends CacheServerLauncher {
     }
 
     final ArrayList<String> vmArgs = new ArrayList<String>();
-    setDefaultVMArgs(map, (Properties)map.get(PROPERTIES), vmArgs);
+
+    final boolean hostData = !"false".equalsIgnoreCase(
+        (String)((Properties)map.get(PROPERTIES)).get(HOST_DATA));
+    setDefaultVMArgs(map, hostData, vmArgs);
     vmArgs.addAll(incomingVMArgs);
     processedDefaultGCParams = true;
 
@@ -1107,14 +1110,14 @@ public class GfxdServerLauncher extends CacheServerLauncher {
       PersistentMemberID myId, String message) {
     StringBuilder otherMembers = new StringBuilder();
     String tableWithLocation = Misc.getFullTableNameFromRegionPath(regionPath);
+    String myDir = myId != null ? myId.directory : "(unknown)";
     if (GemFireStore.DDL_STMTS_REGION.equals(tableWithLocation)) {
-      tableWithLocation = "DataDictionary at location " + myId.directory;
-    }
-    else {
-      tableWithLocation = "Table " + tableWithLocation + " at location " + myId.directory;
+      tableWithLocation = "DataDictionary at location " + myDir;
+    } else {
+      tableWithLocation = "Table " + tableWithLocation + " at location " + myDir;
     }
     for (PersistentMemberID otherId : membersToWaitFor) {
-      otherMembers.append("\n [" + otherId.host + "]");
+      otherMembers.append("\n [").append(otherId.host).append(']');
       otherMembers.append(" [DiskId: ")
           .append(otherId.diskStoreId.toUUID().toString())
           .append(", Location: ").append(otherId.directory).append(']');

@@ -741,8 +741,9 @@ public class BucketRegion extends DistributedRegion implements Bucket {
       if (locked) {
         endLocalWrite(event);
         // create and insert column batch
-        if (success && checkForColumnBatchCreation()) {
-          createAndInsertColumnBatch(false);
+        TXStateInterface tx = event.getTXState(this);
+        if (success && checkForColumnBatchCreation(tx)) {
+          createAndInsertColumnBatch(tx, false);
         }
         if (success && partitionedRegion.isInternalColumnTable()) {
           CallbackFactoryProvider.getStoreCallbacks()
@@ -752,14 +753,16 @@ public class BucketRegion extends DistributedRegion implements Bucket {
     }
   }
 
-  public final boolean checkForColumnBatchCreation() {
+  public final boolean checkForColumnBatchCreation(TXStateInterface tx) {
     final PartitionedRegion pr = getPartitionedRegion();
     return pr.needsBatching()
+        && (tx == null || !tx.getProxy().isColumnRolloverDisabled())
         && (getRegionSize() >= pr.getColumnMaxDeltaRows()
         || getTotalBytes() >= pr.getColumnBatchSize());
   }
 
-  public final boolean createAndInsertColumnBatch(boolean forceFlush) {
+  public final boolean createAndInsertColumnBatch(TXStateInterface tx,
+      boolean forceFlush) {
     // do nothing if a flush is already in progress
     if (this.columnBatchFlushLock.isWriteLocked()) {
       return false;
@@ -768,13 +771,14 @@ public class BucketRegion extends DistributedRegion implements Bucket {
         this.columnBatchFlushLock.writeLock();
     sync.lock();
     try {
-      return internalCreateAndInsertColumnBatch(forceFlush);
+      return internalCreateAndInsertColumnBatch(tx, forceFlush);
     } finally {
       sync.unlock();
     }
   }
 
-  private boolean internalCreateAndInsertColumnBatch(boolean forceFlush) {
+  private boolean internalCreateAndInsertColumnBatch(TXStateInterface tx,
+      boolean forceFlush) {
     // TODO: with forceFlush, ideally we should merge with an existing
     // ColumnBatch if the current size to be flushed is small like < 1000
     // (and split if total size has become too large)
@@ -785,7 +789,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
               .getColumnMinDeltaRows();
     }
     if (!doFlush) {
-      doFlush = checkForColumnBatchCreation();
+      doFlush = checkForColumnBatchCreation(tx);
     }
     // we may have to use region.size so that no state
     // has to be maintained
@@ -797,9 +801,10 @@ public class BucketRegion extends DistributedRegion implements Bucket {
         getCache().getLoggerI18n().fine("createAndInsertColumnBatch: " +
                 "Creating the column batch for bucket " + this.getId());
       }
+      final TXManagerImpl txManager = getCache().getCacheTransactionManager();
       boolean txStarted = false;
-      if (getCache().snapshotEnabled() && getCache().getCacheTransactionManager().getTXState() == null) {
-        getCache().getCacheTransactionManager().begin(IsolationLevel.SNAPSHOT, null);
+      if (tx == null && getCache().snapshotEnabled()) {
+        txManager.begin(IsolationLevel.SNAPSHOT, null);
         txStarted = true;
       }
       try {
@@ -817,7 +822,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
         Set keysToDestroy = createColumnBatchAndPutInColumnTable(batchId);
 
-        if (getCache().getCacheTransactionManager().testRollBack) {
+        if (txManager.testRollBack) {
           throw new RuntimeException("Test Dummy Exception");
         }
         destroyAllEntries(keysToDestroy, batchId);
@@ -828,14 +833,14 @@ public class BucketRegion extends DistributedRegion implements Bucket {
         }
         success = true;
       } finally {
-        if (getCache().snapshotEnabled() && txStarted) {
+        if (txStarted) {
           if (success) {
-            getCache().getCacheTransactionManager().commit();
+            txManager.commit();
             if (null != getCache().getRvvSnapshotTestHook()) {
               getCache().notifyRvvTestHook();
             }
           } else {
-            getCache().getCacheTransactionManager().rollback();
+            txManager.rollback();
           }
         }
       }
@@ -2706,7 +2711,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
     // concurrent operations that are also updating these stats. For example,
     //a destroy could have already been applied to the map, and then updates
     //the stat after we reset it, making the state negative.
-    
+
     final PartitionedRegionDataStore prDs = this.partitionedRegion.getDataStore();
 //     this.debugMap.clear();
 //     this.createCount.set(0);
@@ -2995,9 +3000,9 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   }
 
   @Override
-  protected boolean clearIndexes(IndexUpdater indexUpdater, boolean lockForGII,
-      boolean setIsDestroyed) {
-      BucketRegionIndexCleaner cleaner = new BucketRegionIndexCleaner(lockForGII, !setIsDestroyed, this);
+  protected boolean clearIndexes(IndexUpdater indexUpdater, boolean setIsDestroyed) {
+      BucketRegionIndexCleaner cleaner = new BucketRegionIndexCleaner(
+          !setIsDestroyed, this);
       bucketRegionIndexCleaner.set(cleaner);
       return false;
   }
@@ -3090,7 +3095,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
     }
   }
 
-  void updateBucketMemoryStats(final int memoryDelta) {
+  private void updateBucketMemoryStats(final int memoryDelta) {
     if (memoryDelta != 0) {
 
       final long bSize = bytesInMemory.compareAddAndGet(BUCKET_DESTROYED, memoryDelta);
@@ -3369,9 +3374,14 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   }
 
   @Override
+  public boolean isInternalColumnTable() {
+    return getPartitionedRegion().isInternalColumnTable();
+  }
+
+  @Override
   public boolean isSnapshotEnabledRegion() {
     // concurrency checks is by default true in column table
-    return getPartitionedRegion().columnTable() ||
+    return getPartitionedRegion().isInternalColumnTable() ||
         getPartitionedRegion().needsBatching() || super.isSnapshotEnabledRegion();
   }
 

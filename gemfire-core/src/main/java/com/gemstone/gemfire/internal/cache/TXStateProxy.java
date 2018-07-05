@@ -193,7 +193,7 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
   /**
    * The current {@link State} of the transaction.
    */
-  private final AtomicReference<State> state;
+  final AtomicReference<State> state;
 
   protected volatile boolean hasCohorts;
 
@@ -206,6 +206,12 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
   private volatile boolean hasReadOps;
 
   private Throwable inconsistentThr;
+
+  /**
+   * Transient flag to indicate that rollover from row buffers to column store
+   * are disabled.
+   */
+  private volatile boolean columnRolloverDisabled;
 
   /**
    * List of any function executions that have not yet invoked a getResult().
@@ -1626,9 +1632,10 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
    * here.
    */
   protected void cleanup() {
+    this.hasCohorts = false;
     this.isDirty = false;
     this.hasReadOps = false;
-    this.hasCohorts = false;
+    this.columnRolloverDisabled = false;
     if (!this.pendingResultCollectors.isEmpty()) {
       this.pendingResultCollectors.clear();
     }
@@ -2249,7 +2256,8 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
       // if rollback already started due to some reason (e.g. coordinator
       // departed) then wait for it to finish and then return
       if (state == State.ROLLBACK_STARTED) {
-        waitForLocalTXCommit(null, ExclusiveSharedSynchronizer.LOCK_MAX_TIMEOUT);
+        waitForLocalTXCommit(null,
+            Math.max(5000L, ExclusiveSharedSynchronizer.LOCK_MAX_TIMEOUT / 10));
         return;
       }
       if (this.state.compareAndSet(state, State.ROLLBACK_STARTED)) {
@@ -3337,6 +3345,11 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
     if (state == State.OPEN || state == State.COMMIT_PHASE2_STARTED) {
       return;
     }
+    if (state == State.ROLLBACK_STARTED) {
+      throw new IllegalTransactionStateException(LocalizedStrings
+          .TransactionManagerImpl_TRANSACTIONMANAGERIMPL_COMMIT_TRANSACTION_ROLLED_BACK_BECAUSE_A_USER_MARKED_IT_FOR_ROLLBACK
+          .toLocalizedString());
+    }
     if (state == State.CLOSED) {
       throw new IllegalTransactionStateException(LocalizedStrings
           .TXManagerImpl_THREAD_DOES_NOT_HAVE_AN_ACTIVE_TRANSACTION
@@ -4054,7 +4067,7 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
       final Object key, final LocalRegion dataRegion, final int iContext,
       final boolean allowTombstones, final ReadEntryUnderLock reader) {
     final LockingPolicy lockPolicy = getLockingPolicy();
-    return TXState.lockEntryForRead(lockPolicy, entry, key, dataRegion,
+    return TXState.lockEntryForRead(lockPolicy, entry, key, dataRegion, null,
         this.txId, getTXStateForRead(), iContext, batchingEnabled(),
         allowTombstones, Boolean.TRUE, reader);
   }
@@ -4782,13 +4795,20 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
     }
   }
 
+  public void setColumnRolloverDisabled(boolean disabled) {
+    this.columnRolloverDisabled = disabled;
+  }
+
+  public boolean isColumnRolloverDisabled() {
+    return this.columnRolloverDisabled;
+  }
+
   /**
    * {@inheritDoc}
    */
   @Override
   public int getExecutionSequence() {
-    // TODO Auto-generated method stub
-    return 0;
+    return this.currentExecutionSeq;
   }
   
   public void rollback(int savepoint) {

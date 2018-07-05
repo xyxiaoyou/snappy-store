@@ -277,8 +277,8 @@ public interface GfxdConstants {
   /** property to set max size of chunks in DML operations */
   final String DML_MAX_CHUNK_SIZE_PROP = GFXD_PREFIX + "dml-max-chunk-size";
 
-  /** default max size of chunks in DML operations */
-  final long DML_MAX_CHUNK_SIZE_DEFAULT = 4194304L;
+  /** default max size of chunks in DML operations or query results */
+  final long DML_MAX_CHUNK_SIZE_DEFAULT = 4L * 1024L * 1024L;
 
   /**
    * property to set min size of results for which streaming or throttling is
@@ -311,7 +311,7 @@ public interface GfxdConstants {
    * default number of iterations after which a sample of ResultHolder timings
    * is taken
    */
-  final int DML_SAMPLE_INTERVAL_DEFAULT = 15;
+  final int DML_SAMPLE_INTERVAL_DEFAULT = 16;
 
   /**
    * property to set whether DAP should send results in order from execution

@@ -21,6 +21,7 @@ package com.gemstone.gemfire.internal.cache;
 import com.gemstone.gemfire.cache.EntryEvent;
 import com.gemstone.gemfire.cache.EntryNotFoundException;
 import com.gemstone.gemfire.distributed.internal.DM;
+import com.gemstone.gemfire.internal.cache.store.SerializedDiskBuffer;
 import com.gemstone.gemfire.internal.cache.versions.VersionTag;
 import com.gemstone.gemfire.internal.offheap.annotations.Retained;
 import com.gemstone.gemfire.internal.shared.Version;
@@ -54,10 +55,19 @@ public abstract class AbstractOplogDiskRegionEntry
 
   protected abstract void setDiskId(RegionEntry oldRe);
 
-  public final void setDiskIdForRegion(RegionEntry oldRe) {
+  @Override
+  protected final void initContextForDiskBuffer(RegionEntryContext context,
+      Object value) {
+    if (value instanceof SerializedDiskBuffer) {
+      ((SerializedDiskBuffer)value).setDiskEntry(this, context);
+    }
+  }
+
+  public final void setDiskIdForRegion(RegionEntryContext context,
+      RegionEntry oldRe) {
     setDiskId(oldRe);
-    if (GemFireCacheImpl.hasNewOffHeap()) {
-      initDiskIdForOffHeap(null, getValueField());
+    if (!isOffHeap()) {
+      initContextForDiskBuffer(context, getValueField());
     }
   }
 

@@ -85,6 +85,7 @@ import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.FinalizeObject;
 import com.gemstone.gemfire.internal.shared.LauncherBase;
 import com.gemstone.gemfire.internal.shared.StringPrintWriter;
+import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gnu.trove.THashMap;
 import com.gemstone.gnu.trove.TLongHashSet;
 import com.pivotal.gemfirexd.Attribute;
@@ -173,6 +174,8 @@ import com.pivotal.gemfirexd.internal.shared.common.SharedUtils;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider;
 
+import static com.gemstone.gemfire.distributed.internal.InternalLocator.FORCE_LOCATOR_DM_TYPE;
+
 /**
  * The underlying store implementation that provides methods to create container
  * for tables, schemas while maintaining the mapping from container IDs to their
@@ -201,7 +204,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
    * Hidden region that is used for DDL string puts for DDL statement replay on
    * new servers.
    */
-  public final static String DDL_STMTS_REGION = "_DDL_STMTS_META_REGION";
+  public final static String DDL_STMTS_REGION = SystemProperties.DDL_STMTS_REGION;
 
   private static final Pattern ILLEGAL_DISKDIR_CHARS_PATTERN =
       Pattern.compile("[*?<>|;]");
@@ -385,6 +388,8 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
 
   public static final ThreadLocal<Boolean> externalCatalogInitThread =
       new ThreadLocal<>();
+
+  private Region<String, String> snappyGlobalCmdRgn;
 
   /**
    *************************************************************************
@@ -1092,6 +1097,10 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
         if (this.persistingDD) {
           c.setPdxPersistent(true);
           c.setPdxDiskStore(GfxdConstants.GFXD_DD_DISKSTORE_NAME);
+        }
+
+        if (isLocator) {
+          System.setProperty(FORCE_LOCATOR_DM_TYPE, "true");
         }
 
         this.gemFireCache = (GemFireCacheImpl)c.create();
@@ -2279,6 +2288,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
       selfMemId = null;
       GlobalIndexCacheWithLocalRegion.setCacheToNull();
       this.externalCatalog = null;
+      System.clearProperty(FORCE_LOCATOR_DM_TYPE);
     }
   }
 
@@ -2452,10 +2462,10 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
     ExternalCatalog catalog;
     int cnt = 0;
     // retry catalog get after some sleep
-    while ((catalog = getExternalCatalog()) == null && ++cnt < 10) {
+    while ((catalog = getExternalCatalog()) == null && ++cnt < 500) {
       Throwable t = null;
       try {
-        Thread.sleep(2);
+        Thread.sleep(100);
       } catch (InterruptedException ie) {
         Thread.currentThread().interrupt();
         t = ie;
@@ -3048,5 +3058,13 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
         return true;
       }
     }
+  }
+
+  public void setGlobalCmdRgn(Region gcr) {
+    this.snappyGlobalCmdRgn = gcr;
+  }
+
+  public Region<String, String> getGlobalCmdRgn() {
+    return this.snappyGlobalCmdRgn;
   }
 }

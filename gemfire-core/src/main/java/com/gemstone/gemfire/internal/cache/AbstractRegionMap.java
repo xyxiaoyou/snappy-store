@@ -137,12 +137,17 @@ abstract class AbstractRegionMap implements RegionMap {
     _setAttributes(attr);
     setOwner(owner);
 
+    String ownerPath = null;
     boolean isDisk;
     boolean withVersioning = false;
     this.isReplicatedRegion = false;
     boolean offHeap = false;
     if (owner instanceof LocalRegion) {
       LocalRegion region = (LocalRegion)owner;
+      ownerPath = region.getFullPath();
+      if (LocalRegion.isMetaTable(ownerPath)) {
+        ownerPath = null;
+      }
       isDisk = region.getDiskRegion() != null;
       withVersioning = region.getConcurrencyChecksEnabled();
       if (region.dataPolicy.withReplication()
@@ -154,9 +159,13 @@ abstract class AbstractRegionMap implements RegionMap {
       offHeap = region.getEnableOffHeapMemory();
     }
     else if (owner instanceof PlaceHolderDiskRegion) {
-      offHeap = ((PlaceHolderDiskRegion) owner).getEnableOffHeapMemory();
+      PlaceHolderDiskRegion region = (PlaceHolderDiskRegion)owner;
+      if (!region.isMetaTable()) {
+        ownerPath = region.getFullPath();
+      }
+      offHeap = region.getEnableOffHeapMemory();
       isDisk = true;
-      withVersioning = ((PlaceHolderDiskRegion)owner).getFlags().contains(
+      withVersioning = region.getFlags().contains(
           DiskRegionFlag.IS_WITH_VERSIONING);
     }
     else {
@@ -172,7 +181,7 @@ abstract class AbstractRegionMap implements RegionMap {
             "getHashEntryCreator");
         _setMap(createConcurrentMap(attr.initialCapacity, attr.loadFactor,
             attr.concurrencyLevel, false,
-            (HashEntryCreator<Object, Object>)method.invoke(null)));
+            (HashEntryCreator<Object, Object>)method.invoke(null)), ownerPath);
 
         method = factoryProvider.getDeclaredMethod("getRegionEntryFactory",
             new Class[] { Boolean.TYPE, Boolean.TYPE, Boolean.TYPE,
@@ -196,7 +205,7 @@ abstract class AbstractRegionMap implements RegionMap {
     else {
       _setMap(createConcurrentMap(attr.initialCapacity, attr.loadFactor,
           attr.concurrencyLevel, false,
-          new AbstractRegionEntry.HashRegionEntryCreator()));
+          new AbstractRegionEntry.HashRegionEntryCreator()), ownerPath);
       final RegionEntryFactory factory;
       if (attr.statisticsEnabled) {
         if (isLRU) {
@@ -363,10 +372,7 @@ abstract class AbstractRegionMap implements RegionMap {
       // [sumedh] indexes are now updated by IndexRecoveryTask
     }
     // iterate over the entries of the map to call setOwner for each RegionEntry
-    final Iterator<RegionEntry> iter = r.getRegionMap().regionEntries()
-        .iterator();
-    while (iter.hasNext()) {
-      final RegionEntry re = iter.next();
+    for (RegionEntry re : r.getRegionMap().regionEntries()) {
       re.setOwner(r, currentOwner);
     }
   }
@@ -408,8 +414,10 @@ abstract class AbstractRegionMap implements RegionMap {
     return this.map;
   }
 
-  protected final void _setMap(CustomEntryConcurrentHashMap<Object, Object> m) {
+  protected final void _setMap(CustomEntryConcurrentHashMap<Object, Object> m,
+      String ownerPath) {
     this.map = m;
+    m.setOwner(ownerPath);
   }
 
   public int size() {
@@ -872,7 +880,7 @@ abstract class AbstractRegionMap implements RegionMap {
             continue;
           }
           RegionEntry newRe = getEntryFactory().createEntry(owner, key, value);
-          copyRecoveredEntry(oldRe, newRe, currentTime);
+          copyRecoveredEntry(oldRe, newRe, owner, currentTime);
           // newRe is now in this._getMap().
           if (newRe.isTombstone()) {
             VersionTag tag = newRe.getVersionStamp().asVersionTag();
@@ -903,8 +911,7 @@ abstract class AbstractRegionMap implements RegionMap {
           }
         }
 
-        LocalRegion.regionPath.set(_getOwner().getFullPath());
-         int valueSize  = _getOwner().calculateRegionEntryValueSize(re);
+        int valueSize  = _getOwner().calculateRegionEntryValueSize(re);
         _getOwner().calculateEntryOverhead(re);
         // Always take the value size from recovery thread.
         if (!re.isTombstone()) {
@@ -925,7 +932,8 @@ abstract class AbstractRegionMap implements RegionMap {
     
   }
   
-  protected void copyRecoveredEntry(RegionEntry oldRe, RegionEntry newRe, long dummyVersionTs) {
+  protected void copyRecoveredEntry(RegionEntry oldRe, RegionEntry newRe,
+      LocalRegion owner, long dummyVersionTs) {
     long lastModifiedTime = oldRe.getLastModified();
     if (lastModifiedTime != 0) {
       newRe.setLastModified(lastModifiedTime);
@@ -946,7 +954,7 @@ abstract class AbstractRegionMap implements RegionMap {
 
     if (newRe instanceof AbstractOplogDiskRegionEntry) {
       AbstractOplogDiskRegionEntry newDe = (AbstractOplogDiskRegionEntry)newRe;
-      newDe.setDiskIdForRegion(oldRe);
+      newDe.setDiskIdForRegion(owner, oldRe);
       _getOwner().getDiskRegion().replaceIncompatibleEntry((DiskEntry) oldRe, newDe);
     }
     _getMap().put(newRe.getKey(), newRe);
@@ -1269,7 +1277,6 @@ abstract class AbstractRegionMap implements RegionMap {
                       lruEntryUpdate(oldRe);
                       int newSize = owner.calculateRegionEntryValueSize(oldRe);
                       //Can safely accquire memory here. If fails this block removes the current entry from map.
-                      LocalRegion.regionPath.set(owner.getFullPath());
                       owner.acquirePoolMemory(newSize, oldSize, false, null, true);
                       owner.updateSizeOnPut(key, oldSize, newSize);
                       EntryLogger.logInitialImagePut(_getOwnerObject(), key,
@@ -1331,7 +1338,6 @@ abstract class AbstractRegionMap implements RegionMap {
                       int newSize = owner.calculateRegionEntryValueSize(oldRe);
                       //Can safely accquire memory here. If fails this block removes the current entry from map.
                       owner.calculateEntryOverhead(newRe);
-                      LocalRegion.regionPath.set(owner.getFullPath());
                       if(!oldIsTombstone) {
                         owner.acquirePoolMemory(newSize, oldSize, false, null, true);
                         owner.updateSizeOnPut(key, oldSize, newSize);
@@ -1402,7 +1408,6 @@ abstract class AbstractRegionMap implements RegionMap {
                   int newSize = owner.calculateRegionEntryValueSize(newRe);
                   //Can safely accquire memory here. If fails, this block removes the current entry from map.
                   owner.calculateEntryOverhead(newRe);
-                  LocalRegion.regionPath.set(owner.getFullPath());
                   //System.out.println("Put "+newRe);
                   owner.acquirePoolMemory(0, newSize, true, null, true);
                   owner.updateSizeOnCreate(key, newSize);
@@ -3789,9 +3794,6 @@ RETRY_LOOP:
   throws CacheWriterException,
         TimeoutException {
     final LocalRegion owner = _getOwner();
-    if(!owner.reservedTable()){
-      LocalRegion.regionPath.set(owner.getFullPath());
-    }
 
     boolean clearOccured = false;
     if (owner == null) {
@@ -4092,7 +4094,6 @@ RETRY_LOOP:
       owner.handleDiskAccessException(dae, true/* stop bridge servers*/);
       throw dae;
     } finally {
-      LocalRegion.regionPath.remove();
         releaseCacheModificationLock(owner, event);
         if (indexLocked) {
           indexManager.unlockForIndexGII();

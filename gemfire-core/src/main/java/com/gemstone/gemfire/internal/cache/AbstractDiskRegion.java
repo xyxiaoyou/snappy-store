@@ -42,6 +42,7 @@ import com.gemstone.gemfire.internal.cache.versions.VersionSource;
 import com.gemstone.gemfire.internal.cache.versions.VersionTag;
 import com.gemstone.gemfire.internal.concurrent.CustomEntryConcurrentHashMap;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
+import com.gemstone.gemfire.internal.snappy.StoreCallbacks;
 import joptsimple.internal.Strings;
 
 /**
@@ -90,6 +91,7 @@ public abstract class AbstractDiskRegion implements DiskRegionView {
   private Compressor compressor;
   private boolean enableOffHeapMemory;
   private final LogWriterI18n logger;
+  private final boolean isMetaTable;
 
   /**
    * Records the version vector of what has been persisted to disk.
@@ -204,9 +206,10 @@ public abstract class AbstractDiskRegion implements DiskRegionView {
       this.numOverflowBytesOnDisk = new AtomicLong();
     }
     this.logger = ds.logger;
+    this.isMetaTable = LocalRegion.isMetaTable(name);
   }
 
-  protected AbstractDiskRegion(DiskStoreImpl ds, long id) {
+  protected AbstractDiskRegion(DiskStoreImpl ds, long id, String name) {
     this.ds = ds;
     this.id = id;
     this.flags = EnumSet.noneOf(DiskRegionFlag.class);
@@ -220,6 +223,7 @@ public abstract class AbstractDiskRegion implements DiskRegionView {
     this.numOverflowOnDisk = new AtomicLong();
     this.numEntriesInVM = new AtomicLong();
     this.numOverflowBytesOnDisk = new AtomicLong();
+    this.isMetaTable = LocalRegion.isMetaTable(name);
   }
   /**
    * Used to initialize a PlaceHolderDiskRegion for a region that is being closed
@@ -263,6 +267,7 @@ public abstract class AbstractDiskRegion implements DiskRegionView {
     this.compressor = drv.getCompressor();
     this.enableOffHeapMemory = drv.getEnableOffHeapMemory();
     this.logger = ds.logger;
+    this.isMetaTable = drv.isMetaTable();
   }
 
   //////////////////////  Instance Methods  //////////////////////
@@ -275,6 +280,14 @@ public abstract class AbstractDiskRegion implements DiskRegionView {
 
   public final DiskStoreImpl getDiskStore() {
     return this.ds;
+  }
+
+  public boolean isInternalColumnTable() {
+    if (isBucket) {
+      return getName().contains(StoreCallbacks.SHADOW_TABLE_BUCKET_TAG);
+    } else {
+      return getName().endsWith(StoreCallbacks.SHADOW_TABLE_SUFFIX);
+    }
   }
 
   abstract void beginDestroyRegion(LocalRegion region);
@@ -1070,6 +1083,11 @@ public abstract class AbstractDiskRegion implements DiskRegionView {
   @Override
   public void oplogRecovered(long oplogId) {
     //do nothing.  Overriden in ExportDiskRegion
+  }
+
+  @Override
+  public final boolean isMetaTable() {
+    return this.isMetaTable;
   }
   
   @Override
