@@ -81,6 +81,7 @@ public class StartupSequenceQueryMesasge extends
       if (region instanceof DistributedRegion) {
         persistenceAdvisor = ((DistributedRegion)region).getPersistenceAdvisor();
         PersistentMembershipView view = persistenceAdvisor.getMembershipView();
+        HashSet<PersistentMemberID> onlineOrEqual = persistenceAdvisor.getPersistedOnlineOrEqualMembers();
         // find out a member whose DDLReplay is completed.
         Map<InternalDistributedMember, PersistentMemberID> onlineMembers = view.getOnlineMembers();
         dm.getLoggerI18n().info(LocalizedStrings.DEBUG, "The view is " + view);
@@ -99,6 +100,8 @@ public class StartupSequenceQueryMesasge extends
         if (!isInitialized) {
           // check which are offline members
           offlineMembers = view.getOfflineMembers();
+          //remove equal members too.
+          offlineMembers.removeAll(onlineOrEqual);
           if (offlineMembers != null) {
             offlineMembers.forEach(pId -> {
               dm.getLoggerI18n().info(LocalizedStrings.DEBUG, "The offline members are " + pId + " the disk store " +
