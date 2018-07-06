@@ -89,7 +89,7 @@ public class PersistenceAdvisorImpl implements PersistenceAdvisor {
   private boolean DISALLOW_CLUSTER_RESTART_CHECK = Boolean.getBoolean(
       "gemfire.DISALLOW_CLUSTER_RESTART_CHECK");
 
-  public static final boolean TRACE = Boolean.getBoolean("gemfire.TRACE_PERSISTENCE_ADVISOR");
+  public static final boolean TRACE = true;//Boolean.getBoolean("gemfire.TRACE_PERSISTENCE_ADVISOR");
   
   public PersistenceAdvisorImpl(CacheDistributionAdvisor advisor, DistributedLockService dl, PersistentMemberView storage, String regionPath, DiskRegionStats diskStats, PersistentMemberManager memberManager) {
     this.advisor = advisor;

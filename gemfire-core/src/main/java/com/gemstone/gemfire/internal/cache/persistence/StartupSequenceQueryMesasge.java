@@ -83,12 +83,14 @@ public class StartupSequenceQueryMesasge extends
         PersistentMembershipView view = persistenceAdvisor.getMembershipView();
         // find out a member whose DDLReplay is completed.
         Map<InternalDistributedMember, PersistentMemberID> onlineMembers = view.getOnlineMembers();
-
+        dm.getLoggerI18n().info(LocalizedStrings.DEBUG, "The view is " + view);
         boolean isInitialized = false;
         // Check how many online members
         for (InternalDistributedMember m : onlineMembers.keySet()) {
+          dm.getLoggerI18n().info(LocalizedStrings.DEBUG, "The online members are " + m);
           if ((m.getVmKind() == DistributionManager.NORMAL_DM_TYPE) && cache.isSnappyDataStore(m)) {
             isInitialized = !cache.isUnInitializedMember(m);
+            dm.getLoggerI18n().info(LocalizedStrings.DEBUG, "The online members is initialized " + isInitialized);
           }
           if (isInitialized)
             break;
@@ -97,9 +99,13 @@ public class StartupSequenceQueryMesasge extends
         if (!isInitialized) {
           // check which are offline members
           offlineMembers = view.getOfflineMembers();
-          offlineMembers.forEach(pId -> {
-            diskStoreId.add(pId.diskStoreId);
-          });
+          if (offlineMembers != null) {
+            offlineMembers.forEach(pId -> {
+              dm.getLoggerI18n().info(LocalizedStrings.DEBUG, "The offline members are " + pId + " the disk store " +
+                      "id : " + pId.diskStoreId);
+              diskStoreId.add(pId.diskStoreId);
+            });
+          }
         }
       } else if (region == null) {
         dm.getLoggerI18n().info(LocalizedStrings.DEBUG, "This shouldn't have happened. ");
@@ -128,7 +134,8 @@ public class StartupSequenceQueryMesasge extends
         StartupSequenceQueryMesasge.StartupSequenceQueryReplyMesasge persistentReplyMessage =
             new StartupSequenceQueryMesasge.StartupSequenceQueryReplyMesasge();
         //persistentReplyMessage.diskStoreId = diskStoreId;
-        persistentReplyMessage.persistentMemberIDS.addAll(offlineMembers);
+        if (offlineMembers != null)
+          persistentReplyMessage.persistentMemberIDS.addAll(offlineMembers);
         replyMsg = persistentReplyMessage;
       } else {
         replyMsg = new ReplyMessage();
