@@ -84,14 +84,14 @@ public class StartupSequenceQueryMesasge extends
         HashSet<PersistentMemberID> onlineOrEqual = persistenceAdvisor.getPersistedOnlineOrEqualMembers();
         // find out a member whose DDLReplay is completed.
         Map<InternalDistributedMember, PersistentMemberID> onlineMembers = view.getOnlineMembers();
-        dm.getLoggerI18n().info(LocalizedStrings.DEBUG, "The view is " + view);
+        if (dm.getLoggerI18n().fineEnabled()) {
+          dm.getLoggerI18n().fine("The view is " + view);
+        }
         boolean isInitialized = false;
         // Check how many online members
         for (InternalDistributedMember m : onlineMembers.keySet()) {
-          dm.getLoggerI18n().info(LocalizedStrings.DEBUG, "The online members are " + m);
           if ((m.getVmKind() == DistributionManager.NORMAL_DM_TYPE) && cache.isSnappyDataStore(m)) {
             isInitialized = !cache.isUnInitializedMember(m);
-            dm.getLoggerI18n().info(LocalizedStrings.DEBUG, "The online members is initialized " + isInitialized);
           }
           if (isInitialized)
             break;
@@ -104,8 +104,10 @@ public class StartupSequenceQueryMesasge extends
           offlineMembers.removeAll(onlineOrEqual);
           if (offlineMembers != null) {
             offlineMembers.forEach(pId -> {
-              dm.getLoggerI18n().info(LocalizedStrings.DEBUG, "The offline members are " + pId + " the disk store " +
-                      "id : " + pId.diskStoreId);
+              if (dm.getLoggerI18n().fineEnabled()) {
+                dm.getLoggerI18n().fine("The offline members are " + pId + " the disk store " +
+                        "id : " + pId.diskStoreId);
+              }
               diskStoreId.add(pId.diskStoreId);
             });
           }
