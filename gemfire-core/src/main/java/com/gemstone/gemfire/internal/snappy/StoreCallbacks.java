@@ -17,6 +17,7 @@
 
 package com.gemstone.gemfire.internal.snappy;
 
+import java.net.URLClassLoader;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Set;
@@ -134,4 +135,9 @@ public interface StoreCallbacks {
    * Clear all code-generation caches.
    */
   void clearCodegenCaches();
+
+  /**
+   * Get the class loader of the lead
+   */
+  URLClassLoader getLeadClassLoader();
 }
