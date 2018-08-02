@@ -3464,7 +3464,7 @@ public class LocalRegion extends AbstractRegion
     if (this.concurrencyChecksEnabled && this.versionVector == null) {
       createVersionVector();
     }
-    
+
     DiskRegion dskRgn = getDiskRegion();
     
     if(dskRgn != null && dskRgn.isRecreated()) {
@@ -8532,6 +8532,11 @@ public class LocalRegion extends AbstractRegion
     final TXStateInterface tx = discoverJTA();
     if (tx != null) {
       tx.rmRegion(this);
+    }
+    // cleanup snapshot entries for the region in all transactions
+    for (TXStateProxy txProxy : getCache().getTxManager()
+        .getHostedTransactionsInProgress()) {
+      txProxy.cleanSnapshotEntriesForRegion(this);
     }
   }
 
@@ -14538,6 +14543,13 @@ public class LocalRegion extends AbstractRegion
           size, buffer, shouldEvict, false)) {
         throwLowMemoryException(size);
       }
+    }
+  }
+
+
+  public void relaseMemoryForInternalRegions(){
+    if (this.reservedTable() && needAccounting()) {
+      callback.dropStorageMemory(getFullPath(), 0L);
     }
   }
 
