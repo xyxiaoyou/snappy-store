@@ -3459,7 +3459,7 @@ public class LocalRegion extends AbstractRegion
     if (this.concurrencyChecksEnabled && this.versionVector == null) {
       createVersionVector();
     }
-    
+
     DiskRegion dskRgn = getDiskRegion();
     
     if(dskRgn != null && dskRgn.isRecreated()) {
@@ -14539,6 +14539,13 @@ public class LocalRegion extends AbstractRegion
           size, buffer, shouldEvict, false)) {
         throwLowMemoryException(size);
       }
+    }
+  }
+
+
+  public void relaseMemoryForInternalRegions(){
+    if (this.reservedTable() && needAccounting()) {
+      callback.dropStorageMemory(getFullPath(), 0L);
     }
   }
 
