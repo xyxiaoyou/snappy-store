@@ -1572,7 +1572,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
               region.getVersionVector().getSnapShotOfMemberVersion());
         }
       });
-      getLogger().info("SW:1: acquired snapshot " + snapshot);
+      // getLogger().info("SW:1: acquired snapshot " + snapshot);
       return snapshot;
     } finally {
       lockForSnapshotRvv.readLock().unlock();

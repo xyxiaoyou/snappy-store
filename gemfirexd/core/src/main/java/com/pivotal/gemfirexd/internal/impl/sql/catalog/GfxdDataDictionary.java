@@ -1610,11 +1610,11 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
           argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null, newlyCreatedRoutines,
           tc, GFXD_SYS_PROC_CLASSNAME, true);
     }
-    
+
     {
-        // void SET_BUCKETS_FOR_LOCAL_EXECUTION(TableName, buckets)
+        // void SET_BUCKETS_FOR_LOCAL_EXECUTION(tableName, buckets, relDestroyVersion)
         String[] argNames = new String[] { "TABLE_NAME", "BUCKETS",
-        "RELATION_DESTROY_VERSIONS"};
+          "RELATION_DESTROY_VERSION" };
         TypeDescriptor[] argTypes = new TypeDescriptor[] {
             DataTypeDescriptor.getCatalogType(Types.VARCHAR),
             DataTypeDescriptor.getCatalogType(Types.VARCHAR),
@@ -1623,6 +1623,22 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
         super.createSystemProcedureOrFunction("SET_BUCKETS_FOR_LOCAL_EXECUTION", sysUUID, argNames,
             argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null, newlyCreatedRoutines,
             tc, GFXD_SYS_PROC_CLASSNAME, false);
+    }
+
+    {
+      // void SET_BUCKETS_FOR_LOCAL_EXECUTION_EX(tableName, buckets,
+      //   relDestroyVersion, updateOwner)
+      String[] argNames = new String[] { "TABLE_NAME", "BUCKETS",
+          "RELATION_DESTROY_VERSION", "UPDATE_OWNER" };
+      TypeDescriptor[] argTypes = new TypeDescriptor[] {
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
+          DataTypeDescriptor.getCatalogType(Types.INTEGER),
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR)
+      };
+      super.createSystemProcedureOrFunction("SET_BUCKETS_FOR_LOCAL_EXECUTION_EX",
+          sysUUID, argNames, argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null,
+          newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
     }
 
     {
@@ -1675,21 +1691,35 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
             newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
       }
       {
-        String[] argNames = new String[] { "txId", "rolloverTable" };
+        String[] argNames = new String[] { "txId", "tableName",
+            "doRollover", "updateOwner", "bucketId" };
         TypeDescriptor[] argTypes = new TypeDescriptor[] {
             DataTypeDescriptor.getBuiltInDataTypeDescriptor(
                 Types.VARCHAR, false).getCatalogType(),
             DataTypeDescriptor.getBuiltInDataTypeDescriptor(
-                Types.VARCHAR, false).getCatalogType() };
+                Types.VARCHAR, false).getCatalogType(),
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.BOOLEAN, false).getCatalogType(),
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.VARCHAR, false).getCatalogType(),
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.INTEGER, false).getCatalogType() };
         super.createSystemProcedureOrFunction("COMMIT_SNAPSHOT_TXID", sysUUID,
             argNames, argTypes, 0, 0, RoutineAliasInfo.NO_SQL,
             null, newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
       }
       {
-        String[] argNames = new String[] { "txId" };
+        String[] argNames = new String[] { "txId", "tableName",
+            "updateOwner", "bucketId" };
         TypeDescriptor[] argTypes = new TypeDescriptor[] {
             DataTypeDescriptor.getBuiltInDataTypeDescriptor(
-                Types.VARCHAR, false).getCatalogType() };
+                Types.VARCHAR, false).getCatalogType(),
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.VARCHAR, false).getCatalogType(),
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.VARCHAR, false).getCatalogType(),
+            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                Types.INTEGER, false).getCatalogType() };
         super.createSystemProcedureOrFunction("ROLLBACK_SNAPSHOT_TXID", sysUUID,
             argNames, argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null,
             newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);

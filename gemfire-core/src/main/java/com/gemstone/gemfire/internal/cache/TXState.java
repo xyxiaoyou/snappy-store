@@ -1287,11 +1287,11 @@ public final class TXState implements TXStateInterface {
         pendingReadLocksCleanup(lockPolicy, null, null);
       }
 
-      writeRegions.keySet().stream().filter(region ->
-          region instanceof BucketRegion
-      ).forEach(region ->
-          ((BucketRegion)region).releaseSnapshotGIIReadLock()
-      );
+      writeRegions.keySet().forEach(region -> {
+        if (region instanceof BucketRegion) {
+          ((BucketRegion)region).releaseSnapshotGIIReadLock();
+        }
+      });
 
     } finally {
       if (this.txLocked.compareAndSet(true, false)) {

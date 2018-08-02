@@ -50,6 +50,9 @@ import com.gemstone.gemfire.distributed.internal.locks.DistributedMemberLock;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
 import com.gemstone.gemfire.internal.Assert;
+import com.gemstone.gemfire.internal.cache.locks.ExclusiveSharedSynchronizer;
+import com.gemstone.gemfire.internal.cache.locks.LockMode;
+import com.gemstone.gemfire.internal.cache.locks.ReentrantReadWriteWriteShareLock;
 import com.gemstone.gemfire.internal.cache.partitioned.Bucket;
 import com.gemstone.gemfire.internal.cache.partitioned.BucketListener;
 import com.gemstone.gemfire.internal.cache.partitioned.BucketProfileUpdateMessage;
@@ -91,6 +94,10 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
 
   /** Local lock used by PRHARedundancyProvider */
   protected final ReentrantLock redundancyLock;
+
+  /** lock for maintenance operations */
+  private final ReentrantReadWriteWriteShareLock maintenanceLock =
+      new ReentrantReadWriteWriteShareLock();
 
   //private static final byte MASK_HOSTING       = 1; // 0001 
   //private static final byte MASK_VOLUNTEERING  = 2; // 0010
@@ -291,6 +298,42 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
         this.activePrimaryMoveLock.unlock();
       }
     }
+  }
+
+  boolean isLockededForMaintenance() {
+    return ExclusiveSharedSynchronizer.isExclusive(maintenanceLock.getState());
+  }
+
+  private BucketRegion getRowBuffer() {
+    PartitionedRegion pr = getPartitionedRegion();
+    assert pr.isInternalColumnTable();
+    PartitionedRegion rowBuffer = ColocationHelper.getColocatedRegion(pr);
+    assert rowBuffer != null;
+    return rowBuffer.getDataStore().getLocalBucketById(getProxyBucketRegion().getId());
+  }
+
+  boolean lockForMaintenance(boolean forWrite, long msecs, Object owner) {
+    if (getPartitionedRegion().isInternalColumnTable()) {
+      return getRowBuffer().lockForMaintenance(forWrite, msecs, owner);
+    }
+    final boolean locked = forWrite
+        ? maintenanceLock.attemptLock(LockMode.EX, msecs, owner)
+        : maintenanceLock.attemptLock(LockMode.SH, msecs, owner);
+    getLogWriter().convertToLogWriter().info("SW:0: locked " + getProxyBucketRegion().getFullPath() + " forWrite=" + forWrite + " locked=" + locked);
+    return locked;
+  }
+
+  void unlockAfterMaintenance(boolean forWrite, Object owner) {
+    if (getPartitionedRegion().isInternalColumnTable()) {
+      getRowBuffer().unlockAfterMaintenance(forWrite, owner);
+      return;
+    }
+    if (forWrite) {
+      maintenanceLock.releaseLock(LockMode.EX, false, owner);
+    } else {
+      maintenanceLock.releaseLock(LockMode.SH, false, owner);
+    }
+    getLogWriter().convertToLogWriter().info("SW:0: unlocked " + getProxyBucketRegion().getFullPath() + " forWrite=" + forWrite);
   }
 
   /**
@@ -1230,6 +1273,8 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
 
     long startTime 
         = getPartitionedRegionStats().startPrimaryTransfer(isRebalance);
+    // acquire maintenance lock
+    lockForMaintenance(true, Long.MAX_VALUE, this);
     try {
       long waitTime = 2000; // time each iteration will wait
       while (!isPrimary()) {
@@ -1326,6 +1371,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
       Thread.currentThread().interrupt();
       
     } finally {
+      unlockAfterMaintenance(true, this);
       getPartitionedRegionStats().endPrimaryTransfer(
           startTime, isPrimary(), isRebalance);
     }

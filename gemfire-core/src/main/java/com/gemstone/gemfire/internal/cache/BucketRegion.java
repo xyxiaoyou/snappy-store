@@ -42,7 +42,6 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
 
 import com.gemstone.gemfire.*;
@@ -76,7 +75,6 @@ import com.gemstone.gemfire.internal.cache.partitioned.*;
 import com.gemstone.gemfire.internal.cache.tier.sockets.CacheClientNotifier;
 import com.gemstone.gemfire.internal.cache.tier.sockets.ClientTombstoneMessage;
 import com.gemstone.gemfire.internal.cache.tier.sockets.ClientUpdateMessage;
-import com.gemstone.gemfire.internal.cache.versions.RegionVersionVector;
 import com.gemstone.gemfire.internal.cache.versions.VersionSource;
 import com.gemstone.gemfire.internal.cache.versions.VersionStamp;
 import com.gemstone.gemfire.internal.cache.versions.VersionTag;
@@ -270,9 +268,8 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
   public static final long INVALID_UUID = VMIdAdvisor.INVALID_ID;
 
-  public final ReentrantReadWriteLock columnBatchFlushLock =
-      new ReentrantReadWriteLock();
-
+  private final ReentrantReadWriteWriteShareLock maintenanceLock =
+      new ReentrantReadWriteWriteShareLock();
 
   /**
    * A read/write lock to prevent writing to the bucket when GII from this bucket is in progress
@@ -766,41 +763,68 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   private static final Predicate<?> TRUE_CHECK = v -> true;
 
   @SuppressWarnings("unchecked")
-  static <T> Predicate<T> TRUE_PREDICATE() {
+  public static <T> Predicate<T> TRUE_PREDICATE() {
     return (Predicate<T>)TRUE_CHECK;
+  }
+
+  public boolean isLockededForMaintenance() {
+    return getBucketAdvisor().isLockededForMaintenance();
+  }
+
+  public boolean lockForMaintenance(boolean forWrite, long msecs, Object owner) {
+    return getBucketAdvisor().lockForMaintenance(forWrite, msecs, owner);
+  }
+
+  public static BucketRegion lockPrimaryForMaintenance(boolean forWrite,
+      Object owner, PartitionedRegion pr, Collection<Integer> bucketIds) {
+    if (owner == null) return null;
+    BucketRegion br = null;
+    PartitionedRegionDataStore ds = pr.getDataStore();
+    if (ds != null) {
+      // multi-bucket case should never happen for updates/deletes
+      Assert.assertTrue(bucketIds.size() == 1);
+      br = ds.getLocalBucketById(bucketIds.iterator().next());
+      // bucket should be present and primary else fail
+      if (br == null) {
+        throw new PrimaryBucketException("Require buckets in mutation to be present " +
+            "locally for bucket ID " + bucketIds + ", region = " + pr.getFullPath());
+      }
+      // lock regions, if required, before acquiring the snapshot
+      Assert.assertTrue(br.lockForMaintenance(forWrite, Long.MAX_VALUE, owner));
+      // primary check for bucket after acquiring the lock
+      if (!br.getBucketAdvisor().isPrimary()) {
+        br.unlockAfterMaintenance(forWrite, owner);
+        throw new PrimaryBucketException("Require buckets in mutation to be " +
+            "primary for bucket ID " + bucketIds + " region = " + pr.getFullPath());
+      }
+    }
+    return br;
+  }
+
+  public void unlockAfterMaintenance(boolean forWrite, Object owner) {
+    getBucketAdvisor().unlockAfterMaintenance(forWrite, owner);
   }
 
   @SuppressWarnings("unchecked")
   public final boolean createAndInsertColumnBatch(TXStateInterface tx,
       boolean forceFlush) {
-    // first acquire the global service lock to prevent concurrent
-    // updates/deletes to change entries being rolled over
-    if (!getPartitionedRegion().lockForMaintenance(true, 0)) {
-      return false;
-    }
-    try {
-      return createAndInsertColumnBatch(tx, forceFlush, TRUE_PREDICATE());
-    } finally {
-      getPartitionedRegion().unlockForMaintenance(true);
-    }
+    return createAndInsertColumnBatch(tx, forceFlush, 0, TRUE_PREDICATE());
   }
 
   public final boolean createAndInsertColumnBatch(TXStateInterface tx,
-      boolean forceFlush, Predicate<BucketRegion> checkFlushInLock) {
-    // do nothing if a flush is already in progress on this bucket
-    if (this.columnBatchFlushLock.isWriteLocked()) {
+      boolean forceFlush, long msecs, Predicate<BucketRegion> checkFlushInLock) {
+    // first acquire the maintenance lock to prevent concurrent
+    // updates/deletes to change entries being rolled over
+    Object owner = tx != null ? tx.getTransactionId() : null;
+    if (owner == null) owner = Thread.currentThread();
+    if (!lockForMaintenance(true, msecs, owner)) {
       return false;
     }
-    // next acquire the bucket specific lock so that only one rollover
-    // is active on a bucket
-    final ReentrantReadWriteLock.WriteLock sync =
-        this.columnBatchFlushLock.writeLock();
-    sync.lock();
     try {
       return checkFlushInLock.test(this) &&
           internalCreateAndInsertColumnBatch(tx, forceFlush);
     } finally {
-      sync.unlock();
+      unlockAfterMaintenance(true, owner);
     }
   }
 
