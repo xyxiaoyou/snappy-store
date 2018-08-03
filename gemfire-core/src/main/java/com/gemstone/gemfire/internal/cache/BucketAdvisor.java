@@ -59,6 +59,7 @@ import com.gemstone.gemfire.internal.cache.partitioned.BucketProfileUpdateMessag
 import com.gemstone.gemfire.internal.cache.partitioned.DeposePrimaryBucketMessage;
 import com.gemstone.gemfire.internal.cache.partitioned.DeposePrimaryBucketMessage.DeposePrimaryBucketResponse;
 import com.gemstone.gemfire.internal.cache.partitioned.RegionAdvisor;
+import com.gemstone.gemfire.internal.concurrent.ConcurrentHashSet;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.util.StopWatch;
 
@@ -98,6 +99,8 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
   /** lock for maintenance operations */
   private final ReentrantReadWriteWriteShareLock maintenanceLock =
       new ReentrantReadWriteWriteShareLock();
+  private final ConcurrentHashSet<Object> maintenanceLockReaders =
+      new ConcurrentHashSet<>(8);
 
   //private static final byte MASK_HOSTING       = 1; // 0001 
   //private static final byte MASK_VOLUNTEERING  = 2; // 0010
@@ -316,9 +319,17 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
     if (getPartitionedRegion().isInternalColumnTable()) {
       return getRowBuffer().lockForMaintenance(forWrite, msecs, owner);
     }
-    final boolean locked = forWrite
-        ? maintenanceLock.attemptLock(LockMode.EX, msecs, owner)
-        : maintenanceLock.attemptLock(LockMode.SH, msecs, owner);
+    boolean locked;
+    if (forWrite) {
+      locked = maintenanceLock.attemptLock(LockMode.EX, msecs, owner);
+    } else {
+      locked = maintenanceLock.attemptLock(LockMode.SH, msecs, owner);
+      // avoid re-entry by same owner
+      if (locked && !maintenanceLockReaders.add(owner)) {
+        maintenanceLock.releaseLock(LockMode.SH, false, owner);
+        locked = false;
+      }
+    }
     getLogWriter().convertToLogWriter().info("SW:0: locked " + getProxyBucketRegion().getFullPath() + " forWrite=" + forWrite + " locked=" + locked);
     return locked;
   }
@@ -330,8 +341,11 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
     }
     if (forWrite) {
       maintenanceLock.releaseLock(LockMode.EX, false, owner);
-    } else {
+    } else if (maintenanceLockReaders.remove(owner)) {
       maintenanceLock.releaseLock(LockMode.SH, false, owner);
+    } else {
+      throw new IllegalMonitorStateException("Bucket " + getProxyBucketRegion()
+          .getFullPath() + " not read-locked for maintenance by " + owner);
     }
     getLogWriter().convertToLogWriter().info("SW:0: unlocked " + getProxyBucketRegion().getFullPath() + " forWrite=" + forWrite);
   }

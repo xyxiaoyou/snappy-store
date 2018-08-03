@@ -77,8 +77,6 @@ import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.ServerResolverUtils;
 import com.pivotal.gemfirexd.internal.engine.fabricservice.FabricServiceImpl;
 import com.pivotal.gemfirexd.internal.engine.jdbc.GemFireXDRuntimeException;
-import com.pivotal.gemfirexd.internal.engine.locks.GfxdDRWLockService;
-import com.pivotal.gemfirexd.internal.engine.locks.GfxdLockable;
 import com.pivotal.gemfirexd.internal.engine.sql.catalog.ExtraInfo;
 import com.pivotal.gemfirexd.internal.engine.sql.catalog.ExtraTableInfo;
 import com.pivotal.gemfirexd.internal.engine.store.RowFormatter.ColumnProcessor;
@@ -697,20 +695,6 @@ public final class RegionEntryUtils {
         GfxdConstants.SNAPPY_PREFIX,
         GfxdConstants.GFXD_PREFIX,
         DistributionConfig.GEMFIRE_PREFIX};
-
-    @Override
-    public boolean lockContainer(LocalRegion region, boolean forWrite,
-        Object owner, long waitMillis) {
-      GfxdDRWLockService locking = Misc.getMemStoreBooting().getDDLLockService();
-      GfxdLockable lockable = ((GemFireContainer)region.getUserAttribute())
-          .getContainerLockingObject();
-      if (lockable == null) {
-        throw new IllegalStateException("Invalid lockContainer call for " +
-            region.getFullPath() + " having no locking policy.");
-      }
-      return forWrite ? locking.writeLock(lockable, owner, waitMillis, -1)
-          : locking.readLock(lockable, owner, waitMillis);
-    }
 
     @Override
     public void logAsync(final Object []line) {

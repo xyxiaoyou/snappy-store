@@ -731,11 +731,11 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
   }
 
   public static final boolean EXECUTE_ON() {
-    return true; // Boolean.getBoolean(TRACE_EXECUTE_PROPERTY);
+    return Boolean.getBoolean(TRACE_EXECUTE_PROPERTY);
   }
 
   public static final boolean VERBOSE_ON() {
-    return true; // Boolean.getBoolean(VERBOSE_PROPERTY);
+    return Boolean.getBoolean(VERBOSE_PROPERTY);
   }
 
   public static final boolean VERBOSEVERBOSE_ON() {

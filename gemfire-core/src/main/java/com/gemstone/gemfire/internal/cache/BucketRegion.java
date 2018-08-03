@@ -268,9 +268,6 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
   public static final long INVALID_UUID = VMIdAdvisor.INVALID_ID;
 
-  private final ReentrantReadWriteWriteShareLock maintenanceLock =
-      new ReentrantReadWriteWriteShareLock();
-
   /**
    * A read/write lock to prevent writing to the bucket when GII from this bucket is in progress
    */
@@ -778,27 +775,27 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   public static BucketRegion lockPrimaryForMaintenance(boolean forWrite,
       Object owner, PartitionedRegion pr, Collection<Integer> bucketIds) {
     if (owner == null) return null;
-    BucketRegion br = null;
     PartitionedRegionDataStore ds = pr.getDataStore();
     if (ds != null) {
       // multi-bucket case should never happen for updates/deletes
       Assert.assertTrue(bucketIds.size() == 1);
-      br = ds.getLocalBucketById(bucketIds.iterator().next());
+      BucketRegion br = ds.getLocalBucketById(bucketIds.iterator().next());
       // bucket should be present and primary else fail
       if (br == null) {
         throw new PrimaryBucketException("Require buckets in mutation to be present " +
             "locally for bucket ID " + bucketIds + ", region = " + pr.getFullPath());
       }
       // lock regions, if required, before acquiring the snapshot
-      Assert.assertTrue(br.lockForMaintenance(forWrite, Long.MAX_VALUE, owner));
+      boolean locked = br.lockForMaintenance(forWrite, Long.MAX_VALUE, owner);
       // primary check for bucket after acquiring the lock
       if (!br.getBucketAdvisor().isPrimary()) {
         br.unlockAfterMaintenance(forWrite, owner);
         throw new PrimaryBucketException("Require buckets in mutation to be " +
             "primary for bucket ID " + bucketIds + " region = " + pr.getFullPath());
       }
+      return locked ? br : null;
     }
-    return br;
+    return null;
   }
 
   public void unlockAfterMaintenance(boolean forWrite, Object owner) {

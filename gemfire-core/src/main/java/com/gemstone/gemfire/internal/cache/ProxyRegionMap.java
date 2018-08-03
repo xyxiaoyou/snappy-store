@@ -350,7 +350,7 @@ public final class ProxyRegionMap implements RegionMap {
       ClientProxyMembershipID bridgeContext, VersionTag<?> versionTag,
       long tailKey, TXRegionState txr, EntryEventImpl cbEvent) {
     this.owner.txApplyInvalidatePart2(txState, markerEntry, key, didDestroy,
-        true, false /*Clear conflic occured */);
+        true, false /* clear conflict occurred */);
     if (this.owner.isInitialized()) {
       /*
       if (txEvent != null) {

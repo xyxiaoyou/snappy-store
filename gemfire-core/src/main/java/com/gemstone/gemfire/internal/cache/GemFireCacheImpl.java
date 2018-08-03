@@ -5787,12 +5787,6 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
       SystemProperties.Callbacks {
 
     /**
-     * Lock the container for read or write.
-     */
-    boolean lockContainer(LocalRegion region, boolean forWrite,
-        Object owner, long waitMillis);
-
-    /**
      * Log in-memory until the buffer is full, instead of file io
      * synchronization. This is mainly used in the GemFire code that invokes
      * GemFireXD's SanityManager logging.<br>
