@@ -782,8 +782,10 @@ public class BucketRegion extends DistributedRegion implements Bucket {
       BucketRegion br = ds.getLocalBucketById(bucketIds.iterator().next());
       // bucket should be present and primary else fail
       if (br == null) {
-        throw new PrimaryBucketException("Require buckets in mutation to be present " +
-            "locally for bucket ID " + bucketIds + ", region = " + pr.getFullPath());
+        return null;
+        // TODO: SW: this should always lock primary in remote GFXD scan
+        // throw new PrimaryBucketException("Require buckets in mutation to be present " +
+        //     "locally for bucket ID " + bucketIds + ", region = " + pr.getFullPath());
       }
       // lock regions, if required, before acquiring the snapshot
       boolean locked = br.lockForMaintenance(forWrite, Long.MAX_VALUE, owner);
