@@ -45,7 +45,6 @@ import com.gemstone.gemfire.cache.execute.FunctionService;
 import com.gemstone.gemfire.distributed.DistributedMember;
 import com.gemstone.gemfire.distributed.internal.ServerLocation;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
-import com.gemstone.gemfire.internal.Assert;
 import com.gemstone.gemfire.internal.NanoTimer;
 import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.cache.control.InternalResourceManager;
@@ -84,6 +83,7 @@ import com.pivotal.gemfirexd.internal.engine.distributed.message.LeadNodeSmartCo
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.SecurityUtils;
 import com.pivotal.gemfirexd.internal.engine.jdbc.GemFireXDRuntimeException;
+import com.pivotal.gemfirexd.internal.engine.sql.execute.FunctionUtils;
 import com.pivotal.gemfirexd.internal.engine.store.CustomRowsResultSet;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireStore;
@@ -123,6 +123,8 @@ import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.snappy.LeadNodeSmartConnectorOpContext;
 import com.pivotal.gemfirexd.load.Import;
 import io.snappydata.collection.OpenHashSet;
+import io.snappydata.execute.AcquireBucketMaintLock;
+import io.snappydata.execute.ReleaseBucketMaintLocks;
 import io.snappydata.thrift.ServerType;
 import io.snappydata.thrift.internal.ClientBlob;
 
@@ -2465,30 +2467,12 @@ public class GfxdSystemProcedures extends SystemProcedures {
    * This procedure sets the local execution mode for a particular bucket.
    */
   public static void setBucketsForLocalExecution(String tableName,
-      Set<Integer> bucketSet, boolean retain, String updateOwner,
+      Set<Integer> bucketSet, boolean retain, String lockOwner,
       @Nonnull LanguageConnectionContext lcc) {
     Region<?, ?> region = Misc.getRegionForTable(tableName, true);
-    if ((region instanceof PartitionedRegion) && updateOwner != null) {
+    if ((region instanceof PartitionedRegion) && lockOwner != null) {
       PartitionedRegion pr = (PartitionedRegion)region;
-      BucketRegion br = BucketRegion.lockPrimaryForMaintenance(
-          false, updateOwner, pr, bucketSet);
-      if (br != null) {
-        boolean success = false;
-        try {
-          TXStateProxy tx = ((GemFireTransaction)lcc.getTransactionExecute())
-              .getCurrentTXStateProxy();
-          if (tx == null || !tx.isInProgress()) {
-            tx = pr.getGemFireCache().getTxManager().beginTX(
-                TXManagerImpl.getOrCreateTXContext(), IsolationLevel.SNAPSHOT,
-                null, null);
-          }
-          success = tx.registerLockedBucketRegion(br);
-        } finally {
-          if (!success) {
-            br.unlockAfterMaintenance(false, updateOwner);
-          }
-        }
-      }
+      lockPrimaryForMaintenance(false, lockOwner, pr, bucketSet);
     }
     lcc.setExecuteLocally(bucketSet, region, false, null);
     lcc.setBucketRetentionForLocalExecution(retain);
@@ -2513,7 +2497,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
    * maintenance locks for an update operation.
    */
   public static void SET_BUCKETS_FOR_LOCAL_EXECUTION_EX(String tableName,
-      String buckets, int relationDestroyVersion, String updateOwner)
+      String buckets, int relationDestroyVersion, String lockOwner)
       throws SQLException, StandardException {
     if (tableName == null) {
       throw Util.generateCsSQLException(SQLState.ENTITY_NAME_MISSING);
@@ -2525,19 +2509,76 @@ public class GfxdSystemProcedures extends SystemProcedures {
 
     if ((relationDestroyVersion != -1) &&
         (actualVersion != relationDestroyVersion)) {
-      throw StandardException.newException(SQLState.SNAPPY_RELATION_DESTROY_VERSION_MISMATCH);
+      throw Util.generateCsSQLException(SQLState.SNAPPY_RELATION_DESTROY_VERSION_MISMATCH);
     }
 
-    Region region = Misc.getRegionForTable(tableName, true);
-    LanguageConnectionContext lcc = ConnectionUtil.getCurrentLCC();
-    Set<Integer> bucketSet = new OpenHashSet<>(2);
-    StringTokenizer st = new StringTokenizer(buckets,",");
-    while (st.hasMoreTokens()) {
-      bucketSet.add(Integer.parseInt(st.nextToken()));
+    try {
+      Region region = Misc.getRegionForTable(tableName, true);
+      LanguageConnectionContext lcc = ConnectionUtil.getCurrentLCC();
+      Set<Integer> bucketSet = new OpenHashSet<>(2);
+      StringTokenizer st = new StringTokenizer(buckets, ",");
+      while (st.hasMoreTokens()) {
+        bucketSet.add(Integer.parseInt(st.nextToken()));
+      }
+      setBucketsForLocalExecution(tableName, bucketSet, true, lockOwner, lcc);
+    } catch (Throwable t) {
+      throw TransactionResourceImpl.wrapInSQLException(t);
     }
-    setBucketsForLocalExecution(tableName, bucketSet, true, updateOwner, lcc);
   }
 
+  public static void RELEASE_BUCKET_MAINTENANCE_LOCKS(String tableName,
+      Boolean forWrite, String lockOwner, String buckets) throws SQLException {
+    try {
+      final HashSet<Integer> bucketIds;
+      if (buckets != null) {
+        bucketIds = new HashSet<>(2);
+        SharedUtils.splitCSV(buckets, (s, a, c) ->
+            bucketIds.add(Integer.parseInt(s)), null, null);
+      } else {
+        bucketIds = null;
+      }
+      releaseBucketMaintenanceLocks(tableName, forWrite, lockOwner, bucketIds);
+    } catch (Throwable t) {
+      throw TransactionResourceImpl.wrapInSQLException(t);
+    }
+  }
+
+  public static void releaseBucketMaintenanceLocks(String tableName,
+      boolean forWrite, String lockOwner, Set<Integer> bucketIds) {
+    Set<DistributedMember> allStores = GfxdMessage.getAllDataStores();
+    if (allStores != null && !allStores.isEmpty()) {
+      FunctionService.onMembers(allStores)
+          .withArgs(new Object[] { tableName, forWrite, lockOwner, bucketIds })
+          .execute(ReleaseBucketMaintLocks.ID);
+    }
+  }
+
+  public static void lockPrimaryForMaintenance(boolean forWrite,
+      Object owner, PartitionedRegion pr, Set<Integer> bucketIds) {
+    PartitionedRegionDataStore ds = pr.getDataStore();
+    // lock regions, if required, before acquiring the snapshot
+    for (Integer bucketId : bucketIds) {
+      BucketRegion br = ds != null ? ds.getLocalBucketById(bucketId) : null;
+      // if bucket is present and primary, then lock locally else send to primary
+      if (br != null && br.getBucketAdvisor().isPrimary()) {
+        br.lockForMaintenance(forWrite, Long.MAX_VALUE, owner);
+        // primary check for bucket after acquiring the lock
+        if (br.getBucketAdvisor().isPrimary()) {
+          continue;
+        } else {
+          br.unlockAfterMaintenance(forWrite, owner);
+        }
+      }
+      try {
+        FunctionUtils.executeFunctionOnMembers(pr.getSystem(),
+            new AcquireBucketMaintLock.GetPrimaryMember(pr, bucketId),
+            new Object[] { pr.getFullPath(), forWrite, owner, bucketId },
+            AcquireBucketMaintLock.ID, null, false, false, true, false);
+      } catch (StandardException se) {
+        throw new GemFireXDRuntimeException(se);
+      }
+    }
+  }
 
   /**
    * This procedure sets the Nanotimer type. NanoTimer are used extensively while 
@@ -2582,50 +2623,23 @@ public class GfxdSystemProcedures extends SystemProcedures {
     }
   }
 
-  public static void unlockBucketAfterMaintenance(String resolvedName,
-      String updateOwner, int bucketId) {
-    Region<?, ?> region = Misc.getRegionForTable(resolvedName, false);
-    PartitionedRegionDataStore ds;
-    if ((region instanceof PartitionedRegion)
-        && (ds = ((PartitionedRegion)region).getDataStore()) != null) {
-      BucketRegion br = ds.getLocalBucketById(bucketId);
-      if (br != null) {
-        br.unlockAfterMaintenance(false, updateOwner);
-      }
-    }
-  }
-
-  public static void COMMIT_SNAPSHOT_TXID(String txId, String tableName,
-      Boolean doRollover, String updateOwner, int bucketId)
-      throws SQLException, StandardException {
-    try {
-      commitSnapshotTXID(txId, tableName, doRollover, updateOwner, bucketId);
-    } finally {
-      if (!updateOwner.isEmpty()) {
-        unlockBucketAfterMaintenance(tableName, updateOwner, bucketId);
-      }
-    }
-  }
-
-  private static void commitSnapshotTXID(String txId, String tableName,
-      boolean doRollover, String updateOwner, int bucketId)
+  public static void COMMIT_SNAPSHOT_TXID(String txId, String rolloverTable)
       throws SQLException, StandardException {
     TXStateInterface txState = null;
     LanguageConnectionContext lcc = ConnectionUtil.getCurrentLCC();
     GemFireTransaction tc = (GemFireTransaction) lcc.getTransactionExecute();
     TXManagerImpl txManager = tc.getTransactionManager();
 
-    if (doRollover) {
-      flushLocalBuckets(tableName, false);
+    if (!rolloverTable.isEmpty()) {
+      flushLocalBuckets(rolloverTable, false);
     }
     if (!txId.isEmpty()) {
       StringTokenizer st = new StringTokenizer(txId, ":");
       if (GemFireXDUtils.TraceExecution) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_EXECUTION,
             "in procedure COMMIT_SNAPSHOT_TXID()  " + txId
-                + " table=" + tableName + " delayRollover=" + doRollover
-                + " updateOwner=" + updateOwner + " bucketId=" + bucketId
-                + " for connid " + tc.getConnectionID()
+                + " rolloverTable=" + rolloverTable + " for connid "
+                + tc.getConnectionID() + " rolloverTable=" + rolloverTable
                 + " TxManager " + TXManagerImpl.getCurrentTXId()
                 + " snapshot tx : " + TXManagerImpl.getCurrentSnapshotTXState());
       }
@@ -2651,8 +2665,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
       }
       if (GemFireXDUtils.TraceExecution) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_EXECUTION,
-            "in procedure COMMIT_SNAPSHOT_TXID()  afer commit" + txId
-                + " for connid " + tc.getConnectionID()
+            "in procedure COMMIT_SNAPSHOT_TXID()  afer commit" + txId + " for connid " + tc.getConnectionID()
                 + " TxManager " + TXManagerImpl.getCurrentTXId()
                 + " snapshot tx : " + txState + " else part. ");
       }
@@ -2662,26 +2675,13 @@ public class GfxdSystemProcedures extends SystemProcedures {
     }
     if (GemFireXDUtils.TraceExecution) {
       SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_EXECUTION,
-          "in procedure COMMIT_SNAPSHOT_TXID()  afer commit" + txId
-              + " for connid " + tc.getConnectionID()
+          "in procedure COMMIT_SNAPSHOT_TXID()  afer commit" + txId + " for connid " + tc.getConnectionID()
               + " TxManager " + TXManagerImpl.getCurrentTXId()
               + " snapshot tx : " + txState);
     }
   }
 
-  public static void ROLLBACK_SNAPSHOT_TXID(String txId, String tableName,
-      String updateOwner, int bucketId) throws SQLException, StandardException {
-    try {
-      rollbackSnapshotTXID(txId, tableName, updateOwner, bucketId);
-    } finally {
-      if (!updateOwner.isEmpty()) {
-        unlockBucketAfterMaintenance(tableName, updateOwner, bucketId);
-      }
-    }
-  }
-
-  private static void rollbackSnapshotTXID(String txId, String tableName,
-      String updateOwner, int bucketId) throws SQLException, StandardException {
+  public static void ROLLBACK_SNAPSHOT_TXID(String txId) throws SQLException, StandardException {
     TXStateProxy txState = null;
     TXManagerImpl.TXContext context;
     LanguageConnectionContext lcc = ConnectionUtil.getCurrentLCC();
@@ -2692,9 +2692,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
       StringTokenizer st = new StringTokenizer(txId, ":");
       if (GemFireXDUtils.TraceExecution) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_EXECUTION,
-            "in procedure ROLLBACK_SNAPSHOT_TXID()  " + txId
-                + " tableName=" + tableName + " updateOwner=" + updateOwner
-                + " bucketId=" + bucketId + " for connid " + tc.getConnectionID()
+            "in procedure ROLLBACK_SNAPSHOT_TXID()  " + txId + " for connid " + tc.getConnectionID()
                 + " TxManager " + TXManagerImpl.getCurrentTXId()
                 + " snapshot tx : " + TXManagerImpl.getCurrentSnapshotTXState());
       }
@@ -2717,8 +2715,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
     }
     if (GemFireXDUtils.TraceExecution) {
       SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_EXECUTION,
-          "in procedure ROLLBACK_SNAPSHOT_TXID()  afer commit"
-              + txId + " for connid " + tc.getConnectionID()
+          "in procedure ROLLBACK_SNAPSHOT_TXID()  afer commit" + txId + " for connid " + tc.getConnectionID()
               + " TxManager " + TXManagerImpl.getCurrentTXId()
               + " snapshot tx : " + TXManagerImpl.getCurrentSnapshotTXState());
     }

@@ -143,9 +143,6 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
    */
   protected final SetWithCheckpoint regions;
 
-  /** set of locked bucket regions */
-  private OpenHashSet<BucketRegion> lockedRegions;
-
   /**
    * For persistent regions, this stores a consistent DiskStoreID (primary for
    * PRs and anyone for RRs) to be used for region versions by all commits.
@@ -1651,17 +1648,8 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
     }
 
     this.attemptWriteLock(-1);
-    try {
-      this.regions.clear();
-      if (rollback && lockedRegions != null) {
-        for (BucketRegion region : lockedRegions) {
-          region.unlockAfterMaintenance(false, txId);
-        }
-        lockedRegions = null;
-      }
-    } finally {
-      this.releaseWriteLock();
-    }
+    this.regions.clear();
+    this.releaseWriteLock();
 
     this.commitTime = 0L;
     this.state.set(State.CLOSED);
@@ -3545,19 +3533,6 @@ public class TXStateProxy extends NonReentrantReadWriteLock implements
       }
     }
     return batchException;
-  }
-
-  public final boolean registerLockedBucketRegion(BucketRegion region) {
-    if (region == null) return false;
-    this.attemptWriteLock(-1);
-    try {
-      if (lockedRegions == null) {
-        lockedRegions = new OpenHashSet<>(2);
-      }
-      return lockedRegions.add(region);
-    } finally {
-      this.releaseWriteLock();
-    }
   }
 
   public final void addAffectedRegion(final Object region) {

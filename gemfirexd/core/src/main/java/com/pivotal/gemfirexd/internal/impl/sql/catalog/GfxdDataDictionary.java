@@ -1627,9 +1627,9 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
 
     {
       // void SET_BUCKETS_FOR_LOCAL_EXECUTION_EX(tableName, buckets,
-      //   relDestroyVersion, updateOwner)
+      //   relDestroyVersion, lockOwner)
       String[] argNames = new String[] { "TABLE_NAME", "BUCKETS",
-          "RELATION_DESTROY_VERSION", "UPDATE_OWNER" };
+          "RELATION_DESTROY_VERSION", "LOCK_OWNER" };
       TypeDescriptor[] argTypes = new TypeDescriptor[] {
           DataTypeDescriptor.getCatalogType(Types.VARCHAR),
           DataTypeDescriptor.getCatalogType(Types.VARCHAR),
@@ -1637,6 +1637,23 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
           DataTypeDescriptor.getCatalogType(Types.VARCHAR)
       };
       super.createSystemProcedureOrFunction("SET_BUCKETS_FOR_LOCAL_EXECUTION_EX",
+          sysUUID, argNames, argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null,
+          newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
+    }
+
+    {
+      // void RELEASE_BUCKET_MAINTENANCE_LOCKS(tableName, forWrite, lockOwner, buckets)
+      String[] argNames = new String[] { "TABLE_NAME", "FOR_WRITE",
+          "LOCK_OWNER", "BUCKETS" };
+      TypeDescriptor[] argTypes = new TypeDescriptor[] {
+          DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+              Types.VARCHAR, false).getCatalogType(),
+          DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+              Types.BOOLEAN, false).getCatalogType(),
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR)
+      };
+      super.createSystemProcedureOrFunction("RELEASE_BUCKET_MAINTENANCE_LOCKS",
           sysUUID, argNames, argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null,
           newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
     }
@@ -1691,35 +1708,21 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
             newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
       }
       {
-        String[] argNames = new String[] { "txId", "tableName",
-            "doRollover", "updateOwner", "bucketId" };
+        String[] argNames = new String[] { "txId", "rolloverTable" };
         TypeDescriptor[] argTypes = new TypeDescriptor[] {
             DataTypeDescriptor.getBuiltInDataTypeDescriptor(
                 Types.VARCHAR, false).getCatalogType(),
             DataTypeDescriptor.getBuiltInDataTypeDescriptor(
-                Types.VARCHAR, false).getCatalogType(),
-            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
-                Types.BOOLEAN, false).getCatalogType(),
-            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
-                Types.VARCHAR, false).getCatalogType(),
-            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
-                Types.INTEGER, false).getCatalogType() };
+                Types.VARCHAR, false).getCatalogType() };
         super.createSystemProcedureOrFunction("COMMIT_SNAPSHOT_TXID", sysUUID,
             argNames, argTypes, 0, 0, RoutineAliasInfo.NO_SQL,
             null, newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
       }
       {
-        String[] argNames = new String[] { "txId", "tableName",
-            "updateOwner", "bucketId" };
+        String[] argNames = new String[] { "txId" };
         TypeDescriptor[] argTypes = new TypeDescriptor[] {
             DataTypeDescriptor.getBuiltInDataTypeDescriptor(
-                Types.VARCHAR, false).getCatalogType(),
-            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
-                Types.VARCHAR, false).getCatalogType(),
-            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
-                Types.VARCHAR, false).getCatalogType(),
-            DataTypeDescriptor.getBuiltInDataTypeDescriptor(
-                Types.INTEGER, false).getCatalogType() };
+                Types.VARCHAR, false).getCatalogType() };
         super.createSystemProcedureOrFunction("ROLLBACK_SNAPSHOT_TXID", sysUUID,
             argNames, argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null,
             newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
@@ -2096,11 +2099,6 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
       super.createSystemProcedureOrFunction("COLUMN_TABLE_SCAN", sysUUID,
           arg_names, arg_types, 0, 1, RoutineAliasInfo.READS_SQL_DATA, null,
           newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
-    }
-    {
-      super.createSystemProcedureOrFunction("PURGE_CODEGEN_CACHES", sysUUID,
-          null, null, 0, 0, RoutineAliasInfo.READS_SQL_DATA,
-          null, newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, true);
     }
   }
 

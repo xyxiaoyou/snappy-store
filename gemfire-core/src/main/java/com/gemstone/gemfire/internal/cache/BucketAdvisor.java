@@ -317,7 +317,8 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
 
   boolean lockForMaintenance(boolean forWrite, long msecs, Object owner) {
     if (getPartitionedRegion().isInternalColumnTable()) {
-      return getRowBuffer().lockForMaintenance(forWrite, msecs, owner);
+      return getRowBuffer().getBucketAdvisor().lockForMaintenance(
+          forWrite, msecs, owner);
     }
     boolean locked;
     if (forWrite) {
@@ -336,7 +337,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
 
   void unlockAfterMaintenance(boolean forWrite, Object owner) {
     if (getPartitionedRegion().isInternalColumnTable()) {
-      getRowBuffer().unlockAfterMaintenance(forWrite, owner);
+      getRowBuffer().getBucketAdvisor().unlockAfterMaintenance(forWrite, owner);
       return;
     }
     if (forWrite) {
@@ -348,6 +349,38 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
           .getFullPath() + " not read-locked for maintenance by " + owner);
     }
     getLogWriter().convertToLogWriter().info("SW:0: unlocked " + getProxyBucketRegion().getFullPath() + " forWrite=" + forWrite);
+  }
+
+  void unlockAllAfterMaintenance(boolean forWrite) {
+    if (getPartitionedRegion().isInternalColumnTable()) {
+      getRowBuffer().getBucketAdvisor().unlockAllAfterMaintenance(forWrite);
+      return;
+    }
+    if (forWrite) {
+      Object writer = maintenanceLock.getOwnerId(null);
+      if (writer != null) {
+        maintenanceLock.releaseLock(LockMode.EX, false, writer);
+      }
+    } else {
+      for (Object reader : maintenanceLockReaders) {
+        try {
+          maintenanceLock.releaseLock(LockMode.SH, false, reader);
+        } catch (IllegalMonitorStateException ignored) {
+        }
+      }
+    }
+    getLogWriter().convertToLogWriter().info("SW:0: unlocked all " + getProxyBucketRegion().getFullPath() + " forWrite=" + forWrite);
+  }
+
+  boolean hasMaintenanceLock(boolean forWrite, Object owner) {
+    if (getPartitionedRegion().isInternalColumnTable()) {
+      return getRowBuffer().getBucketAdvisor().hasMaintenanceLock(forWrite, owner);
+    }
+    if (forWrite) {
+      return Objects.equals(owner, maintenanceLock.getOwnerId(null));
+    } else {
+      return owner != null && maintenanceLockReaders.contains(owner);
+    }
   }
 
   /**

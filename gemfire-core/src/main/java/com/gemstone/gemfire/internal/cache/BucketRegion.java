@@ -772,36 +772,16 @@ public class BucketRegion extends DistributedRegion implements Bucket {
     return getBucketAdvisor().lockForMaintenance(forWrite, msecs, owner);
   }
 
-  public static BucketRegion lockPrimaryForMaintenance(boolean forWrite,
-      Object owner, PartitionedRegion pr, Collection<Integer> bucketIds) {
-    if (owner == null) return null;
-    PartitionedRegionDataStore ds = pr.getDataStore();
-    if (ds != null) {
-      // multi-bucket case should never happen for updates/deletes
-      Assert.assertTrue(bucketIds.size() == 1);
-      BucketRegion br = ds.getLocalBucketById(bucketIds.iterator().next());
-      // bucket should be present and primary else fail
-      if (br == null) {
-        return null;
-        // TODO: SW: this should always lock primary in remote GFXD scan
-        // throw new PrimaryBucketException("Require buckets in mutation to be present " +
-        //     "locally for bucket ID " + bucketIds + ", region = " + pr.getFullPath());
-      }
-      // lock regions, if required, before acquiring the snapshot
-      boolean locked = br.lockForMaintenance(forWrite, Long.MAX_VALUE, owner);
-      // primary check for bucket after acquiring the lock
-      if (!br.getBucketAdvisor().isPrimary()) {
-        br.unlockAfterMaintenance(forWrite, owner);
-        throw new PrimaryBucketException("Require buckets in mutation to be " +
-            "primary for bucket ID " + bucketIds + " region = " + pr.getFullPath());
-      }
-      return locked ? br : null;
-    }
-    return null;
-  }
-
   public void unlockAfterMaintenance(boolean forWrite, Object owner) {
     getBucketAdvisor().unlockAfterMaintenance(forWrite, owner);
+  }
+
+  public void unlockAllAfterMaintenance(boolean forWrite) {
+    getBucketAdvisor().unlockAllAfterMaintenance(forWrite);
+  }
+
+  public boolean hasMaintenanceLock(boolean forWrite, Object owner) {
+    return getBucketAdvisor().hasMaintenanceLock(forWrite, owner);
   }
 
   @SuppressWarnings("unchecked")
