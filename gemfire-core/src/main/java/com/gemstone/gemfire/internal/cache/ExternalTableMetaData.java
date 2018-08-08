@@ -64,6 +64,7 @@ public class ExternalTableMetaData {
   public String dataSourcePath;
   public String driverClass;
   public String columnTableSortOrder;
+  public String viewText;
   // columns for metadata queries
   public List<Column> columns;
 
