@@ -57,8 +57,10 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.cache.*;
+import com.gemstone.gemfire.distributed.DistributedMember;
 import com.gemstone.gemfire.distributed.internal.DistributionManager;
 import com.gemstone.gemfire.distributed.internal.InternalDistributedSystem;
+import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.internal.ClassPathLoader;
 import com.gemstone.gemfire.internal.GFToSlf4jBridge;
 import com.gemstone.gemfire.internal.LogWriterImpl;
@@ -84,6 +86,7 @@ import com.pivotal.gemfirexd.internal.engine.access.index.MemIndex;
 import com.pivotal.gemfirexd.internal.engine.ddl.*;
 import com.pivotal.gemfirexd.internal.engine.ddl.catalog.messages.GfxdSystemProcedureMessage;
 import com.pivotal.gemfirexd.internal.engine.ddl.wan.messages.AbstractGfxdReplayableMessage;
+import com.pivotal.gemfirexd.internal.engine.distributed.GfxdDistributionAdvisor;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdMessage;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.fabricservice.FabricServerImpl;
@@ -105,6 +108,7 @@ import com.pivotal.gemfirexd.internal.iapi.reference.Property;
 import com.pivotal.gemfirexd.internal.iapi.reference.SQLState;
 import com.pivotal.gemfirexd.internal.iapi.services.cache.ClassSize;
 import com.pivotal.gemfirexd.internal.iapi.services.context.ContextManager;
+import com.pivotal.gemfirexd.internal.iapi.services.context.ContextService;
 import com.pivotal.gemfirexd.internal.iapi.services.daemon.Serviceable;
 import com.pivotal.gemfirexd.internal.iapi.services.io.FileUtil;
 import com.pivotal.gemfirexd.internal.iapi.services.loader.ClassFactory;
@@ -928,7 +932,7 @@ public final class FabricDatabase implements ModuleControl,
 
     // Mark this node as uninitialized on all nodes, including self, to
     // avoid selecting it for any primaries etc.
-    this.memStore.getDistributionAdvisor().distributeNodeStatus(false);
+    this.memStore.getDistributionAdvisor().distributeNodeStatus(false, false);
     // Do not remote the SQL commands that are part of initial DDL replay.
     lcc.setIsConnectionForRemote(true);
     lcc.setSkipLocks(true);
@@ -963,6 +967,7 @@ public final class FabricDatabase implements ModuleControl,
     */
     int actualSize;
     List<GfxdDDLQueueEntry> currentQueue;
+    final List<GfxdDDLQueueEntry> hiveMetaEntryQueue = new ArrayList<GfxdDDLQueueEntry>();
     final ArrayList<GemFireContainer> uninitializedContainers =
         new ArrayList<GemFireContainer>();
     final LinkedHashSet<GemFireContainer> uninitializedTables =
@@ -1121,8 +1126,11 @@ public final class FabricDatabase implements ModuleControl,
           else {
             final DDLConflatable conflatable = (DDLConflatable)qVal;
             String schemaForTable = conflatable.getSchemaForTableNoThrow();
-            if (this.memStore.restrictedDDLStmtQueue() &&
-                !(schemaForTable != null && Misc.isSnappyHiveMetaTable(schemaForTable))) {
+            if (this.memStore.restrictedDDLStmtQueue()) {
+              logger.info("SKSK Going to add the entry : " + entry);
+              if ((schemaForTable != null && Misc.isSnappyHiveMetaTable(schemaForTable))) {
+                hiveMetaEntryQueue.add(entry);
+              }
               continue;
             }
             // check for any merged DDLs
@@ -1224,6 +1232,8 @@ public final class FabricDatabase implements ModuleControl,
 
       // before initializing regions and possibly waiting for other nodes, allow
       // any waiting GfxdDDLMessage to go through (#47873)
+
+
       this.memStore.setInitialDDLReplayPart1Done(true);
 
       // first populate with any other uninitialized containers (currently
@@ -1231,18 +1241,17 @@ public final class FabricDatabase implements ModuleControl,
       for (GemFireContainer container : this.memStore.getAllContainers()) {
         LocalRegion region = container.getRegion();
         if (region != null && !uninitializedTables.contains(container)
-            && !region.isInitialized() && !region.isDestroyed()) {
+                && !region.isInitialized() && !region.isDestroyed()) {
           uninitializedContainers.add(container);
         }
       }
       for (GemFireContainer container : uninitializedTables) {
         LocalRegion lr = container.getRegion();
         if (lr != null && !lr.isDestroyed() && !lr.isInitialized()
-            && this.memStore.findConglomerate(container.getId()) != null) {
+                && this.memStore.findConglomerate(container.getId()) != null) {
           uninitializedContainers.add(container);
         }
       }
-
       // take DD lock to flush any on-the-wire DDLs at this point else a DROP
       // INDEX, for example, may keep on waiting for node to initialize (#47873)
       // commenting out for snap-585
@@ -1326,6 +1335,7 @@ public final class FabricDatabase implements ModuleControl,
             .getWaitingThreadPool();
         List<Future<Boolean>> results = new ArrayList<>();
         List<GemFireContainer> failed = new ArrayList<>(1);
+
         for (GemFireContainer container : uninitializedContainers) {
           if (logger.infoEnabled() &&
               !Misc.isSnappyHiveMetaTable(container.getSchemaName())) {
@@ -1336,7 +1346,6 @@ public final class FabricDatabase implements ModuleControl,
           // check if one is done or goes into WAITING, then submit next
           final FabricService service = FabricServiceManager
               .currentFabricServiceInstance();
-          ReentrantLock lock = new ReentrantLock();
           Future<Boolean> f = execService.submit(() -> {
             boolean initialized = false;
             try {
@@ -1384,6 +1393,11 @@ public final class FabricDatabase implements ModuleControl,
           }
         }
 
+        // once we have tried creating all the tables, notify the locator
+        // so that it can go ahead creating hive metastore
+        this.memStore.getDistributionAdvisor().
+                distributeNodeStatus(true, true);
+
         int index = 0;
         for (Future<Boolean> f : results) {
           try {
@@ -1419,6 +1433,10 @@ public final class FabricDatabase implements ModuleControl,
             }
           }
         }
+      }
+
+      if (isLocator() && hiveMetaEntryQueue.size() > 0) {
+        createHiveMetaStoreInSeparatethread(cache, lastCurrentSchema, hiveMetaEntryQueue, logger);
       }
 
       ddlStmtQueue.clearQueue();
@@ -1498,10 +1516,108 @@ public final class FabricDatabase implements ModuleControl,
       // Setting this to false so that the waiting compactor thread finishes
       this.memStore.setInitialDDLReplayInProgress(false);
     }
-
     // restore the original schema if required
     if (!ArrayUtils.objectEquals(initSchema, lcc.getCurrentSchemaName())) {
       FabricDatabase.setupDefaultSchema(dd, lcc, tc, initSchema, true);
+    }
+  }
+
+
+  private void createHiveMetaStoreInSeparatethread(final GemFireCacheImpl cache
+          ,final String lastSchema, final List<GfxdDDLQueueEntry> hiveMetaEntryQueue,
+                                                   final LogWriter logger) {
+    cache.getDistributionManager()
+            .getFunctionExcecutor().submit(() -> {
+      // initialize all hive metastore
+      // If I am a locator, then wait till a server is up
+      // this is for backward compatibility with 1.0.1
+      try {
+        GemFireXDUtils.waitForNodeInitialization();
+        waitForAServerToJoin();
+        //---
+        EmbedConnection embedConnection = null;
+        embedConnection = GemFireXDUtils.createNewInternalConnection(
+                false);
+        final LanguageConnectionContext lcc = embedConnection.getLanguageConnection();
+        final GemFireTransaction tc = (GemFireTransaction)lcc
+                .getTransactionExecute();
+        boolean popContext = false;
+        try {
+          embedConnection.getTR().setupContextStack();
+          lcc.pushMe();
+          popContext = true;
+          assert ContextService
+                  .getContextOrNull(LanguageConnectionContext.CONTEXT_ID) != null;
+
+          lcc.setIsConnectionForRemote(true);
+          lcc.setIsConnectionForRemoteDDL(false);
+          lcc.setSkipLocks(true);
+          lcc.setQueryRoutingFlag(false);
+          tc.resetActiveTXState(false);
+
+          lcc.getDataDictionary().lockForReading(tc);
+
+          String lastSchema2 = lastSchema;
+          for (GfxdDDLQueueEntry entry : hiveMetaEntryQueue) {
+            Object qVal = entry.getValue();
+            logger.info("SKSK Going to execute  " + qVal);
+            final DDLConflatable conflatable = (DDLConflatable) qVal;
+            Statement stmt = embedConnection.createStatement();
+            String schema = executeDDL(conflatable, stmt, false,
+                    embedConnection, lastSchema2, lcc, tc, logger);
+            lastSchema2 = schema;
+          }
+        } catch (StandardException e) {
+          throw new GemFireXDRuntimeException(e);
+        } finally {
+          lcc.getDataDictionary().unlockAfterReading(tc);
+          if(popContext)
+            lcc.popMe();
+
+          if (embedConnection != null) {
+            embedConnection.getTR().restoreContextStack();
+          }
+          if (embedConnection != null) {
+            try {
+              embedConnection.close();
+            } catch (Exception ignore) {
+            }
+          }
+        }
+        logger.info("SKSK Finished initializing the hive metastore regions ");
+      } catch (Exception se) {
+        logger.info("SKSK Got exception se ", se);
+        throw new GemFireXDRuntimeException(se);
+      }
+    });
+  }
+
+
+  private boolean isLocator() {
+    return (this.memStore.getMyVMKind() == GemFireStore.VMKind.LOCATOR);
+  }
+
+  private void waitForAServerToJoin() {
+    boolean done = false;
+    while (!done) {
+      Misc.getCacheLogWriter().info("SKSK waiting for server ");
+      try {
+        Thread.sleep(200);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+      GfxdDistributionAdvisor advisor = GemFireXDUtils.getGfxdAdvisor();
+      Set<DistributedMember> stores = this.memStore.getDistributionAdvisor().
+              adviseDataStores(null);
+
+      for (DistributedMember m : stores) {
+        Misc.getCacheLogWriter().info("SKKS got server : " + m);
+        GfxdDistributionAdvisor.GfxdProfile profile = advisor
+                .getProfile((InternalDistributedMember) m);
+        if (profile != null && profile.idDDLReplayDone()) {
+          done = true;
+        }
+      }
     }
   }
 
@@ -1716,13 +1832,14 @@ public final class FabricDatabase implements ModuleControl,
     if (currentSchema == null) {
       currentSchema = SchemaDescriptor.STD_DEFAULT_SCHEMA_NAME;
     }
+    logger.info("SKSK The current " + currentSchema + " last schema " + lastCurrentSchema);
     if (!lastCurrentSchema.equals(currentSchema)) {
       // If the ddl replay for the hive meta tables is in progress
       // whatever may be the logging level, just log the warning messages.
       // This is because hive meta store table replay generates hundreds of
       // line of logs which are of no use. Once the hive meta tables are
       // done, restore the logging level.
-      if (previousLevel == Integer.MAX_VALUE &&
+      /*if (previousLevel == Integer.MAX_VALUE &&
           Misc.isSnappyHiveMetaTable(currentSchema)) {
         GFToSlf4jBridge bridgeLogger = ((GFToSlf4jBridge)logger);
         int currentLevel = bridgeLogger.getLevel();
@@ -1736,11 +1853,12 @@ public final class FabricDatabase implements ModuleControl,
           GFToSlf4jBridge bridgeLogger = ((GFToSlf4jBridge)logger);
           bridgeLogger.setLevel(previousLevel);
           previousLevel = Integer.MAX_VALUE;
-      }
+      }*/
       // set the default schema masquerading as the user
       // temporarily for this DDL
       SanityManager.DEBUG_PRINT("info:" + GfxdConstants.TRACE_DDLREPLAY,
           "Setting default schema to " + currentSchema);
+      logger.info("SKSK going to setup default schema " + currentSchema);
       FabricDatabase.setupDefaultSchema(dd, lcc, tc,
           currentSchema, true);
       lastCurrentSchema = currentSchema;
@@ -1752,6 +1870,7 @@ public final class FabricDatabase implements ModuleControl,
             skipRegionInitialization);
       }
     }
+    logger.info("SKSK going to execute ..sql lcc " + lcc);
     try {
       try {
         lcc.setContextObject(conflatable.getAdditionalArgs());
@@ -1760,7 +1879,9 @@ public final class FabricDatabase implements ModuleControl,
         lcc.setDefaultPersistent(conflatable.defaultPersistent());
         lcc.setPersistMetaStoreInDataDictionary(
             conflatable.persistMetaStoreInDataDictionary());
+
         tc.setDDLId(conflatable.getId());
+        logger.info("SKSK going to execute the sql " + sqlText);
         stmt.execute(sqlText);
         GfxdMessage.logWarnings(stmt, sqlText,
             "FabricDatabase: SQL warning in initial replay of DDL: ", logger);
@@ -1801,8 +1922,8 @@ public final class FabricDatabase implements ModuleControl,
         }
       } else {
         // TODO: use i18n message string
-        if (logger.severeEnabled()) {
-          logger.severe("FabricDatabase: failed initial replay "
+        if (true) {
+          logger.info("FabricDatabase: failed initial replay "
               + "for DDL [" + sqlText + "] due to exception"
               + (ex instanceof SQLException ? " with severity="
                 + ((SQLException)ex).getErrorCode() : ""), ex);

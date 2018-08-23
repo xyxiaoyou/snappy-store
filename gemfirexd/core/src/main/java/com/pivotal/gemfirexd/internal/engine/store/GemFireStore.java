@@ -560,7 +560,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
     if (GemFireXDUtils.TraceConglom) {
       SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_CONGLOM, String.format(
           "GemFireStore#addConglomerate: adding conglomerate [%s] "
-              + "with ID [%s]", conglom, id));
+              + "with ID [%s]", conglom, id), new Throwable("SKSKSK"));
     }
     final MemConglomerate oldConglom = this.conglomerates.putIfAbsent(id,
         conglom);
@@ -579,7 +579,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
         if (GemFireXDUtils.TraceConglom) {
           SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_CONGLOM, String.format(
               "GemFireStore#addConglomerate: adding conglomerate [%s] "
-                  + "with ID [%s] to uninitialized list", conglom, id));
+                  + "with ID [%s] to uninitialized list", conglom, id), new Throwable("SKSK"));
         }
         synchronized (this.uninitializedConglomerates) {
           this.uninitializedConglomerates.put(id, conglom);
@@ -1833,7 +1833,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
             }
           }
           // if bucket was persisted then it can be hosting else not
-          for (final BucketRegion breg : ds.getAllLocalBucketRegions()) {
+          /*for (final BucketRegion breg : ds.getAllLocalBucketRegions()) {
             if (!((isLeaderPersistent || isShadowPRPersistent) && !breg
                 .getBucketAdvisor().isPrimary())) {
               GemFireContainer gfcontainer = (GemFireContainer)pr.getUserAttribute();
@@ -1843,12 +1843,12 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
                     + leaderRegion);
               }
             }
-          }
+          }*/
         }
       }
     }
     // update profiles for all bucket/replicated regions to initialized
-    getDistributionAdvisor().distributeNodeStatus(true);
+    getDistributionAdvisor().distributeNodeStatus(true, false);
     // Update profiles of all DistributedRegions indicating member has
     // initialized and cache ops can be routed.
     // For PRs initiate startup redundancy recovery.

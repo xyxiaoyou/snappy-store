@@ -458,13 +458,14 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
    * Distribute the initialized or uninitialized status of this node to other
    * VMs and also update the information in this VM.
    */
-  public final void distributeNodeStatus(boolean initialized) {
+  public final void distributeNodeStatus(boolean initialized, boolean ddlReplayDone) {
     // first update the information in this VM
     final InternalDistributedMember myId;
     synchronized (this) {
       this.myProfile = (GfxdProfile)createProfile();
       myId = this.myProfile.getDistributedMember();
       this.myProfile.setInitialized(initialized);
+      this.myProfile.setDDLReplayDone(ddlReplayDone);
     }
     final GemFireCacheImpl cache = Misc.getGemFireCache();
     if (DistributionManager.VERBOSE || GemFireXDUtils.TraceQuery
@@ -1365,6 +1366,8 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
      */
     private String sparkDriverUrl;
 
+    private boolean ddlReplayDone;
+
     private AtomicInteger relationDestroyVersion;
 
     /** for deserialization */
@@ -1382,6 +1385,7 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
       setHasSparkURL(hasURL);
       initFlags();
       relationDestroyVersion = new AtomicInteger(0);
+      ddlReplayDone = false;
     }
 
     private void initFlags() {
@@ -1431,6 +1435,13 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
       }
     }
 
+    public boolean idDDLReplayDone () {
+      return ddlReplayDone;
+    }
+
+    public void setDDLReplayDone(boolean done) {
+      this.ddlReplayDone = done;
+    }
     public final boolean hasSparkURL() {
       return (this.flags & F_HAS_SPARK_DRIVERURL) != 0;
     }
@@ -1540,6 +1551,7 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
         DataSerializer.writeString(sparkDriverUrl, out);
       }
       DataSerializer.writeInteger(relationDestroyVersion.get(), out);
+      DataSerializer.writeBoolean(ddlReplayDone, out);
     }
 
     @Override
@@ -1572,6 +1584,7 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
         this.sparkDriverUrl = DataSerializer.readString(in);
       }
       relationDestroyVersion = new AtomicInteger(DataSerializer.readInteger(in));
+      ddlReplayDone = DataSerializer.readBoolean(in);
     }
 
     @Override

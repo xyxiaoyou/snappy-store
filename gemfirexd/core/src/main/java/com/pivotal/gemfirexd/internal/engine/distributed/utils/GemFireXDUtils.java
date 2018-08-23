@@ -3266,7 +3266,7 @@ public final class GemFireXDUtils {
   }
 
   public static void initFlags() {
-    TraceQuery = SanityManager.TRACE_ON(GfxdConstants.TRACE_QUERYDISTRIB);
+    TraceQuery = true;//SanityManager.TRACE_ON(GfxdConstants.TRACE_QUERYDISTRIB);
     TraceIndex = SanityManager.TRACE_ON(GfxdConstants.TRACE_INDEX);
     TraceLock = SanityManager.TRACE_ON(GfxdConstants.TRACE_LOCK);
     TraceTran = SanityManager.TRACE_ON(GfxdConstants.TRACE_TRAN);
