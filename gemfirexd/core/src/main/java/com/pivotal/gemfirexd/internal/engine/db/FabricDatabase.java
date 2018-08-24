@@ -52,7 +52,6 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.locks.ReentrantLock;
 
 import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.LogWriter;
@@ -63,7 +62,6 @@ import com.gemstone.gemfire.distributed.internal.InternalDistributedSystem;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.internal.ClassPathLoader;
 import com.gemstone.gemfire.internal.GFToSlf4jBridge;
-import com.gemstone.gemfire.internal.LogWriterImpl;
 import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
@@ -1396,7 +1394,7 @@ public final class FabricDatabase implements ModuleControl,
         // once we have tried creating all the tables, notify the locator
         // so that it can go ahead creating hive metastore
         this.memStore.getDistributionAdvisor().
-                distributeNodeStatus(true, true);
+                distributeNodeStatus(false, true);
 
         int index = 0;
         for (Future<Boolean> f : results) {
@@ -1435,10 +1433,6 @@ public final class FabricDatabase implements ModuleControl,
         }
       }
 
-      if (isLocator() && hiveMetaEntryQueue.size() > 0) {
-        createHiveMetaStoreInSeparatethread(cache, lastCurrentSchema, hiveMetaEntryQueue, logger);
-      }
-
       ddlStmtQueue.clearQueue();
       String currentSchema = lcc.getCurrentSchemaName();
       if (currentSchema == null) {
@@ -1466,6 +1460,10 @@ public final class FabricDatabase implements ModuleControl,
       if (!lastCurrentSchema.equals(currentSchema)) {
         // restore the default schema
         FabricDatabase.setupDefaultSchema(dd, lcc, tc, currentSchema, true);
+      }
+
+      if (isLocator() && hiveMetaEntryQueue.size() > 0) {
+        createHiveMetaStoreInSeparatethread(cache, lastCurrentSchema, hiveMetaEntryQueue, logger);
       }
 
       if (!this.memStore.isHadoopGfxdLonerMode()) {
@@ -1574,6 +1572,8 @@ public final class FabricDatabase implements ModuleControl,
           if(popContext)
             lcc.popMe();
 
+          lcc.setIsConnectionForRemote(false);
+          lcc.setSkipLocks(false);
           if (embedConnection != null) {
             embedConnection.getTR().restoreContextStack();
           }
@@ -1583,6 +1583,7 @@ public final class FabricDatabase implements ModuleControl,
             } catch (Exception ignore) {
             }
           }
+
         }
         logger.info("SKSK Finished initializing the hive metastore regions ");
       } catch (Exception se) {
@@ -1611,10 +1612,11 @@ public final class FabricDatabase implements ModuleControl,
               adviseDataStores(null);
 
       for (DistributedMember m : stores) {
-        Misc.getCacheLogWriter().info("SKKS got server : " + m);
+
         GfxdDistributionAdvisor.GfxdProfile profile = advisor
                 .getProfile((InternalDistributedMember) m);
-        if (profile != null && profile.idDDLReplayDone()) {
+        Misc.getCacheLogWriter().info("SKKS got server : " + m + " profile " + profile);
+        if (profile != null && profile.isDDLReplayDone()) {
           done = true;
         }
       }

@@ -363,8 +363,12 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
     // if only the initialized status has changed then skip doing anything else
     if (oldProfile != null && oldProfile instanceof GfxdProfile
         && newProfile instanceof GfxdProfile) {
-      return ((GfxdProfile)oldProfile).getInitialized() ==
-        ((GfxdProfile)newProfile).getInitialized();
+      GfxdProfile oldGfxdProfile = (GfxdProfile)oldProfile;
+      GfxdProfile newGfxdProfile = (GfxdProfile)newProfile;
+      getLogWriter().convertToLogWriter().info("SKSK oldProfile : " + oldGfxdProfile +
+              " newProfile : " + newGfxdProfile);
+      return oldGfxdProfile.getInitialized() == newGfxdProfile.getInitialized()
+          || newGfxdProfile.isDDLReplayDone();
     }
     return true;
   }
@@ -1435,7 +1439,7 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
       }
     }
 
-    public boolean idDDLReplayDone () {
+    public boolean isDDLReplayDone() {
       return ddlReplayDone;
     }
 
@@ -1540,6 +1544,9 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
       }
       out.writeByte(flgs);
       out.writeBoolean(this.initialized);
+      if(this.initialized) {
+        Misc.getCacheLogWriter().info("SKSK The initialized flag is true ", new Throwable("SKSK"));
+      }
       // write the locale
       if (!isPre12Version) {
         DataSerializer.writeString(dbLocaleStr, out);
@@ -1602,6 +1609,7 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
       sb.append("; initialized=").append(this.initialized);
       sb.append("; dbLocaleStr=").append(this.dbLocaleStr);
       sb.append("; numProcessors=").append(this.numProcessors);
+      sb.append("; ddlReplayDone=").append(this.ddlReplayDone);
     }
   }
 

@@ -3270,7 +3270,7 @@ public final class GemFireXDUtils {
     TraceIndex = SanityManager.TRACE_ON(GfxdConstants.TRACE_INDEX);
     TraceLock = SanityManager.TRACE_ON(GfxdConstants.TRACE_LOCK);
     TraceTran = SanityManager.TRACE_ON(GfxdConstants.TRACE_TRAN);
-    TraceTranVerbose = SanityManager.TRACE_ON(GfxdConstants.TRACE_TRAN_VERBOSE);
+    TraceTranVerbose = true;//SanityManager.TRACE_ON(GfxdConstants.TRACE_TRAN_VERBOSE);
     TraceConglomRead = SanityManager.TRACE_ON(GfxdConstants.TRACE_CONGLOM_READ);
     TraceConglomUpdate = TraceConglomRead
         || SanityManager.TRACE_ON(GfxdConstants.TRACE_CONGLOM_UPDATE);

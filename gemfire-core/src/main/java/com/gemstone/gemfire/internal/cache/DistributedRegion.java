@@ -3462,12 +3462,13 @@ public class DistributedRegion extends LocalRegion implements
               entry.setLocalInvalid();
               entry.setLastModified(dm, mapEntry.getLastModified());
             }
+            /*
             if (keyRequiresRegionContext) {
               entry.key = ((KeyWithRegionContext)key)
                   .beforeSerializationWithValue(entry.isInvalid()
                       || entry.isLocalInvalid() || entry.isTombstone());
             }
-  
+            */
             chunkEntries.add(entry);
             currentChunkSize += entry.calcSerializedSize(countingStream);
           }
