@@ -637,7 +637,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
    * @param transformation algorithm to be used, default is AES, if null is passed for arg
    * @param keySize encryption key size, default is 128 if a value <=0 is passed for this arg
    * @param encryptedPwdRs
-   * @throws Exception
+   * @throws SQLException
    */
   public static void ENCRYPT_PASSWORD(String userID, String password,
       String transformation, int keySize, ResultSet[] encryptedPwdRs)
