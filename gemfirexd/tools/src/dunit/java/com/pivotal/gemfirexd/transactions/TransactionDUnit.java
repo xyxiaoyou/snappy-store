@@ -90,6 +90,7 @@ public class TransactionDUnit extends DistributedSQLTestBase {
   public void beforeClass() throws Exception {
     super.beforeClass();
     super.baseShutDownAll();
+    deleteAllOplogFiles();
     startVMs(1, 3);
   }
 
