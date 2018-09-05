@@ -118,6 +118,9 @@ public class ClientDriver extends ClientDRDADriver {
   @Override
   protected java.sql.Connection createThriftConnection(String server, int port,
       java.util.Properties props) throws SQLException {
+    if (!props.containsKey("snappydata.sql.disableHashJoin")) {
+      props.setProperty("snappydata.sql.disableHashJoin", "true");
+    }
     return ClientConnection.create(server, port, props,
         DriverManager.getLogWriter());
   }
