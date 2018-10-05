@@ -17,6 +17,9 @@
 
 package com.pivotal.gemfirexd.internal.engine.ui;
 
+import java.util.List;
+import java.util.Map;
+
 public class SnappyExternalTableStats {
   private String tableName;
   private String tableType;
@@ -24,6 +27,8 @@ public class SnappyExternalTableStats {
   private String dataSourcePath;
   private String driverClass;
   private Object externalStore;
+
+  private List<Map<String, Object>> schema;
 
   public SnappyExternalTableStats(String tableName, String tableType,
       String provider, Object externalStore, String dataSourcePath, String driverClass) {
@@ -58,5 +63,13 @@ public class SnappyExternalTableStats {
 
   public String getDriverClass() {
     return driverClass;
+  }
+
+  public List<Map<String, Object>> getSchema() {
+    return schema;
+  }
+
+  public void setSchema(List<Map<String, Object>> schema) {
+    this.schema = schema;
   }
 }

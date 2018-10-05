@@ -20,6 +20,8 @@ package com.pivotal.gemfirexd.internal.engine.ui;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 
 import com.gemstone.gemfire.DataSerializer;
 import com.gemstone.gemfire.internal.VersionedDataSerializable;
@@ -34,6 +36,8 @@ public class SnappyRegionStats implements VersionedDataSerializable {
   private long totalSize = 0;
   private boolean isReplicatedTable = false;
   private int bucketCount;
+
+  private List<Map<String, Object>> schema;
 
   public SnappyRegionStats() {
   }
@@ -109,6 +113,14 @@ public class SnappyRegionStats implements VersionedDataSerializable {
 
   public void setBucketCount(int bucketCount) {
     this.bucketCount = bucketCount;
+  }
+
+  public List<Map<String, Object>> getSchema() {
+    return schema;
+  }
+
+  public void setSchema(List<Map<String, Object>> schema) {
+    this.schema = schema;
   }
 
   public SnappyRegionStats getCombinedStats(SnappyRegionStats stats) {
