@@ -52,10 +52,12 @@ import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserver;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserverAdapter;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserverHolder;
 import com.pivotal.gemfirexd.internal.engine.Misc;
+import com.pivotal.gemfirexd.internal.engine.access.index.GfxdIndexManager;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdConnectionHolder;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdConnectionWrapper;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
+import com.pivotal.gemfirexd.internal.engine.store.ServerGroupUtils;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedConnection;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedPreparedStatement;
@@ -160,6 +162,65 @@ public class TransactionDUnit extends DistributedSQLTestBase {
       txMgr.setObserver(null);
       GemFireXDQueryObserverHolder.clearInstance();
     }
+  }
+
+  public void testTransactionalInsertOnReplicatedTable_JnJ() throws Exception {
+    java.sql.Connection conn = TestUtil.jdbcConn;
+    conn.setAutoCommit(false);
+    Statement st = conn.createStatement();
+    st.execute("Create table app.t1 (c1 int not null , c2 int not null," +
+        " c3 int not null , c4 int not null, "
+        + "primary key(c4)) replicate" + getSuffix());
+    st.execute("create index localindex on app.t1(c3)");
+    st.execute("create unique index uniqindex on app.t1(c1)");
+    conn.commit();
+    conn.setTransactionIsolation(getIsolationLevel());
+    ResultSet rs = null;
+    st.execute("insert into app.t1 values (10, 10, 10, 10)");
+    st.execute("insert into app.t1 values (20, 20, 20, 20)");
+    conn.commit();
+    st.execute("select * from app.t1");
+    st.execute("delete from app.t1 where c4 = 10");
+    st.execute("insert into app.t1 values (10, 10, 10, 10)");
+    conn.rollback();
+    st.execute("delete from app.t1 where c4 = 10");
+    st.execute("insert into app.t1 values (10, 10, 10, 10)");
+    conn.commit();
+    rs = st.executeQuery("select count(*) from app.t1");
+    assertTrue(rs.next());
+    assertEquals(rs.getInt(1), 2);
+    assertFalse(rs.next());
+    conn.commit();
+    conn.close();
+  }
+
+  public void testTransactionalScanWhenUpdateOnNonUniqueIndexedColumn() throws Exception {
+    java.sql.Connection conn = TestUtil.jdbcConn;
+    conn.setAutoCommit(false);
+    Statement st = conn.createStatement();
+    st.execute("Create table app.t1 (c1 int not null , c2 int not null," +
+        " c3 int not null , c4 int not null, "
+        + "primary key(c4)) replicate" + getSuffix());
+    st.execute("create index localindex on app.t1(c3)");
+    st.execute("create unique index uniqindex on app.t1(c1)");
+    conn.commit();
+    conn.setTransactionIsolation(getIsolationLevel());
+    ResultSet rs = null;
+    st.execute("insert into app.t1 values (10, 10, 10, 10)");
+    st.execute("insert into app.t1 values (20, 20, 20, 20)");
+    conn.commit();
+    st.execute("update app.t1 set c3=50 where c4=10");
+    st.execute("select c3 from app.t1 --GEMFIREXD-PROPERTIES index=uniqindex\n where c1 = 10");
+    rs = st.getResultSet();
+    assertTrue(rs.next());
+    assertEquals(rs.getInt(1), 50);
+    conn.commit();
+    st.execute("select c3 from app.t1 where c1 = 10");
+    rs = st.getResultSet();
+    assertTrue(rs.next());
+    assertEquals(rs.getInt(1), 50);
+    conn.commit();
+    conn.close();
   }
 
   public void testStateFlushWithTXHA() throws Exception {

@@ -426,6 +426,13 @@ public final class GfxdTXStateProxy extends TXStateProxy {
                 oldRowLocation /* replacement */, false, null,
                 false /* isPutDML */);
 
+        // For SNAP-2620. Better would be to clean the wrapper itself when such scenario arises
+        // Check SNAP-2620 commented out code in SortedMao2IndexInsertOperation
+        if (!deleted && indexContainer.isUniqueIndex()) {
+          deleted = SortedMap2IndexInsertOperation.doMe(null, null, indexContainer,
+              indexKey, (RowLocation) wrapper.getUnderlyingRegionEntry(), true,
+              null, false);
+        }
         if (GemFireXDUtils.TraceIndex | GemFireXDUtils.TraceQuery) {
           GfxdIndexManager.traceIndex("SortedMap2Index cleanup: "
               + "rolled back key=%s to value=(%s) in %s", indexKey,
