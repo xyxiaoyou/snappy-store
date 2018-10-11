@@ -499,12 +499,13 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
     }
 
     if (oldValue instanceof  WrapperRowLocationForTxn && insertedValue instanceof  WrapperRowLocationForTxn
-        ) {
-      WrapperRowLocationForTxn e1 = (WrapperRowLocationForTxn) oldValue;
+        && oldValue.equals(insertedValue)) {
+      /*WrapperRowLocationForTxn e1 = (WrapperRowLocationForTxn) oldValue;
       WrapperRowLocationForTxn e2 = (WrapperRowLocationForTxn) insertedValue;
       if (e1.getTXId().equals(e2.getTXId()) && e1.getRegionEntry() == e2.getRegionEntry()) {
         return insertedValue;
-      }
+      } */
+      return  insertedValue;
     }
     RowLocation[] newValues = new RowLocation[2];
     newValues[0] = oldValue;
@@ -528,6 +529,7 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
           numExistingValues + 1, 0.60f,
           ObjectEqualsHashingStrategy.getInstance(), container
               .getBaseContainer().getRegion().getRegionPerfStats());
+      boolean skipIfSameTxEntry = false;
       for (int i = 0; i < numExistingValues; i++) {
         // should not happen when a duplicate entry from both GII and create
         // will be converted to an update by GFE and handled properly by
@@ -542,10 +544,25 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
               GemFireXDUtils.newDuplicateEntryViolation(
                   container.getQualifiedTableName(), existingValues[i],
                   insertedValue));
+        } else {
+          skipIfSameTxEntry = insertedValue instanceof WrapperRowLocationForTxn &&
+              existingValues[i] instanceof WrapperRowLocationForTxn &&
+              insertedValue.equals(existingValues[i]);
+          /*
+          if (insertedValue instanceof WrapperRowLocationForTxn) {
+            if (existingValues[i] instanceof WrapperRowLocationForTxn) {
+              skipIfSameTxEntry = ((WrapperRowLocationForTxn)existingValues[i]).getTXId().equals(
+                  ((WrapperRowLocationForTxn)insertedValue).getTXId()) &&
+                  ((WrapperRowLocationForTxn)existingValues[i]).getRegionEntry() ==
+                      ((WrapperRowLocationForTxn)insertedValue).getRegionEntry();
+            }
+          } */
         }
         set.add(existingValues[i]);
       }
-      set.add(insertedValue);
+      if (!skipIfSameTxEntry) {
+        set.add(insertedValue);
+      }
       return set;
     }
     else {
@@ -565,15 +582,18 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
                   container.getQualifiedTableName(), existingValues[i],
                   insertedValue));
         } else {
-          boolean isTxSame = false;
-          if (insertedValue instanceof WrapperRowLocationForTxn ) {
+          boolean isTxSame = insertedValue instanceof WrapperRowLocationForTxn &&
+              existingValues[i] instanceof  WrapperRowLocationForTxn
+              && insertedValue.equals(existingValues[i]);
+
+          /*if (insertedValue instanceof WrapperRowLocationForTxn ) {
             if (existingValues[i] instanceof  WrapperRowLocationForTxn) {
               isTxSame = ((WrapperRowLocationForTxn)existingValues[i]).getTXId().equals(
                   ((WrapperRowLocationForTxn)insertedValue).getTXId()) &&
                   ((WrapperRowLocationForTxn)existingValues[i]).getRegionEntry() ==
                       ((WrapperRowLocationForTxn)insertedValue).getRegionEntry();
             }
-          }
+          } */
           if (isTxSame) {
             return  existingValues;
           }
@@ -597,19 +617,24 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
     final ConcurrentTHashSet<Object> set =
         (ConcurrentTHashSet<Object>)oldValue;
 
+
     Object oldRowLocObj;
     if ((oldRowLocObj = set.addKey(insertedValue)) == null || isPutDML) {
       return set;
     }
     assert oldRowLocObj.equals(insertedValue);
-    // should not happen when a duplicate entry from both GII and create
-    // will be converted to an update by GFE and handled properly by
-    // GfxdIndexManager#onEvent();
-    // can happen in case update is fired on index column updating to the
-    // old value itself
-    throw new IndexMaintenanceException(
-        GemFireXDUtils.newDuplicateEntryViolation(
-            container.getQualifiedTableName(), oldRowLocObj, insertedValue));
+    if (!(oldRowLocObj instanceof WrapperRowLocationForTxn && insertedValue instanceof  WrapperRowLocationForTxn)) {
+      // should not happen when a duplicate entry from both GII and create
+      // will be converted to an update by GFE and handled properly by
+      // GfxdIndexManager#onEvent();
+      // can happen in case update is fired on index column updating to the
+      // old value itself
+      throw new IndexMaintenanceException(
+          GemFireXDUtils.newDuplicateEntryViolation(
+              container.getQualifiedTableName(), oldRowLocObj, insertedValue));
+    } else {
+      return set;
+    }
   }
 
   static final class ReplaceValue extends UpdateReplacementValue {
@@ -685,28 +710,45 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
       // GfxdIndexManager#onEvent();
       // can happen in case update is fired on index column updating to the
       // old value itself
+
+      /*
       boolean isTxSame = false;
       if (insertedValue instanceof WrapperRowLocationForTxn ) {
        /* if (existingValue instanceof  RegionEntry) {
           isTxSame = ((WrapperRowLocationForTxn)insertedValue).getRegionEntry() == existingValue;
-        } else*/ if (existingValue instanceof  WrapperRowLocationForTxn) {
+        } else*/ /* if (existingValue instanceof  WrapperRowLocationForTxn) {
           isTxSame = ((WrapperRowLocationForTxn)existingValue).getTXId().equals(
               ((WrapperRowLocationForTxn)insertedValue).getTXId()) &&
               ((WrapperRowLocationForTxn)existingValue).getRegionEntry() ==
                   ((WrapperRowLocationForTxn)insertedValue).getRegionEntry();
         }
-      }
+      } */
+      boolean isTxSame = insertedValue instanceof WrapperRowLocationForTxn
+          && existingValue instanceof  WrapperRowLocationForTxn &&
+          insertedValue.equals(existingValue);
 
-      if (insertedValue != existingValue && !isTxSame) {
-        if (oldValue != existingValue) {
-          try {
-            newValues[++index] = existingValue;
-          } catch (ArrayIndexOutOfBoundsException ae) {
-            // throw back a proper exception for the case when value to be
-            // replaced is not found
-            throw new IndexMaintenanceException(
-                GemFireXDUtils.newOldValueNotFoundException(key, oldValue,
-                    existingValues, container));
+
+
+
+      if (insertedValue != existingValue ) {
+        if (isTxSame) {
+          //do not add this value as we wil add inserted value to 0 position
+          foundOldValue = true;
+        } else if (oldValue != existingValue) {
+          if (oldValue instanceof TXEntryState &&
+              ((TXEntryState)oldValue).getOriginalValue() == existingValue) {
+            //do not add this value as we wil add inserted value to 0 position
+            foundOldValue = true;
+          } else {
+            try {
+              newValues[++index] = existingValue;
+            } catch (ArrayIndexOutOfBoundsException ae) {
+              // throw back a proper exception for the case when value to be
+              // replaced is not found
+              throw new IndexMaintenanceException(
+                  GemFireXDUtils.newOldValueNotFoundException(key, oldValue,
+                      existingValues, container));
+            }
           }
         }
         else if (!foundOldValue) {
@@ -746,10 +788,16 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
     final ConcurrentTHashSet<Object> set =
         (ConcurrentTHashSet<Object>)existingValue;
 
+    // TODO: Asif : How to conflate two WrapperRowLocationTxn? May be that situation does not arise?
     if (set.replace(oldValue, insertedValue)) {
       return set;
     }
     else {
+      if (oldValue instanceof TXEntryState ) {
+        if (set.replace(((TXEntryState)oldValue).getOriginalValue(), insertedValue)) {
+          return set;
+        }
+      }
       // throw back a proper exception for the case when value to be
       // replaced is not found
       throw new IndexMaintenanceException(
