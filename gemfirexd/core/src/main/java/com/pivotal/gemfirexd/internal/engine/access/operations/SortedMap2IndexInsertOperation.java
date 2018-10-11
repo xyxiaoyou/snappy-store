@@ -22,13 +22,7 @@ import java.io.IOException;
 import com.gemstone.gemfire.cache.ConflictException;
 import com.gemstone.gemfire.cache.query.IndexMaintenanceException;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
-import com.gemstone.gemfire.internal.cache.AbstractRegionEntry;
-import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
-import com.gemstone.gemfire.internal.cache.ObjectEqualsHashingStrategy;
-import com.gemstone.gemfire.internal.cache.OffHeapRegionEntry;
-import com.gemstone.gemfire.internal.cache.TXEntryState;
-import com.gemstone.gemfire.internal.cache.TXId;
-import com.gemstone.gemfire.internal.cache.TXStateInterface;
+import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.cache.locks.ExclusiveSharedSynchronizer;
 import com.gemstone.gemfire.internal.cache.locks.LockMode;
 import com.gemstone.gemfire.internal.cache.locks.LockingPolicy;
@@ -408,11 +402,23 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
         return null;
       }
       else if ((oldValueClass = oldValue.getClass()) == RowLocation[].class) {
-        return insertToRowLocationArray(container, key, value,
-            (RowLocation[])oldValue, this.isPutDML);
+        RowLocation[] oldArr = (RowLocation[]) oldValue;
+        if (oldArr.length == 1 ) {
+          return insertToRowLocation(container, key, value,
+              oldArr[0], this.isPutDML);
+        } else {
+          return insertToRowLocationArray(container, key, value,
+              (RowLocation[])oldValue, this.isPutDML);
+        }
       }
       else if (oldValueClass == ConcurrentTHashSet.class) {
-        return insertToHashSet(container, key, value, oldValue, this.isPutDML);
+        ConcurrentTHashSet<Object> x = (ConcurrentTHashSet<Object>) oldValue;
+        if (x.size() == 1) {
+          return insertToRowLocation(container, key, value,
+              (RowLocation)x.iterator().next(), this.isPutDML);
+        } else {
+          return insertToHashSet(container, key, value, oldValue, this.isPutDML);
+        }
       }
       else if (RowLocation.class.isAssignableFrom(oldValueClass)) {
         return insertToRowLocation(container, key, value,
@@ -492,6 +498,14 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
               container.getQualifiedTableName(), oldValue, insertedValue));
     }
 
+    if (oldValue instanceof  WrapperRowLocationForTxn && insertedValue instanceof  WrapperRowLocationForTxn
+        ) {
+      WrapperRowLocationForTxn e1 = (WrapperRowLocationForTxn) oldValue;
+      WrapperRowLocationForTxn e2 = (WrapperRowLocationForTxn) insertedValue;
+      if (e1.getTXId().equals(e2.getTXId()) && e1.getRegionEntry() == e2.getRegionEntry()) {
+        return insertedValue;
+      }
+    }
     RowLocation[] newValues = new RowLocation[2];
     newValues[0] = oldValue;
     newValues[1] = insertedValue;
@@ -550,6 +564,19 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
               GemFireXDUtils.newDuplicateEntryViolation(
                   container.getQualifiedTableName(), existingValues[i],
                   insertedValue));
+        } else {
+          boolean isTxSame = false;
+          if (insertedValue instanceof WrapperRowLocationForTxn ) {
+            if (existingValues[i] instanceof  WrapperRowLocationForTxn) {
+              isTxSame = ((WrapperRowLocationForTxn)existingValues[i]).getTXId().equals(
+                  ((WrapperRowLocationForTxn)insertedValue).getTXId()) &&
+                  ((WrapperRowLocationForTxn)existingValues[i]).getRegionEntry() ==
+                      ((WrapperRowLocationForTxn)insertedValue).getRegionEntry();
+            }
+          }
+          if (isTxSame) {
+            return  existingValues;
+          }
         }
         newValues[i] = existingValues[i];
       }
@@ -603,10 +630,19 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
       }
       else if ((mapValueClass = existingValue.getClass()) ==
           RowLocation[].class) {
-        return replaceRowLocationArray(container, key, oldValue,
-            (RowLocation)newValue, (RowLocation[])existingValue, this.isPutDML);
+        RowLocation[] arr = (RowLocation[])existingValue;
+        if (arr.length == 1) {
+           return newValue;
+        } else {
+          return replaceRowLocationArray(container, key, oldValue,
+              (RowLocation)newValue, (RowLocation[])existingValue, this.isPutDML);
+        }
       }
       else if (mapValueClass == ConcurrentTHashSet.class) {
+        ConcurrentTHashSet<Object> x = (ConcurrentTHashSet<Object>)existingValue;
+        if (x.size() == 1) {
+          return newValue;
+        }
         return replaceInHashSet(container, key, oldValue,
             newValue, existingValue);
       }
@@ -649,7 +685,19 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
       // GfxdIndexManager#onEvent();
       // can happen in case update is fired on index column updating to the
       // old value itself
-      if (insertedValue != existingValue) {
+      boolean isTxSame = false;
+      if (insertedValue instanceof WrapperRowLocationForTxn ) {
+       /* if (existingValue instanceof  RegionEntry) {
+          isTxSame = ((WrapperRowLocationForTxn)insertedValue).getRegionEntry() == existingValue;
+        } else*/ if (existingValue instanceof  WrapperRowLocationForTxn) {
+          isTxSame = ((WrapperRowLocationForTxn)existingValue).getTXId().equals(
+              ((WrapperRowLocationForTxn)insertedValue).getTXId()) &&
+              ((WrapperRowLocationForTxn)existingValue).getRegionEntry() ==
+                  ((WrapperRowLocationForTxn)insertedValue).getRegionEntry();
+        }
+      }
+
+      if (insertedValue != existingValue && !isTxSame) {
         if (oldValue != existingValue) {
           try {
             newValues[++index] = existingValue;
