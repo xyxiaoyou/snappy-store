@@ -164,7 +164,7 @@ public class TransactionDUnit extends DistributedSQLTestBase {
     }
   }
 
-  public void testTransactionalInsertOnReplicatedTable_JnJ() throws Exception {
+  public void testTransactionalInsertDeleteOnReplicatedTable() throws Exception {
     java.sql.Connection conn = TestUtil.jdbcConn;
     conn.setAutoCommit(false);
     Statement st = conn.createStatement();
