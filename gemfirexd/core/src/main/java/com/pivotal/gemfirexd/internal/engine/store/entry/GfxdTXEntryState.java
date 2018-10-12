@@ -706,7 +706,8 @@ public final class GfxdTXEntryState extends TXEntryState implements
     }
     boolean isOpDestroy = isOpDestroy();
 
-    assert isOpPut() || isOpDestroy;
+    // TODO This has to be commented out. Check sie effects.
+    // assert isOpPut() || isOpDestroy;
 
     final TXRegionState txrs = this.txRegionState;
     txrs.lock();

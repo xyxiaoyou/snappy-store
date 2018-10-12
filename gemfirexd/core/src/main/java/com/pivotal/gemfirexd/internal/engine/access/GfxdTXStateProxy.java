@@ -29,17 +29,7 @@ import com.gemstone.gemfire.cache.Operation;
 import com.gemstone.gemfire.cache.TransactionFlag;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
-import com.gemstone.gemfire.internal.cache.Checkpoint;
-import com.gemstone.gemfire.internal.cache.THashMapWithKeyPair;
-import com.gemstone.gemfire.internal.cache.TObjectObjectObjectProcedure;
-import com.gemstone.gemfire.internal.cache.TXEntryState;
-import com.gemstone.gemfire.internal.cache.TXId;
-import com.gemstone.gemfire.internal.cache.TXManagerImpl;
-import com.gemstone.gemfire.internal.cache.TXRegionState;
-import com.gemstone.gemfire.internal.cache.TXState;
-import com.gemstone.gemfire.internal.cache.TXStateProxy;
-import com.gemstone.gemfire.internal.cache.TXStateProxyFactory;
-import com.gemstone.gemfire.internal.cache.VMIdAdvisor;
+import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.concurrent.AtomicUpdaterFactory;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
@@ -426,13 +416,6 @@ public final class GfxdTXStateProxy extends TXStateProxy {
                 oldRowLocation /* replacement */, false, null,
                 false /* isPutDML */);
 
-        // For SNAP-2620. Better would be to clean the wrapper itself when such scenario arises
-        // Check SNAP-2620 commented out code in SortedMao2IndexInsertOperation
-        if (!deleted && indexContainer.isUniqueIndex()) {
-          deleted = SortedMap2IndexInsertOperation.doMe(null, null, indexContainer,
-              indexKey, (RowLocation) wrapper.getUnderlyingRegionEntry(), true,
-              null, false);
-        }
         if (GemFireXDUtils.TraceIndex | GemFireXDUtils.TraceQuery) {
           GfxdIndexManager.traceIndex("SortedMap2Index cleanup: "
               + "rolled back key=%s to value=(%s) in %s", indexKey,
@@ -659,6 +642,17 @@ public final class GfxdTXStateProxy extends TXStateProxy {
     }
   }
 
+  private boolean checkSameIndexKeyInUnderlyingRegionEntry(GfxdTXEntryState sqle,
+    Object indexKey, GemFireContainer indexContainer) {
+    RegionEntry re = sqle.getUnderlyingRegionEntry();
+    assert re != null;
+    TXRegionState txrs = getTXStateForRead().readRegion((sqle).getDataRegion());
+
+    Object committedEntryIndexKey =
+      indexContainer.getIndexKey(re.getValueInVMOrDiskWithoutFaultIn(txrs.region), re);
+    return committedEntryIndexKey.equals(indexKey);
+  }
+
   private void updateIndexAtCommitAbortNoThrow(GfxdTXEntryState sqle,
       GemFireContainer indexContainer, Object indexKey, boolean rollback)
       throws StandardException {
@@ -673,8 +667,16 @@ public final class GfxdTXStateProxy extends TXStateProxy {
     try {
       if (rollback) {
         if (!indexContainer.isGlobalIndex()) {
-          deleted = SortedMap2IndexDeleteOperation.doMe(null, indexContainer,
-              indexKey, sqle, false, valueBytesBeingReplaced);
+          if (indexContainer.isUniqueIndex() && !sqle.wasCreatedByTX() &&
+              checkSameIndexKeyInUnderlyingRegionEntry(sqle, indexKey, indexContainer)) {
+            deleted = SortedMap2IndexInsertOperation.replaceInSkipListMap(
+                indexContainer, indexKey, sqle,
+                (RowLocation)sqle.getUnderlyingRegionEntry(), true/* not used*/,
+                valueBytesBeingReplaced, false /* isPutDML */);
+          } else {
+            deleted = SortedMap2IndexDeleteOperation.doMe(null, indexContainer,
+                indexKey, sqle, false, valueBytesBeingReplaced);
+          }
         } else {
           deleted = true;
         }

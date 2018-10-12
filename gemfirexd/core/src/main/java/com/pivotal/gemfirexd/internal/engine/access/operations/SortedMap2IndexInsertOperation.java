@@ -19,6 +19,7 @@ package com.pivotal.gemfirexd.internal.engine.access.operations;
 
 import java.io.IOException;
 
+import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.cache.ConflictException;
 import com.gemstone.gemfire.cache.query.IndexMaintenanceException;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
@@ -263,11 +264,10 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
               if (skipListMap.replace(key, oldValue, value)) {
                 // remove txentry, wrapper pair for reinstated map
                 // which is with TXRegionState
-                // TODO SNAP-2620 Below should be the proper way of cleanup, instead of
-                // doing a replace and then insert in GfxdTXStateProxy.cleanupIndexEntryForDestroy
-                // Check SNAP-2620 in that class.
-                // TXRegionState txrs = tx.readRegion(((GfxdTXEntryState)value).getDataRegion());
-                // txrs.getToBeReinstatedIndexMap().removeKeyPair(value, oldValue);
+                GfxdTXEntryState gfxdtxentry = (GfxdTXEntryState)value;
+                TXRegionState txrs = tx.readRegion((gfxdtxentry).getDataRegion());
+                txrs.getToBeReinstatedIndexMap().removeKeyPair(value, container);
+                gfxdtxentry.updateIndexInfos(container, key);
                 break;
               }
               else {

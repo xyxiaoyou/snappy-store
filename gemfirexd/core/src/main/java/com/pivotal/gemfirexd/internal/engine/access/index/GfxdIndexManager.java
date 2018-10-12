@@ -2407,9 +2407,7 @@ public final class GfxdIndexManager implements Dependent, IndexUpdater,
         if (rowLocation.getTXId() != null) {
           txEntry = (GfxdTXEntryState)rowLocation;
           // for rollback, just remove the inserted GfxdTXEntryState (#51553)
-          if (isSuccess) {
-            wrapper = txEntry.wrapperForRollback(indexContainer, indexKey);
-          }
+          wrapper = txEntry.wrapperForRollback(indexContainer, indexKey);
         }
         try {
         if (wrapper != null) {
@@ -2483,7 +2481,6 @@ public final class GfxdIndexManager implements Dependent, IndexUpdater,
         }
       }      
       
-     
       if (!deleted &&  exceptionToThrow == null) {
         try {
         handleNotDeleted(event.isPossibleDuplicate(), owner, indexContainer,
