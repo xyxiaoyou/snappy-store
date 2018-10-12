@@ -1833,13 +1833,15 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
 
     {
       // ALTER_SNAPPY_TABLE
-      String[] arg_names = new String[] { "TABLE_IDENT", "IS_ADD_COL", "COL_NAME", "COL_DATATYPE", "COL_IS_NULLABLE"};
+      String[] arg_names = new String[] { "TABLE_IDENT", "IS_ADD_COL", "COL_NAME", "COL_DATATYPE",
+          "COL_IS_NULLABLE", "DEFAULT_VALUE"};
       TypeDescriptor[] arg_types = new TypeDescriptor[] {
               DataTypeDescriptor.getCatalogType(Types.VARCHAR),
               DataTypeDescriptor.getCatalogType(Types.BOOLEAN),
               DataTypeDescriptor.getCatalogType(Types.VARCHAR),
               DataTypeDescriptor.getCatalogType(Types.VARCHAR),
-              DataTypeDescriptor.getCatalogType(Types.BOOLEAN)};
+              DataTypeDescriptor.getCatalogType(Types.BOOLEAN),
+              DataTypeDescriptor.getCatalogType(Types.VARCHAR)};
       super.createSystemProcedureOrFunction("ALTER_SNAPPY_TABLE",
               sysUUID, arg_names, arg_types, 0, 0, RoutineAliasInfo.READS_SQL_DATA, null,
               newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);

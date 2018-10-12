@@ -63,6 +63,7 @@ public final class LeadNodeSmartConnectorOpContext implements GfxdSerializable {
   private String columnName; // for alter table
   private String columnDataType; // for alter table
   private Boolean columnNullable; // for alter table
+  private String defaultValue; // for alter table
 
   public LeadNodeSmartConnectorOpContext() {
 
@@ -86,7 +87,8 @@ public final class LeadNodeSmartConnectorOpContext implements GfxdSerializable {
       Boolean addOrDropCol,
       String columnName,
       String columnDataType,
-      Boolean columnNullable) {
+      Boolean columnNullable,
+      String defaultValue) {
     this.type = type;
     this.tableIdentifier = tableIdentifier;
     this.provider = provider;
@@ -111,6 +113,7 @@ public final class LeadNodeSmartConnectorOpContext implements GfxdSerializable {
     this.columnName = columnName;
     this.columnDataType = columnDataType;
     this.columnNullable = columnNullable;
+    this.defaultValue = defaultValue;
   }
 
   @Override
@@ -146,6 +149,7 @@ public final class LeadNodeSmartConnectorOpContext implements GfxdSerializable {
     DataSerializer.writeString(columnName, out);
     DataSerializer.writeString(columnDataType, out);
     DataSerializer.writeBoolean(columnNullable, out);
+    DataSerializer.writeString(defaultValue, out);
   }
 
   @Override
@@ -171,6 +175,7 @@ public final class LeadNodeSmartConnectorOpContext implements GfxdSerializable {
     this.columnName = DataSerializer.readString(in);
     this.columnDataType = DataSerializer.readString(in);
     this.columnNullable = DataSerializer.readBoolean(in);
+    this.defaultValue = DataSerializer.readString(in);
   }
 
   @Override
@@ -239,5 +244,7 @@ public final class LeadNodeSmartConnectorOpContext implements GfxdSerializable {
   public String getColumnDataType() { return columnDataType; }
 
   public Boolean getColumnNullable() { return columnNullable; }
+
+  public String getDefaultValue() { return defaultValue; }
 
 }
