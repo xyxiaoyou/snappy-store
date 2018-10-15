@@ -266,8 +266,10 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
                 // which is with TXRegionState
                 GfxdTXEntryState gfxdtxentry = (GfxdTXEntryState)value;
                 TXRegionState txrs = tx.readRegion((gfxdtxentry).getDataRegion());
-                txrs.getToBeReinstatedIndexMap().removeKeyPair(value, container);
-                gfxdtxentry.updateIndexInfos(container, key);
+                if (txrs.getToBeReinstatedIndexMap() != null) {
+                  txrs.getToBeReinstatedIndexMap().removeKeyPair(value, container);
+                  gfxdtxentry.updateIndexInfos(container, key);
+                }
                 break;
               }
               else {
