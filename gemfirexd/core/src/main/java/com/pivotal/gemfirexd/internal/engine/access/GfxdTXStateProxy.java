@@ -29,7 +29,17 @@ import com.gemstone.gemfire.cache.Operation;
 import com.gemstone.gemfire.cache.TransactionFlag;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
-import com.gemstone.gemfire.internal.cache.*;
+import com.gemstone.gemfire.internal.cache.Checkpoint;
+import com.gemstone.gemfire.internal.cache.THashMapWithKeyPair;
+import com.gemstone.gemfire.internal.cache.TObjectObjectObjectProcedure;
+import com.gemstone.gemfire.internal.cache.TXEntryState;
+import com.gemstone.gemfire.internal.cache.TXId;
+import com.gemstone.gemfire.internal.cache.TXManagerImpl;
+import com.gemstone.gemfire.internal.cache.TXRegionState;
+import com.gemstone.gemfire.internal.cache.TXState;
+import com.gemstone.gemfire.internal.cache.TXStateProxy;
+import com.gemstone.gemfire.internal.cache.TXStateProxyFactory;
+import com.gemstone.gemfire.internal.cache.VMIdAdvisor;
 import com.gemstone.gemfire.internal.concurrent.AtomicUpdaterFactory;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
@@ -57,7 +67,7 @@ import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedConnectionContext;
 /**
  * Extends GFE {@link TXStateProxy} to add GFXD specific artifacts including
  * DBSynchronizer message list to be sent out at commit time.
- * 
+ *
  * @author swale
  * @since 7.0
  */
@@ -417,7 +427,7 @@ public final class GfxdTXStateProxy extends TXStateProxy {
                 false /* isPutDML */);
 
         if (GemFireXDUtils.TraceIndex | GemFireXDUtils.TraceQuery) {
-          GfxdIndexManager.traceIndex("SortedMap2Index cleanup: "
+          GfxdIndexManager.traceIndex("GfxdTXStateProxy cleanupIndexEntryForDestroy: "
               + "rolled back key=%s to value=(%s) in %s", indexKey,
               GemFireXDUtils.TraceIndex ? oldRowLocation : ArrayUtils
                   .objectRefString(oldRowLocation), indexContainer);
@@ -460,7 +470,7 @@ public final class GfxdTXStateProxy extends TXStateProxy {
         }
       });
     }
-    
+
     if (unaffectedIndexInfo != null) {
       unaffectedIndexInfo.forEachEntry(new TObjectObjectObjectProcedure() {
         @Override
@@ -642,41 +652,22 @@ public final class GfxdTXStateProxy extends TXStateProxy {
     }
   }
 
-  private boolean checkSameIndexKeyInUnderlyingRegionEntry(GfxdTXEntryState sqle,
-    Object indexKey, GemFireContainer indexContainer) {
-    RegionEntry re = sqle.getUnderlyingRegionEntry();
-    assert re != null;
-    TXRegionState txrs = getTXStateForRead().readRegion((sqle).getDataRegion());
-
-    Object committedEntryIndexKey =
-      indexContainer.getIndexKey(re.getValueInVMOrDiskWithoutFaultIn(txrs.region), re);
-    return committedEntryIndexKey.equals(indexKey);
-  }
-
   private void updateIndexAtCommitAbortNoThrow(GfxdTXEntryState sqle,
       GemFireContainer indexContainer, Object indexKey, boolean rollback)
       throws StandardException {
     boolean deleted;
     Object valueBytesBeingReplaced = sqle.getPendingValue();
-    
-    //TODO:Asif: This will cause a memory leak if an existing entry is 
+
+    //TODO:Asif: This will cause a memory leak if an existing entry is
     //updated in txn, such a new index key is introduced, and then again
-    // a txn update happens such that byte [] changes . Then 
+    // a txn update happens such that byte [] changes . Then
     // the firts indexkey's byte[] will not match the pending value
-    
+
     try {
       if (rollback) {
         if (!indexContainer.isGlobalIndex()) {
-          if (indexContainer.isUniqueIndex() && !sqle.wasCreatedByTX() &&
-              checkSameIndexKeyInUnderlyingRegionEntry(sqle, indexKey, indexContainer)) {
-            deleted = SortedMap2IndexInsertOperation.replaceInSkipListMap(
-                indexContainer, indexKey, sqle,
-                (RowLocation)sqle.getUnderlyingRegionEntry(), true/* not used*/,
-                valueBytesBeingReplaced, false /* isPutDML */);
-          } else {
-            deleted = SortedMap2IndexDeleteOperation.doMe(null, indexContainer,
-                indexKey, sqle, false, valueBytesBeingReplaced);
-          }
+          deleted = SortedMap2IndexDeleteOperation.doMe(null, indexContainer,
+              indexKey, sqle, false, valueBytesBeingReplaced);
         } else {
           deleted = true;
         }

@@ -260,13 +260,16 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
                 SQLState.GFXD_OPERATION_CONFLICT, ce, ce.getMessage());
           } else {
             if (oldValue instanceof WrapperRowLocationForTxn) {
+              GfxdTXEntryState gfxdtxentry = (GfxdTXEntryState)value;
+              gfxdtxentry.setCommittedRegionEntry(
+                  ((WrapperRowLocationForTxn)oldValue).getUnderlyingRegionEntry());
               if (skipListMap.replace(key, oldValue, value)) {
                 // remove txentry, wrapper pair for reinstated map
                 // which is with TXRegionState
-                GfxdTXEntryState gfxdtxentry = (GfxdTXEntryState)value;
                 TXRegionState txrs = tx.readRegion((gfxdtxentry).getDataRegion());
                 if (txrs.getToBeReinstatedIndexMap() != null) {
-                  txrs.getToBeReinstatedIndexMap().removeKeyPair(value, container);
+                  Object wrappedRL = ((WrapperRowLocationForTxn)oldValue).getWrappedRowLocation();
+                  txrs.getToBeReinstatedIndexMap().removeKeyPair(wrappedRL, container);
                   gfxdtxentry.updateIndexInfos(container, key);
                 }
                 break;

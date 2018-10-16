@@ -1715,4 +1715,14 @@ public final class GfxdTXEntryState extends TXEntryState implements
   public Version[] getSerializationVersions() {
     return null;
   }
+
+  private volatile RegionEntry committedRegionEntry = null;
+
+  public void setCommittedRegionEntry(RegionEntry committedRegionEntry) {
+    this.committedRegionEntry = committedRegionEntry;
+  }
+
+  public RegionEntry getCommittedEntry() {
+    return this.committedRegionEntry;
+  }
 }
