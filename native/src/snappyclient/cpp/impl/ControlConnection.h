@@ -115,7 +115,8 @@ namespace io {
           static void getLocatorPreferredServer(thrift::HostAddress& prefHostAddr,std::set<thrift::HostAddress>& failedServers,
               std::set<std::string>serverGroups);
 
-
+          void getPreferredServer(thrift::HostAddress& preferredServer,std::exception* failure,
+                        bool forFailover = false);
         public:
 
           static const boost::optional<ControlConnection&> getOrCreateControlConnection(
@@ -125,8 +126,7 @@ namespace io {
               std::set<thrift::HostAddress>& failedServers,
               std::set<std::string>& serverGroups,bool forFailover = false);
 
-          void getPreferredServer(thrift::HostAddress& preferredServer,std::exception* failure,
-              bool forFailover = false);
+
           void searchRandomServer(const std::set<thrift::HostAddress>& skipServers,
               std::exception* failure,thrift::HostAddress& hostAddress);
         };

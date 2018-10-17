@@ -86,24 +86,25 @@ const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlC
   boost::lock_guard<boost::mutex> globalGuard(s_allConnsLock);
   signed short index = static_cast<signed short>(s_allConnections.size());
   while (--index >= 0) {
-    const std::unique_ptr<ControlConnection>& controlService = s_allConnections.at(index);
+    const std::unique_ptr<ControlConnection>& controlConn = s_allConnections.at(index);
 
-    boost::lock_guard<boost::mutex> serviceGuard(controlService->m_lock);
+    boost::lock_guard<boost::mutex> serviceGuard(controlConn->m_lock);
+    std::vector<thrift::HostAddress> _locators = controlConn->m_locators;
     for(thrift::HostAddress hostAddr : hostAddrs){
-      auto result = std::find(m_locators.begin(),m_locators.end(),hostAddr);
-      if(result == m_locators.end()){
+      auto result = std::find(_locators.begin(),_locators.end(),hostAddr);
+      if(result == _locators.end()){
         continue;
       }
-      auto serviceServerType = service->getServerType(true,false,false);
-      auto contrServiceServerType = controlService->m_snappyServerType;
-      if(contrServiceServerType == serviceServerType){
-        return *controlService;
+      auto serviceServerType = service->getServerType(true,false,false); // TODO: need to discuss with sumedh about this getServerType method
+      auto contrConnServerType = controlConn->m_snappyServerType;
+      if(contrConnServerType == serviceServerType){
+        return *controlConn;
       }else{
         thrift::SnappyException *ex = new thrift::SnappyException();
         std::string portStr;
         Utils::convertIntToString(hostAddr.port,portStr);
         std::string msg= hostAddr.hostName + ":" + portStr +
-            " as registered but having different type " + Utils::getServerTypeString(contrServiceServerType) +
+            " as registered but having different type " + Utils::getServerTypeString(contrConnServerType) +
             " than connection " + Utils::getServerTypeString( serviceServerType) ;
         SnappyExceptionData snappyExData;
         //  snappyExData.__set_sqlState("08006.C");// TODO: discuss with sumedh about correct SQLState
@@ -122,16 +123,13 @@ const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlC
   // check again if new control host already exist
   index =  static_cast<signed short>(s_allConnections.size());
   while (--index >= 0) {
-    const std::unique_ptr<ControlConnection>& controlService = s_allConnections.at(index);
-    boost::lock_guard<boost::mutex> serviceGuard(controlService->m_lock);
-    auto result = std::find(m_locators.begin(),m_locators.end(),preferredServer);
-    if(result == m_locators.end()){
-      return *controlService;
+    const std::unique_ptr<ControlConnection>& controlConn = s_allConnections.at(index);
+    boost::lock_guard<boost::mutex> serviceGuard(controlConn->m_lock);
+    std::vector<thrift::HostAddress> _locators = controlConn->m_locators;
+    auto result = std::find(_locators.begin(),_locators.end(),preferredServer);
+    if(result == _locators.end()){
+      return *controlConn;
     }
-    //    if (controlService->m_controlHostSet.find(preferredServer)
-    //        != controlService->m_controlHostSet.end()) {
-    //      return *controlService;
-    //    }
   }
   s_allConnections.push_back(std::move(controlService));
   return *s_allConnections.back();

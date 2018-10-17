@@ -289,14 +289,14 @@ void ClientService::setPendingTransactionAttrs(
 // settings; this could become configurable in future
 ClientService::ClientService(const std::string& host, const int port,
     thrift::OpenConnectionArgs& connArgs) :
-        // default for load-balance is true
-        m_connArgs(initConnectionArgs(connArgs)), m_loadBalance(true),
-        m_reqdServerType(thrift::ServerType::THRIFT_SNAPPY_CP),
-        m_useFramedTransport(false), m_serverGroups(),
-        m_transport(), m_client(createDummyProtocol()),
-        m_connHosts(1), m_connId(0), m_token(), m_isOpen(false),
-        m_pendingTXAttrs(), m_hasPendingTXAttrs(false),
-        m_isolationLevel(IsolationLevel::NONE), m_lock() {
+            // default for load-balance is true
+            m_connArgs(initConnectionArgs(connArgs)), m_loadBalance(true),
+            m_reqdServerType(thrift::ServerType::THRIFT_SNAPPY_CP),
+            m_useFramedTransport(false), m_serverGroups(),
+            m_transport(), m_client(createDummyProtocol()),
+            m_connHosts(1), m_connId(0), m_token(), m_isOpen(false),
+            m_pendingTXAttrs(), m_hasPendingTXAttrs(false),
+            m_isolationLevel(IsolationLevel::NONE), m_lock() {
   std::map<std::string, std::string>& props = connArgs.properties;
   std::map<std::string, std::string>::iterator propValue;
 
@@ -387,10 +387,10 @@ void ClientService::openConnection(thrift::HostAddress& hostAddr,
   while (true) {
 
     if (m_loadBalance) {
-      boost::optional<ControlConnection&> controlService = ControlConnection::getOrCreateControlConnection(m_connHosts,this,nullptr);
-      // at this point query the control service for preferred server
       boost::mutex mutex;
       boost::lock_guard<boost::mutex> serviceGuard(mutex);
+      boost::optional<ControlConnection&> controlService = ControlConnection::getOrCreateControlConnection(m_connHosts,this,nullptr);
+      // at this point query the control service for preferred server
       controlService->getPreferredServer(hostAddr ,nullptr,failedServers,this->m_serverGroups, false);
     }
 
