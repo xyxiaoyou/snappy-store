@@ -230,6 +230,7 @@ public class Main {
 		      hist = new FileHistory(new File((System
 		          .getProperty("user.home")), historyFileName));
 		    }
+		    hist.setMaxSize(10000);
 		    reader.setHistory(hist);
 		  }
 			Runtime.getRuntime().addShutdownHook(new Thread() {
