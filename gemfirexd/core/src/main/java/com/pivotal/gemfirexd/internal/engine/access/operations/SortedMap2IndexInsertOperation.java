@@ -19,6 +19,7 @@ package com.pivotal.gemfirexd.internal.engine.access.operations;
 
 import java.io.IOException;
 
+import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.cache.ConflictException;
 import com.gemstone.gemfire.cache.query.IndexMaintenanceException;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
@@ -283,6 +284,23 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
           }
           break;
         }
+
+        // TODO: identify the cause of Bug SNAP-2627
+        // Till then this is the crude fix
+        if (oldValue instanceof AbstractRegionEntry &&
+            ((AbstractRegionEntry)oldValue).isDestroyedOrRemoved()) {
+          // create a dummy exception
+          Throwable th = GemFireXDUtils.newDuplicateKeyViolation("unique constraint",
+            container.getQualifiedTableName(), "key=" + key.toString()
+            + ", row=" + value, oldValue, null, null);
+          final GemFireCacheImpl cache = Misc.getGemFireCache();
+          final LogWriter logger = cache.getLogger();
+          logger.error("Unique index constraint violation caused due to " +
+            "removed/destroyed entry. The index is corrupted. Cleaning the index", th);
+          skipListMap.remove(key, oldValue);
+          continue;
+        }
+
         throw GemFireXDUtils.newDuplicateKeyViolation("unique constraint",
             container.getQualifiedTableName(), "key=" + key.toString()
                 + ", row=" + value, oldValue, null, null);
