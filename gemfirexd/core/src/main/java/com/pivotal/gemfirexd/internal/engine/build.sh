@@ -27,7 +27,7 @@ function absPath() {
 }
 
 CURR_DIR=`pwd`
-script_real_path==`absPath $0`
+script_real_path=`absPath $0`
 # script home is assumed to be
 # <SNAPPY_HOME>/store/gemfirexd/core/src/main/java/com/pivotal/gemfirexd/internal/engine/
 script_home=`dirname $script_real_path`
