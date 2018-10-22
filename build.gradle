@@ -149,6 +149,14 @@ allprojects {
     }
   }
 
+  // force same output directory for IDEA and gradle
+  idea {
+    module {
+      outputDir file("${project.buildDir}/classes/main")
+      testOutputDir file("${project.buildDir}/classes/test")
+    }
+  }
+
   group = 'io.snappydata'
   version = PRODUCT_VERSION
 

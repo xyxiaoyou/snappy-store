@@ -3426,10 +3426,27 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
       } catch (RedundancyAlreadyMetException e) {
         // don't log this
         throw e;
-      } catch (final RuntimeException validationException) {
+      } catch (final Exception validationException) {
         getLoggerI18n().warning(LocalizedStrings.GemFireCache_INITIALIZATION_FAILED_FOR_REGION_0, rgn.getFullPath(),
             validationException);
         throw validationException;
+      } catch (Error e) {
+        getLoggerI18n().warning(LocalizedStrings.GemFireCache_INITIALIZATION_FAILED_FOR_REGION_0,
+            rgn.getFullPath(), e);
+        // don't try cleanup for any of the fatal errors below
+        // else they themselves can get stuck
+        success = true;
+        if (SystemFailure.isJVMFailureError(e)) {
+          SystemFailure.initiateFailure(e);
+          // If this ever returns, rethrow the error. We're poisoned
+          // now, so don't let this thread continue.
+          throw e;
+        }
+        SystemFailure.checkFailure();
+        // do cleanup for any non-fatal errors
+        success = false;
+        stopper.checkCancelInProgress(e);
+        throw e;
       } finally {
         if (!success) {
           try {
