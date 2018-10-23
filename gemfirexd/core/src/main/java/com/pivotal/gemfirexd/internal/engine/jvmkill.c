@@ -17,13 +17,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-
+#include <stdlib.h>
 #include <jvmti.h>
 
-static void *logMessage(char * message){
-  FILE * logFile = NULL;
-  logFile = fopen("jvmkill.log", "w");
-  fprintf(logFile, message);
+void *logMessage(char * message){
+  FILE * logFile = fopen("jvmkill.log", "w");
+  if(logFile == NULL){
+    fprintf(stderr, "Error opening log file");
+  }
+  fputs(message, logFile);
   fclose(logFile);
 }
 
@@ -35,7 +37,10 @@ resourceExhausted(
       const void *reserved,
       const char *description)
 {
-   logMessage(strcat("ResourceExhausted: %s: killing current process!\n", description));
+   char* msg=(char*)malloc(sizeof(char)*120);
+   sprintf(msg, "ResourceExhausted: %s: killing current process!", description);
+   logMessage(msg);
+   free(msg);
    kill(getpid(), SIGKILL);
 }
 
@@ -44,12 +49,13 @@ Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 {
    jvmtiEnv *jvmti;
    jvmtiError err;
+   char* msg=(char*)malloc(sizeof(char)*120);
 
    jint rc = (*vm)->GetEnv(vm, (void **) &jvmti, JVMTI_VERSION);
    if (rc != JNI_OK) {
-      char * rcStr;
-      sprintf(rcStr, "%d", rc);
-      logMessage(strcat("ERROR: GetEnv failed: % d\n", rcStr));
+      sprintf(msg, "ERROR: GetEnv failed: %d\n", rc);
+      logMessage(msg);
+      free(msg);
       return JNI_ERR;
    }
 
@@ -60,16 +66,18 @@ Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 
    err = (*jvmti)->SetEventCallbacks(jvmti, &callbacks, sizeof(callbacks));
    if (err != JVMTI_ERROR_NONE) {
-      char * errStr;
-      sprintf(errStr, "%d", err); 
-      logMessage(strcat("ERROR: SetEventCallbacks failed: % d\n", errStr));
+      sprintf(msg, "ERROR: SetEventCallbacks failed: %d\n", err);
+      logMessage(msg);
+      free(msg);
       return JNI_ERR;
    }
 
    err = (*jvmti)->SetEventNotificationMode(
          jvmti, JVMTI_ENABLE, JVMTI_EVENT_RESOURCE_EXHAUSTED, NULL);
    if (err != JVMTI_ERROR_NONE) {
-      fprintf(stderr, "ERROR: SetEventNotificationMode failed: %d\n", err);
+      sprintf(msg, "ERROR: SetEventNotificationMode failed: %d\n", err);
+      logMessage(msg);
+      free(msg);
       return JNI_ERR;
    }
 

@@ -26,6 +26,11 @@ function absPath() {
   perl -MCwd -le 'print Cwd::abs_path(shift)' "$1"
 }
 
+if [ "$JAVA_HOME" == "" ]; then
+  echo "ERROR: JAVA_HOME is not set"
+  exit 1;
+fi
+
 CURR_DIR=`pwd`
 script_real_path=`absPath $0`
 # script home is assumed to be
