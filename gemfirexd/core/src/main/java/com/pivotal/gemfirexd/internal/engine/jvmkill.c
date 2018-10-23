@@ -20,6 +20,13 @@
 
 #include <jvmti.h>
 
+static void *logMessage(char * message){
+  FILE * logFile = NULL;
+  logFile = fopen("jvmkill.log", "w");
+  fprintf(logFile, message);
+  fclose(logFile);
+}
+
 static void JNICALL
 resourceExhausted(
       jvmtiEnv *jvmti_env,
@@ -28,8 +35,7 @@ resourceExhausted(
       const void *reserved,
       const char *description)
 {
-   fprintf(stderr,
-      "ResourceExhausted: %s: killing current process!\n", description);
+   logMessage(strcat("ResourceExhausted: %s: killing current process!\n", description));
    kill(getpid(), SIGKILL);
 }
 
@@ -41,7 +47,9 @@ Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 
    jint rc = (*vm)->GetEnv(vm, (void **) &jvmti, JVMTI_VERSION);
    if (rc != JNI_OK) {
-      fprintf(stderr, "ERROR: GetEnv failed: %d\n", rc);
+      char * rcStr;
+      sprintf(rcStr, "%d", rc);
+      logMessage(strcat("ERROR: GetEnv failed: % d\n", rcStr));
       return JNI_ERR;
    }
 
@@ -52,7 +60,9 @@ Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 
    err = (*jvmti)->SetEventCallbacks(jvmti, &callbacks, sizeof(callbacks));
    if (err != JVMTI_ERROR_NONE) {
-      fprintf(stderr, "ERROR: SetEventCallbacks failed: %d\n", err);
+      char * errStr;
+      sprintf(errStr, "%d", err); 
+      logMessage(strcat("ERROR: SetEventCallbacks failed: % d\n", errStr));
       return JNI_ERR;
    }
 

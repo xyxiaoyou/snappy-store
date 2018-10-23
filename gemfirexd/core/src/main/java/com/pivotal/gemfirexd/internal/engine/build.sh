@@ -77,10 +77,10 @@ case "$(uname -s)" in
     os_name="linux"
     rm_if_exists $gemfirexd_core_lib/libgemfirexd.so
     rm_if_exists $gemfirexd_core_lib/libgemfirexd64.so
-    gcc -DGEMFIRE_VERSION=$gemfire_version -DGEMFIRE_BUILDID=$gemfire_buildid -DGEMFIRE_BUILDDATE=$gemfire_builddate -DGEMFIRE_BUILDOS=$gemfire_buildos -m32 -O3 -fPIC -DPIC -D_REENTRANT -I $JAVA_HOME/include -I $JAVA_HOME/include/$os_name -I $script_home/ -shared utils.c jvmkill.c -o $gemfirexd_core_lib/libgemfirexd.so
+    gcc -DGEMFIRE_VERSION=$gemfire_version -DGEMFIRE_BUILDID=$gemfire_buildid -DGEMFIRE_BUILDDATE=$gemfire_builddate -DGEMFIRE_BUILDOS=$gemfire_buildos -m32 -O3 -fPIC -DPIC -D_REENTRANT -I $JAVA_HOME/include -I $JAVA_HOME/include/$os_name -I $gemfirexd_core_lib/ -shared utils.c jvmkill.c -o $gemfirexd_core_lib/libgemfirexd.so
      is_file_generated $gemfirexd_core_lib/libgemfirexd.so
 
-    gcc -DGEMFIRE_VERSION=$gemfire_version -DGEMFIRE_BUILDID=$gemfire_buildid -DGEMFIRE_BUILDDATE=$gemfire_builddate -DGEMFIRE_BUILDOS=$gemfire_buildos  -m64 -O3 -fPIC -DPIC -D_REENTRANT -I $JAVA_HOME/include -I $JAVA_HOME/include/$os_name -I $script_home/ -shared utils.c jvmkill.c -o $gemfirexd_core_lib/libgemfirexd64.so
+    gcc -DGEMFIRE_VERSION=$gemfire_version -DGEMFIRE_BUILDID=$gemfire_buildid -DGEMFIRE_BUILDDATE=$gemfire_builddate -DGEMFIRE_BUILDOS=$gemfire_buildos  -m64 -O3 -fPIC -DPIC -D_REENTRANT -I $JAVA_HOME/include -I $JAVA_HOME/include/$os_name -I $gemfirexd_core_lib/ -shared utils.c jvmkill.c -o $gemfirexd_core_lib/libgemfirexd64.so
     is_file_generated $gemfirexd_core_lib/libgemfirexd64.so
 
     chmod -x $gemfirexd_core_lib/*.so
