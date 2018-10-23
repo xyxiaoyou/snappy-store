@@ -16,11 +16,14 @@
  */
 package com.gemstone.gemfire.internal.cache.control;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryPoolMXBean;
 import java.lang.management.MemoryType;
 import java.lang.management.MemoryUsage;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -54,8 +57,10 @@ import com.gemstone.gemfire.internal.cache.control.MemoryThresholds.MemoryState;
 import com.gemstone.gemfire.internal.cache.control.ResourceAdvisor.ResourceManagerProfile;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.shared.LauncherBase;
+import com.gemstone.gemfire.internal.shared.NativeCalls;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.util.LogService;
+import org.apache.log4j.Logger;
 
 /**
  * Allows for the setting of eviction and critical thresholds. These thresholds
@@ -117,6 +122,8 @@ public final class HeapMemoryMonitor implements NotificationListener,
   
   private static boolean testDisableMemoryUpdates = false;
   private static long testBytesUsedForThresholdSet = -1;
+  Logger logger = Logger.getLogger(this.getClass());
+
 
   /**
    * Number of eviction or critical state changes that have to occur before the
@@ -674,6 +681,33 @@ public void stopMonitoring() {
   }
 
   /**
+   * Logs heap histogram for given pid
+   *
+   * @param pid
+   *          PID of the process for which heap histogram is to be logged
+   */
+  public void jmapHisto(String pid) {
+    BufferedReader reader;
+    String line;
+    try {
+      Process jmapProcess = Runtime.getRuntime().exec("jmap -histo " + pid);
+      logger.info("heap histogram for " + pid + " beginning");
+      // if inputStream or errorStream gets filled and not read, exec waits infinitely
+      reader = new BufferedReader(new InputStreamReader(jmapProcess.getInputStream()));
+      while ((line = reader.readLine()) != null) {
+        logger.info(line);
+      }
+      reader = new BufferedReader(new InputStreamReader(jmapProcess.getErrorStream()));
+      while ((line = reader.readLine()) != null) {
+        logger.info(line);
+      }
+      jmapProcess.waitFor();
+    } catch (Exception e) {
+      logger.error("Failed to log heap histogram for pid: " + pid, e);
+    }
+  }
+
+  /**
    * Update resource manager stats based upon the given event.
    * 
    * @param event
@@ -682,11 +716,13 @@ public void stopMonitoring() {
   private void updateStatsFromEvent(MemoryEvent event) {
     if (event.isLocal()) {
       if (event.getState().isCritical() && !event.getPreviousState().isCritical()) {
+        int pid = NativeCalls.getInstance().getProcessId();
+        jmapHisto(Integer.toString(pid));
         this.stats.incHeapCriticalEvents();
       } else if (!event.getState().isCritical() && event.getPreviousState().isCritical()) {
         this.stats.incHeapSafeEvents();
       }
-      
+
       if (event.getState().isEviction() && !event.getPreviousState().isEviction()) {
         this.stats.incEvictionStartEvents();
       } else if (!event.getState().isEviction() && event.getPreviousState().isEviction()) {
