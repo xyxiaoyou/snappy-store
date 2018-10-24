@@ -20,7 +20,7 @@
 #include <stdlib.h>
 #include <jvmti.h>
 
-void *logMessage(char * message){
+void logMessage(char * message){
   FILE * logFile = fopen("jvmkill.log", "w");
   if(logFile == NULL){
     fprintf(stderr, "Error opening log file");
