@@ -52,6 +52,7 @@ import com.gemstone.gemfire.internal.LogWriterImpl;
 import com.gemstone.gemfire.internal.SetUtils;
 import com.gemstone.gemfire.internal.StatisticsImpl;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
+import com.gemstone.gemfire.internal.cache.PartitionedRegion;
 import com.gemstone.gemfire.internal.cache.control.InternalResourceManager.ResourceType;
 import com.gemstone.gemfire.internal.cache.control.MemoryThresholds.MemoryState;
 import com.gemstone.gemfire.internal.cache.control.ResourceAdvisor.ResourceManagerProfile;
@@ -94,6 +95,9 @@ public final class HeapMemoryMonitor implements NotificationListener,
    // Internal for polling the JVM for changes in heap memory usage.
   private static final int POLLER_INTERVAL =
        Integer.getInteger(POLLER_INTERVAL_PROP, 500);
+
+  // Duration in millis to wait for jmap -histo to finish
+  private static final int JMAP_HISTO_SLEEP_DURATION = 3 * 1000;
 
   // This holds a new event as it transitions from updateStateAndSendEvent(...) to fillInProfile()
   private ThreadLocal<MemoryEvent> upcomingEvent = new ThreadLocal<MemoryEvent>();
@@ -690,18 +694,10 @@ public void stopMonitoring() {
     BufferedReader reader;
     String line;
     try {
-      Process jmapProcess = Runtime.getRuntime().exec("jmap -histo " + pid);
-      logger.info("heap histogram for " + pid + " beginning");
-      // if inputStream or errorStream gets filled and not read, exec waits infinitely
-      reader = new BufferedReader(new InputStreamReader(jmapProcess.getInputStream()));
-      while ((line = reader.readLine()) != null) {
-        logger.info(line);
-      }
-      reader = new BufferedReader(new InputStreamReader(jmapProcess.getErrorStream()));
-      while ((line = reader.readLine()) != null) {
-        logger.info(line);
-      }
-      jmapProcess.waitFor();
+      String[] jmapCommand = new String[] {"sh", "-c", "jmap -histo " + pid + " > " +
+          pid + '_' + PartitionedRegion.rand.nextInt() + ".jmap" };
+      Process jmapProcess = Runtime.getRuntime().exec(jmapCommand);
+      Thread.sleep(JMAP_HISTO_SLEEP_DURATION);
     } catch (Exception e) {
       logger.error("Failed to log heap histogram for pid: " + pid, e);
     }
