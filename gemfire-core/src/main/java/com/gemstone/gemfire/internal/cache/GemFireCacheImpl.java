@@ -838,7 +838,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
        synchronized (oldEntryMap) {
         for (Map<Object, BlockingQueue<RegionEntry>> regionEntryMap : oldEntryMap.values()) {
           for (Entry<Object, BlockingQueue<RegionEntry>> entry : regionEntryMap.entrySet()) {
-            if (entry.getValue().size() == 0) {
+            if (entry.getValue().isEmpty()) {
               regionEntryMap.remove(entry.getKey());
               if (getLoggerI18n().fineEnabled()) {
                 getLoggerI18n().fine(
