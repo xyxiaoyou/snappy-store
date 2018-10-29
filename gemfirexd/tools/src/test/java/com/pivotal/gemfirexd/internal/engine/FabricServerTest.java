@@ -40,9 +40,9 @@ import com.gemstone.gemfire.distributed.internal.DistributionConfig;
 import com.gemstone.gemfire.distributed.internal.InternalDistributedSystem;
 import com.gemstone.gemfire.distributed.internal.InternalLocator;
 import com.gemstone.gemfire.internal.AvailablePort;
-import com.gemstone.gemfire.internal.SocketCreator;
 import com.gemstone.gemfire.internal.cache.CacheServerLauncher;
 import com.gemstone.gemfire.internal.cache.PartitionedRegion;
+import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.NativeCalls;
 import com.gemstone.junit.UnitTest;
 import com.pivotal.gemfirexd.*;
@@ -52,13 +52,14 @@ import com.pivotal.gemfirexd.internal.iapi.reference.Property;
 import com.pivotal.gemfirexd.internal.iapi.services.monitor.Monitor;
 import com.pivotal.gemfirexd.internal.impl.io.DirFile;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
-import com.pivotal.gemfirexd.jdbc.ClientDriver;
 import com.pivotal.gemfirexd.tools.GfxdUtilLauncher;
 import com.pivotal.gemfirexd.tools.internal.GfxdServerLauncher;
+import io.snappydata.jdbc.ClientDriver;
 import io.snappydata.test.dunit.DistributedTestBase;
 import junit.framework.TestSuite;
 import junit.textui.TestRunner;
 
+@SuppressWarnings("ResultOfMethodCallIgnored")
 public class FabricServerTest extends TestUtil implements UnitTest {
 
   public FabricServerTest(String name) {
@@ -228,7 +229,7 @@ public class FabricServerTest extends TestUtil implements UnitTest {
       final Map<String, Object> m = l.getStartOptions(startOps);
 
       @SuppressWarnings("unchecked")
-      final List<String> vmargs = (List<String>)m.get("vmargs");
+      final List<String> vmargs = (List<String>)m.get("vmArgs");
       assertTrue("expected UseParNewGC definition ",
           vmargs.contains("-XX:+UseParNewGC"));
       assertTrue("expected UseConcMarkSweepGC definition ",
@@ -275,7 +276,7 @@ public class FabricServerTest extends TestUtil implements UnitTest {
       }
       final String[] cmdOps = new String[] { launcher, "server", "start",
           "-dir=" + workingdir, "-client-bind-address=0.0.0.0",
-          "-client-port=" + port,
+          "-client-port=" + port, "-bind-address=localhost",
           "-log-file=./" + getTestName() + "-utilLauncher.log",
           "-log-level=config",
           "-mcast-port=" + mcastPort, "-heap-size=512m" };
@@ -293,9 +294,9 @@ public class FabricServerTest extends TestUtil implements UnitTest {
           conn = getNetConnection(port, null, null);
           break;
         } catch (SQLException sqle) {
-          if (tries++ < 5 && ("08006".equals(sqle.getSQLState()) ||
+          if (tries++ < 30 && ("08006".equals(sqle.getSQLState()) ||
               "08001".equals(sqle.getSQLState()))) {
-            Thread.sleep(100);
+            Thread.sleep(200);
             continue;
           }
           else {
@@ -303,13 +304,12 @@ public class FabricServerTest extends TestUtil implements UnitTest {
           }
         }
       }
-      final InetAddress host = SocketCreator.getLocalHost();
       final ResultSet rs = conn.createStatement().executeQuery(
           "select id from sys.members");
       assertTrue(rs.next());
       assertTrue("member ID " + rs.getString(1)
-          + " does not contain this host: " + host.getHostName(),
-          rs.getString(1).contains(host.getHostName()));
+          + " does not contain localhost",
+          rs.getString(1).contains("localhost"));
       assertFalse(rs.next());
       conn.close();
     } finally {
@@ -339,7 +339,6 @@ public class FabricServerTest extends TestUtil implements UnitTest {
       validateProperties(outProps);
 
     } finally {
-      //noinspection ResultOfMethodCallIgnored
       f.delete();
       try {
         if (jdbcConn != null) {
@@ -387,7 +386,7 @@ public class FabricServerTest extends TestUtil implements UnitTest {
 
     Properties outProps = new Properties();
 
-    //no accidental left out of the properties file.
+    // no accidental left out of the properties file.
     File checkNoFile = new File(".", com.pivotal.gemfirexd.Property.PROPERTIES_FILE);
     assertFalse(checkNoFile.exists());
     
@@ -425,8 +424,7 @@ public class FabricServerTest extends TestUtil implements UnitTest {
     wrongf.createNewFile();
     
     Properties distort = new Properties();
-    String locatoradd = InetAddress.getLocalHost().getHostName()
-        + "["
+    String locatoradd = "localhost["
         + String.valueOf(AvailablePort
             .getRandomAvailablePort(AvailablePort.SOCKET)) + "]";
     distort.setProperty(DistributionConfig.MCAST_PORT_NAME, String
@@ -471,14 +469,13 @@ public class FabricServerTest extends TestUtil implements UnitTest {
 
     Properties outProps = new Properties();
 
-    //no accidental left out of the properties file.
+    // no accidental left out of the properties file.
     File checkLocalFile = new File(".",
         com.pivotal.gemfirexd.Property.PROPERTIES_FILE);
     assertFalse(checkLocalFile.exists());
 
     File f = new File(".", com.pivotal.gemfirexd.Property.PROPERTIES_FILE);
     try {
-      //noinspection ResultOfMethodCallIgnored
       f.createNewFile();
     }
     catch(IOException ioe) {
@@ -500,7 +497,6 @@ public class FabricServerTest extends TestUtil implements UnitTest {
       validateProperties(outProps);
 
     } finally {
-      //noinspection ResultOfMethodCallIgnored
       f.delete();
       try {
         if (jdbcConn != null) {
@@ -543,7 +539,6 @@ public class FabricServerTest extends TestUtil implements UnitTest {
 
     } finally {
       try {
-        //noinspection ResultOfMethodCallIgnored
         f.delete();
         if (jdbcConn != null) {
           shutDown();
@@ -593,7 +588,6 @@ public class FabricServerTest extends TestUtil implements UnitTest {
       validateProperties(outProps);
 
     } finally {
-      //noinspection ResultOfMethodCallIgnored
       f.delete();
       try {
         if (jdbcConn != null) {
@@ -655,7 +649,6 @@ public class FabricServerTest extends TestUtil implements UnitTest {
       validateProperties(outProps);
 
     } finally {
-      //noinspection ResultOfMethodCallIgnored
       f.delete();
       try {
         if (jdbcConn != null) {
@@ -674,18 +667,21 @@ public class FabricServerTest extends TestUtil implements UnitTest {
 
     System.setProperty(com.pivotal.gemfirexd.Property.PROPERTIES_FILE, PROP_FILE_NAME);
 
-    System.setProperty(Property.START_DRDA, "true");
-    int port;
+    int port, port2;
     while ((port = AvailablePort.getRandomAvailablePort(AvailablePort.SOCKET))
         <= FabricService.NETSERVER_DEFAULT_PORT);
-    System.setProperty(com.pivotal.gemfirexd.Property.DRDA_PROP_PORTNUMBER, String.valueOf(port));
 
     final FabricServer fabapi = FabricServiceManager.getFabricServerInstance();
     try {
       fabapi.start(null);
 
-      final NetworkInterface ni = fabapi.startNetworkServer(null,
-          -1, null);
+      final NetworkInterface ni = fabapi.startDRDAServer(null,
+          port, null);
+
+      while ((port2 = AvailablePort.getRandomAvailablePort(AvailablePort.SOCKET))
+          <= FabricService.NETSERVER_DEFAULT_PORT);
+      final NetworkInterface ni2 = fabapi.startThriftServer(null,
+          port2, null);
       try {
         ni.logConnections(true);
         ni.setMaxThreads(20);
@@ -695,7 +691,11 @@ public class FabricServerTest extends TestUtil implements UnitTest {
         int maxT = ni.getMaxThreads();
         assertEquals(20, maxT);
         int timSl = ni.getTimeSlice();
-        assertEquals(10, timSl);
+        if (ClientSharedUtils.isThriftDefault()) {
+          assertEquals(-1, timSl);
+        } else {
+          assertEquals(10, timSl);
+        }
         ni.trace(false);
 
         // expect a specific exception as connection number 2 shouldn't exist.
@@ -730,11 +730,17 @@ public class FabricServerTest extends TestUtil implements UnitTest {
         // NOTE: creating the 13th connection and setting trace on it. if any
         // call gets added above, connNum might have to be changed in below
         // trace(...) call.
-        String netUrl = TestUtil.getNetProtocol(localHost.getHostName(),
-            FabricService.NETSERVER_DEFAULT_PORT);
+        final String drdaPrefix = ClientSharedUtils.isThriftDefault()
+            ? "jdbc:gemfirexd:drda://" : "jdbc:gemfirexd://";
+        final String thriftPrefix = ClientSharedUtils.isThriftDefault()
+            ? "jdbc:gemfirexd://" : "jdbc:gemfirexd:thrift://";
+        final String host = localHost.getHostName();
+        final String netUrl = drdaPrefix + host + '[' + port + "]/";
+        final String netUrl2 = thriftPrefix + host + '[' + port2 + "]/";
 
         loadNetDriver();
         Connection conn = DriverManager.getConnection(netUrl);
+        Connection conn2 = DriverManager.getConnection(netUrl2);
 
         ni.trace(13, true);
 
@@ -749,41 +755,64 @@ public class FabricServerTest extends TestUtil implements UnitTest {
             throw sqle;
           }
         }
+        try {
+          conn2.createStatement().execute("");
+          fail("expected syntax error");
+        } catch (SQLException sqle) {
+          if (!"42X01".equals(sqle.getSQLState())) {
+            throw sqle;
+          }
+        }
 
         conn.close();
+        conn2.close();
         // end of 13th connection.
 
-        netUrl = TestUtil.getNetProtocol(localHost.getHostName(), port);
         Properties props = new Properties();
         // force connection to the system network server only
         props.setProperty("load-balance", "false");
         conn = DriverManager.getConnection(netUrl, getNetProperties(props));
+        conn2 = DriverManager.getConnection(netUrl2, getNetProperties(props));
         // verify that meta-data tables can be queried successfully
-        final ResultSet rs = conn.createStatement().executeQuery(
-            "select KIND, NETSERVERS from SYS.MEMBERS");
+        ResultSet rs = conn.createStatement().executeQuery(
+            "select KIND, NETSERVERS, THRIFTSERVERS from SYS.MEMBERS");
+        final String fullHost = getFullHost(localHost);
         assertTrue("expected one row in meta-data query", rs.next());
         assertEquals("datastore(normal)", rs.getString(1));
-        assertEquals(getFullHost(localHost) + '['
-            + FabricService.NETSERVER_DEFAULT_PORT + "],"
-            + getFullHost(localHost) + '[' + port + ']', rs.getString(2));
+        assertEquals(fullHost + '[' + port2 + "]," + fullHost +
+            '[' + port + ']', rs.getString(2));
+        assertEquals(fullHost + '[' + port2 + ']',
+            rs.getString(3));
         assertFalse("expected no more than one row from SYS.MEMBERS", rs.next());
+
+        rs = conn2.createStatement().executeQuery(
+            "select KIND, NETSERVERS, THRIFTSERVERS from SYS.MEMBERS");
+        assertTrue("expected one row in meta-data query", rs.next());
+        assertEquals("datastore(normal)", rs.getString(1));
+        assertEquals(fullHost + '[' + port2 + "]," + fullHost +
+            '[' + port + ']', rs.getString(2));
+        assertEquals(fullHost + '[' + port2 + ']',
+            rs.getString(3));
+        assertFalse("expected no more than one row from SYS.MEMBERS", rs.next());
+
+        conn.close();
+        conn2.close();
       } finally {
         ni.stop();
+        ni2.stop();
       }
     } finally {
       f.delete();
       try {
         fabapi.stop(null);
       } finally {
-        System.clearProperty(Property.START_DRDA);
-        System.clearProperty(com.pivotal.gemfirexd.Property.DRDA_PROP_PORTNUMBER);
         DistributedSQLTestBase.deleteStrayDataDictionaryDir();
       }
     }
   }
 
   public void testLocatorStartupAPI() throws Exception {
-    final InetAddress localHost = SocketCreator.getLocalHost();
+    final InetAddress localHost = InetAddress.getByName("localhost");
     int port, netPort;
     Properties props = doCommonSetup(null);
 
@@ -822,7 +851,7 @@ public class FabricServerTest extends TestUtil implements UnitTest {
 
     // next check with a specified non-localhost bind-address
     fabapi = FabricServiceManager.getFabricLocatorInstance();
-    port = startLocator(null, -1, props);
+    port = startLocator(localHost.getHostName(), -1, props);
     try {
       // verify that no tables can be created in this VM
       final Connection conn = getConnection();
@@ -842,7 +871,7 @@ public class FabricServerTest extends TestUtil implements UnitTest {
           .executeQuery("select KIND, LOCATOR from SYS.MEMBERS");
       assertTrue("expected one row in meta-data query", rs.next());
       assertEquals("locator(normal)", rs.getString(1));
-      assertEquals("0.0.0.0[" + port + ']', rs.getString(2));
+      assertEquals("127.0.0.1[" + port + ']', rs.getString(2));
       assertFalse("expected no more than one row from SYS.MEMBERS", rs.next());
     } finally {
       try {
@@ -877,14 +906,15 @@ public class FabricServerTest extends TestUtil implements UnitTest {
       final ResultSet rs = stmt
           .executeQuery("select KIND, LOCATOR, NETSERVERS from SYS.MEMBERS");
       assertTrue("expected one row in meta-data query", rs.next());
-      assertEquals("datastore(loner)", rs.getString(1));
+      assertEquals("loner", rs.getString(1));
       if (!rs.getString(2).equals(
           localHost.getHostAddress() + '[' + port2 + ']')) {
         assertEquals(getFullHost(localHost) + '[' + port2 + ']',
             rs.getString(2));
       }
-      assertEquals(localHost.getCanonicalHostName() + "/0.0.0.0[" + netPort
-          + ']', rs.getString(3));
+      String netStr = rs.getString(3);
+      assertTrue("Unexpected network server address " + netStr,
+          netStr.endsWith("/0.0.0.0[" + netPort + ']'));
       assertFalse("expected no more than one row from SYS.MEMBERS", rs.next());
     } finally {
       try {
@@ -942,7 +972,7 @@ public class FabricServerTest extends TestUtil implements UnitTest {
 
     int locPort = AvailablePort.getRandomAvailablePort(AvailablePort.SOCKET);
     FabricLocator locator = FabricServiceManager.getFabricLocatorInstance();
-    locator.start(null, locPort, startProps);
+    locator.start("localhost", locPort, startProps);
 
     Properties socketProps = new Properties();
     socketProps.put("gemfirexd.drda.sslMode", "peerAuthentication");
@@ -956,7 +986,7 @@ public class FabricServerTest extends TestUtil implements UnitTest {
     // wait for OS to release the socket
     Thread.sleep(3000);
 
-    ni = locator.startNetworkServer("localhost", netPort, socketProps);
+    locator.startNetworkServer("localhost", netPort, socketProps);
     getLogger().info("GemFire XD started. State: " + locator.status());
 
     if (locator.status() == FabricService.State.RUNNING) {
@@ -975,7 +1005,7 @@ public class FabricServerTest extends TestUtil implements UnitTest {
     shutdownProp.setProperty("user", "sysUser1");
     shutdownProp.setProperty("password", "pwd_sysUser1");
     
-     Properties sysprop = null;
+     Properties sysprop;
 
      int locatorPort = AvailablePort
           .getRandomAvailablePort(AvailablePort.SOCKET);
@@ -1124,11 +1154,28 @@ public class FabricServerTest extends TestUtil implements UnitTest {
       // start the JVM process and try to connect using a client
       final Process proc = Runtime.getRuntime().exec(cmdOps, null, file);
       assertEquals(0, waitForProcess(proc, 120000));
-      
+
       Connection conn;
-      conn = getNetConnection(port, null, null);
-      int rs = conn.createStatement().executeUpdate(
-          "create gatewayreceiver ok (hostnameforsenders 'NICJVM');");
+      // try a few times in case of disconnect exception
+      int tries = 1;
+      for (;;) {
+        try {
+          conn = getNetConnection(port, null, null);
+          break;
+        } catch (SQLException sqle) {
+          if (tries++ < 30 && ("08006".equals(sqle.getSQLState()) ||
+              "08001".equals(sqle.getSQLState()))) {
+            Thread.sleep(200);
+            continue;
+          }
+          else {
+            throw sqle;
+          }
+        }
+      }
+
+      conn.createStatement().executeUpdate(
+          "create gatewayreceiver ok (bindaddress 'localhost' hostnameforsenders 'NICJVM');");
 
       final ResultSet rs1 = conn.createStatement().executeQuery(
           "select * from SYS.GATEWAYRECEIVERS");
@@ -1180,7 +1227,6 @@ public class FabricServerTest extends TestUtil implements UnitTest {
 
   private File createPropertyFile(Properties outProps) throws IOException {
     final File file = new File(PROP_FILE_NAME);
-    //noinspection ResultOfMethodCallIgnored
     file.createNewFile();
     createPropertyFile(outProps, file, null);
     return file;
@@ -1191,8 +1237,7 @@ public class FabricServerTest extends TestUtil implements UnitTest {
 
     assertTrue(file.canWrite());
 
-    String locatoradd = InetAddress.getLocalHost().getHostName()
-        + "["
+    String locatoradd = "localhost["
         + String.valueOf(AvailablePort
             .getRandomAvailablePort(AvailablePort.SOCKET)) + "]";
 
@@ -1207,6 +1252,7 @@ public class FabricServerTest extends TestUtil implements UnitTest {
 
     outProps.setProperty("gemfirexd.host-data", "true");
     outProps.setProperty(DistributionConfig.MCAST_PORT_NAME, "0");
+    outProps.setProperty(DistributionConfig.BIND_ADDRESS_NAME, "localhost");
     outProps.setProperty(DistributionConfig.LOG_LEVEL_NAME, "config");
     outProps.setProperty(DistributionConfig.CONSERVE_SOCKETS_NAME, "false");
     outProps

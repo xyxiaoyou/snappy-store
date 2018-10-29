@@ -22,6 +22,8 @@ package PKG;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 #endif
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+
+import com.gemstone.gemfire.internal.cache.Token;
 import com.gemstone.gemfire.internal.concurrent.AtomicUpdaterFactory;
 #ifdef OFFHEAP
 import com.gemstone.gemfire.internal.offheap.OffHeapRegionEntryHelper;
@@ -178,7 +180,8 @@ public class LEAF_CLASS extends PARENT_CLASS
   protected long getlastModifiedField() {
     return lastModifiedUpdater.get(this);
   }
-  protected boolean compareAndSetLastModifiedField(long expectedValue, long newValue) {
+  protected final boolean compareAndSetLastModifiedField(long expectedValue,
+      long newValue) {
     return lastModifiedUpdater.compareAndSet(this, expectedValue, newValue);
   }
   /**
@@ -189,7 +192,7 @@ public class LEAF_CLASS extends PARENT_CLASS
     return this.hash;
   }
   @Override
-  protected void setEntryHash(int v) {
+  protected final void setEntryHash(int v) {
     this.hash = v;
   }
   /**
@@ -212,7 +215,7 @@ public class LEAF_CLASS extends PARENT_CLASS
   
   // disk code
 #ifdef LRU
-  protected void initialize(RegionEntryContext drs, Object value) {
+  protected final void initialize(RegionEntryContext drs, Object value) {
     boolean isBackup;
     if (drs instanceof LocalRegion) {
       isBackup = ((LocalRegion)drs).getDiskRegion().isBackup();
@@ -257,11 +260,11 @@ public class LEAF_CLASS extends PARENT_CLASS
     }
   }
 #else
-  protected void initialize(RegionEntryContext context, Object value) {
+  protected final void initialize(RegionEntryContext context, Object value) {
     diskInitialize(context, value);
   }
   @Override
-  public int updateAsyncEntrySize(EnableLRU capacityController) {
+  public final int updateAsyncEntrySize(EnableLRU capacityController) {
     throw new IllegalStateException("should never be called");
   }
 #endif
@@ -283,11 +286,11 @@ public class LEAF_CLASS extends PARENT_CLASS
    * @since 5.1
    */
   protected DiskId id;//= new DiskId();
-  public DiskId getDiskId() {
+  public final DiskId getDiskId() {
     return this.id;
   }
   @Override
-  public void setDiskId(RegionEntry old) {
+  public final void setDiskId(RegionEntry old) {
     this.id = ((AbstractDiskRegionEntry)old).getDiskId();
   }
 #endif
@@ -297,7 +300,7 @@ public class LEAF_CLASS extends PARENT_CLASS
   
   // lru code
   @Override
-  public void setDelayedDiskId(LocalRegion r) {
+  public final void setDelayedDiskId(LocalRegion r) {
 #ifdef DISK
     DiskStoreImpl ds = r.getDiskStore();
     long maxOplogSize = ds.getMaxOplogSize();
@@ -458,7 +461,7 @@ public class LEAF_CLASS extends PARENT_CLASS
     this.missCount = 0;
   }
   @Override
-  public boolean hasStats() {
+  public final boolean hasStats() {
     return true;
   }
 #endif
@@ -474,33 +477,33 @@ public class LEAF_CLASS extends PARENT_CLASS
   private byte entryVersionHighByte;
   private byte distributedSystemId;
 
-  public int getEntryVersion() {
+  public final int getEntryVersion() {
     return ((entryVersionHighByte << 16) & 0xFF0000) | (entryVersionLowBytes & 0xFFFF);
   }
   
-  public long getRegionVersion() {
+  public final long getRegionVersion() {
     return (((long)regionVersionHighBytes) << 32) | (regionVersionLowBytes & 0x00000000FFFFFFFFL);  
   }
   
   
-  public long getVersionTimeStamp() {
+  public final long getVersionTimeStamp() {
     return getLastModified();
   }
   
-  public void setVersionTimeStamp(long time) {
+  public final void setVersionTimeStamp(long time) {
     setLastModified(time);
   }
 
-  public VersionSource getMemberID() {
+  public final VersionSource getMemberID() {
     return this.memberID;
   }
-  public int getDistributedSystemId() {
+  public final int getDistributedSystemId() {
     return this.distributedSystemId;
   }
 
   // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
   
-  public void setVersions(VersionTag tag) {
+  public final void setVersions(VersionTag tag) {
     this.memberID = tag.getMemberID();
     int eVersion = tag.getEntryVersion();
     this.entryVersionLowBytes = (short)(eVersion & 0xffff);
@@ -519,18 +522,18 @@ public class LEAF_CLASS extends PARENT_CLASS
     this.distributedSystemId = (byte)(tag.getDistributedSystemId() & 0xff);
   }
 
-  public void setMemberID(VersionSource memberID) {
+  public final void setMemberID(VersionSource memberID) {
     this.memberID = memberID; 
   }
 
   @Override
-  public VersionStamp getVersionStamp() {
+  public final VersionStamp getVersionStamp() {
     return this;
   }
 
   // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
   
-  public VersionTag asVersionTag() {
+  public final VersionTag asVersionTag() {
     VersionTag tag = VersionTag.create(memberID);
     tag.setEntryVersion(getEntryVersion());
     tag.setRegionVersion(this.regionVersionHighBytes, this.regionVersionLowBytes);
@@ -539,26 +542,26 @@ public class LEAF_CLASS extends PARENT_CLASS
     return tag;
   }
 
-  public void processVersionTag(LocalRegion r, VersionTag tag,
+  public final void processVersionTag(LocalRegion r, VersionTag tag,
       boolean isTombstoneFromGII, boolean hasDelta,
       VersionSource thisVM, InternalDistributedMember sender, boolean checkForConflicts) {
     basicProcessVersionTag(r, tag, isTombstoneFromGII, hasDelta, thisVM, sender, checkForConflicts);
   }
 
   @Override
-  public void processVersionTag(EntryEvent cacheEvent) {
+  public final void processVersionTag(EntryEvent cacheEvent) {
     // this keeps Eclipse happy.  without it the sender chain becomes confused
     // while browsing this code
     super.processVersionTag(cacheEvent);
   }
 
   /** get rvv internal high byte.  Used by region entries for transferring to storage */
-  public short getRegionVersionHighBytes() {
+  public final short getRegionVersionHighBytes() {
     return this.regionVersionHighBytes;
   }
   
   /** get rvv internal low bytes.  Used by region entries for transferring to storage */
-  public int getRegionVersionLowBytes() {
+  public final int getRegionVersionLowBytes() {
     return this.regionVersionLowBytes;
   }
 #endif
@@ -572,7 +575,7 @@ public class LEAF_CLASS extends PARENT_CLASS
     return this.key;
   }
   @Override
-  protected void _setRawKey(Object key) {
+  protected final void _setRawKey(Object key) {
     this.key = key;
   }
   
@@ -595,54 +598,96 @@ public class LEAF_CLASS extends PARENT_CLASS
   // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
 
   @Override
-  public Token getValueAsToken() {
+  public final boolean isOffHeap() {
+    return true;
+  }
+
+  @Override
+  public final Token getValueAsToken() {
     return OffHeapRegionEntryHelper.getValueAsToken(this);
   }
   
   @Override
   @Unretained
-  protected Object getValueField() {
+  protected final Object getValueField() {
     return OffHeapRegionEntryHelper._getValue(this);
   }
 
   @Override
-  protected void setValueField(@Unretained Object v) {
+  protected final void setValueField(@Unretained Object v) {
     OffHeapRegionEntryHelper.setValue(this, v);
   }
 
   @Override
   @Retained
-  public Object _getValueRetain(RegionEntryContext context, boolean decompress) {
+  public final Object _getValueRetain(RegionEntryContext context,
+      boolean decompress) {
     return OffHeapRegionEntryHelper._getValueRetain(this, decompress);
   }
 
   @Override
-  public long getAddress() {
+  public final long getAddress() {
     return ohAddrUpdater.get(this);
   }
 
   @Override
-  public boolean setAddress(long expectedAddr, long newAddr) {
+  public final boolean setAddress(long expectedAddr, long newAddr) {
     return ohAddrUpdater.compareAndSet(this, expectedAddr, newAddr);
   }
   
   @Override
   @Released
-  public void release() {
+  public final void release() {
     OffHeapRegionEntryHelper.releaseEntry(this);
   }
 #else
   private volatile Object value;
-  
+
   @Override
-  protected Object getValueField() {
+  public final boolean isRemoved() {
+    final Object o = this.value;
+    return (o == Token.REMOVED_PHASE1) || (o == Token.REMOVED_PHASE2) || (o == Token.TOMBSTONE);
+  }
+
+  @Override
+  public final boolean isDestroyedOrRemoved() {
+    final Object o = this.value;
+    return o == Token.DESTROYED || o == Token.REMOVED_PHASE1 || o == Token.REMOVED_PHASE2 || o == Token.TOMBSTONE;
+  }
+
+  @Override
+  public final boolean isDestroyedOrRemovedButNotTombstone() {
+    final Object o = this.value;
+    return o == Token.DESTROYED || o == Token.REMOVED_PHASE1 || o == Token.REMOVED_PHASE2;
+  }
+
+  @Override
+  protected final Object getValueField() {
     return this.value;
   }
 
   @Override
-  protected void setValueField(Object v) {
+  protected final void setValueField(Object v) {
     this.value = v;
   }
+
+  @Override
+  public final Token getValueAsToken() {
+    Object v = this.value;
+    if (v == null) {
+      return null;
+    } else if (v instanceof Token) {
+      return (Token)v;
+    } else {
+      return Token.NOT_A_TOKEN;
+    }
+  }
+
+  @Override
+  public final boolean isValueNull() {
+    return this.value == null;
+  }
+
 #endif
 
 #ifdef ROWLOCATION
@@ -687,12 +732,12 @@ public class LEAF_CLASS extends PARENT_CLASS
   }
 
   @Override
-  public int estimateMemoryUsage() {
+  public final int estimateMemoryUsage() {
     return ClassSize.refSize;
   }
 
   @Override
-  public int getTypeFormatId() {
+  public final int getTypeFormatId() {
     return StoredFormatIds.ACCESS_MEM_HEAP_ROW_LOCATION_ID;
   }
 
@@ -716,22 +761,22 @@ public class LEAF_CLASS extends PARENT_CLASS
   }
 
   @Override
-  public DataValueDescriptor recycle() {
+  public final DataValueDescriptor recycle() {
     return this;
   }
 
   @Override
-  public DataValueDescriptor getNewNull() {
+  public final DataValueDescriptor getNewNull() {
     return DataValueFactory.DUMMY;
   }
 
   @Override
-  public boolean isNull() {
+  public final boolean isNull() {
     return this == DataValueFactory.DUMMY;
   }
 
   @Override
-  public Object getObject() throws StandardException {
+  public final Object getObject() throws StandardException {
     return this;
   }
 
@@ -888,16 +933,21 @@ public class LEAF_CLASS extends PARENT_CLASS
 
 
   @Override
-  public Object getValueWithoutFaultInOrOffHeapEntry(LocalRegion owner) {
+  public final Object getValueWithoutFaultInOrOffHeapEntry(LocalRegion owner) {
 #ifdef OFFHEAP
     return this;
-#else 
-    return this.getValueInVMOrDiskWithoutFaultIn(owner);
+#elif defined(DISK)
+    final Object value = this.value;
+    return value != null && !Token.isRemovedFromDisk(value)
+        ? value : Helper.getValueHeapOrDiskWithoutFaultIn(this, owner);
+#else
+    final Object value = this.value;
+    return value != null ? value : Token.NOT_AVAILABLE;
 #endif
   }
 
   @Override
-  public Object getValueOrOffHeapEntry(LocalRegion owner) {
+  public final Object getValueOrOffHeapEntry(LocalRegion owner) {
 #ifdef OFFHEAP
     return this;
 #else
@@ -906,7 +956,7 @@ public class LEAF_CLASS extends PARENT_CLASS
   }
 
   @Override
-  public Object getRawValue() {
+  public final Object getRawValue() {
 #ifdef OFFHEAP
     Object val = OffHeapRegionEntryHelper._getValueRetain(this, false);
     if (val != null && !Token.isInvalidOrRemoved(val)
@@ -923,7 +973,7 @@ public class LEAF_CLASS extends PARENT_CLASS
   
 #ifdef OFFHEAP
   @Override
-  public Object prepareValueForCache(RegionEntryContext r, Object val,
+  public final Object prepareValueForCache(RegionEntryContext r, Object val,
       boolean isEntryUpdate, boolean valHasMetadataForGfxdOffHeapUpdate) {
     if (okToStoreOffHeap(val)
         && OffHeapRegionEntryUtils.isValidValueForGfxdOffHeapStorage(val)) {
@@ -947,7 +997,7 @@ public class LEAF_CLASS extends PARENT_CLASS
   }
 
   @Override
-  public boolean destroy(LocalRegion region, EntryEventImpl event,
+  public final boolean destroy(LocalRegion region, EntryEventImpl event,
       boolean inTokenMode, boolean cacheWrite, @Unretained Object expectedOldValue,
       boolean forceDestroy, boolean removeRecoveredEntry)
       throws CacheWriterException, EntryNotFoundException, TimeoutException,
@@ -967,32 +1017,32 @@ public class LEAF_CLASS extends PARENT_CLASS
 #endif
 
   @Override
-  public Version[] getSerializationVersions() {
+  public final Version[] getSerializationVersions() {
     return null;
   }
 #ifdef LOCAL
   @Override
-  public Object getValue(GemFireContainer baseContainer) {
+  public final Object getValue(GemFireContainer baseContainer) {
      return RegionEntryUtils.getValue(baseContainer.getRegion(), this);
   }
 
   @Override
-  public Object getValueWithoutFaultIn(GemFireContainer baseContainer) {
+  public final Object getValueWithoutFaultIn(GemFireContainer baseContainer) {
     return RegionEntryUtils.getValueWithoutFaultIn(baseContainer.getRegion(), this);
   }
 
   @Override
-  public ExecRow getRow(GemFireContainer baseContainer) {
+  public final ExecRow getRow(GemFireContainer baseContainer) {
     return RegionEntryUtils.getRow(baseContainer, baseContainer.getRegion(), this, this.tableInfo);
   }
 
   @Override
-  public ExecRow getRowWithoutFaultIn(GemFireContainer baseContainer) {
+  public final ExecRow getRowWithoutFaultIn(GemFireContainer baseContainer) {
     return RegionEntryUtils.getRowWithoutFaultIn(baseContainer, baseContainer.getRegion(), this, this.tableInfo);
   }
 
   @Override
-  public int getBucketID() {
+  public final int getBucketID() {
     return -1;
   }
 #endif
@@ -1000,28 +1050,28 @@ public class LEAF_CLASS extends PARENT_CLASS
   private final int bucketId;
 
   @Override
-  public Object getValue(GemFireContainer baseContainer) {
+  public final Object getValue(GemFireContainer baseContainer) {
     return RegionEntryUtils.getValue(baseContainer, this.bucketId, this);
   }
 
   @Override
-  public Object getValueWithoutFaultIn(GemFireContainer baseContainer) {
+  public final Object getValueWithoutFaultIn(GemFireContainer baseContainer) {
     return RegionEntryUtils.getValueWithoutFaultIn(baseContainer,this.bucketId, this);
   }
 
   @Override
-  public ExecRow getRow(GemFireContainer baseContainer) {
+  public final ExecRow getRow(GemFireContainer baseContainer) {
     return RegionEntryUtils.getRow(baseContainer, this.bucketId, this, this.tableInfo);
   }
 
   @Override
-  public ExecRow getRowWithoutFaultIn(GemFireContainer baseContainer) {
+  public final ExecRow getRowWithoutFaultIn(GemFireContainer baseContainer) {
     return RegionEntryUtils.getRowWithoutFaultIn(baseContainer, this.bucketId, this,
         this.tableInfo);
   }
 
   @Override
-  public int getBucketID() {
+  public final int getBucketID() {
     return this.bucketId;
   }
 #endif

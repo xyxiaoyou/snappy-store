@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -20,6 +20,9 @@ package com.pivotal.gemfirexd.internal.catalog;
 import java.util.HashMap;
 import java.util.List;
 
+import com.gemstone.gemfire.internal.cache.ExternalTableMetaData;
+import com.gemstone.gemfire.internal.cache.PolicyTableData;
+
 /**
  * Need to keep GemXD independent of any snappy/spark/hive related
  * classes. An implementation of this can be made which adheres to this
@@ -27,6 +30,13 @@ import java.util.List;
  * initializes and set into the GemFireStore instance.
  */
 public interface ExternalCatalog {
+
+  /**
+   * Wait for initialization of the catalog. Should always be invoked
+   * before calling any other method. Fails after waiting for some period
+   * of time.
+   */
+  boolean waitForInitialization();
 
   /**
    * Will be used by the execution engine to route to JobServer
@@ -56,15 +66,34 @@ public interface ExternalCatalog {
   HashMap<String, List<String>> getAllStoreTablesInCatalog(boolean skipLocks);
 
   /**
-   *  Removes a table from the external catalog
+   * Removes a table from the external catalog
    */
   boolean removeTable(String schema, String table, boolean skipLocks);
 
   /**
    * Returns the schema in which this catalog is created
+   *
    * @return
    */
   public String catalogSchemaName();
 
-  void stop();
+  Object getTable(String schema, String tableName, boolean skipLocks);
+
+  /**
+   * Get the metadata for all external hive tables (including all their columns).
+   */
+  public List<ExternalTableMetaData> getHiveTables(boolean skipLocks);
+
+  /**
+   * Get the details of all the policies created.
+   */
+  public List<PolicyTableData> getPolicies(boolean skipLocks);
+
+  /**
+   * Returns the meta data of the Hive Table
+   */
+  public ExternalTableMetaData getHiveTableMetaData(String schema, String tableName,
+      boolean skipLocks);
+
+  void close();
 }

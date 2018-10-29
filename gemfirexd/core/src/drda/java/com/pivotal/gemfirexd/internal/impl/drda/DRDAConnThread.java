@@ -82,11 +82,13 @@ import com.gemstone.gemfire.internal.shared.ClientSharedData;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.shared.UnsupportedGFXDVersionException;
 import com.gemstone.gemfire.internal.shared.Version;
+import com.gemstone.gemfire.internal.tcp.ConnectionTable;
 import com.pivotal.gemfirexd.Attribute;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserver;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserverHolder;
 import com.pivotal.gemfirexd.internal.engine.access.GemFireTransaction;
+import com.pivotal.gemfirexd.internal.engine.sql.execute.SnappySelectResultSet;
 import com.pivotal.gemfirexd.internal.engine.stats.ConnectionStats;
 import com.pivotal.gemfirexd.internal.iapi.services.io.ApplicationObjectInputStream;
 import com.pivotal.gemfirexd.internal.iapi.services.loader.ClassFactory;
@@ -426,6 +428,7 @@ class DRDAConnThread extends Thread {
 				}
 			}
 		}
+		ConnectionTable.releaseThreadsSockets();
 		if (this.trace)
 			trace("Ending connection thread");
 		server.removeThread(this);
@@ -1062,16 +1065,23 @@ class DRDAConnThread extends Thread {
 // GemStone changes END
 							  long currentVersion =
 							       ((EnginePreparedStatement)stmt.ps).
-							         getVersionCounter();
-							
-							  if (stmt.sqldaType ==
+							          getVersionCounter();
+
+							  final ResultSet rs = stmt.ps.getResultSet();
+							  final boolean sendMetadata = (rs != null) && rs instanceof EmbedResultSet
+							  && ((EmbedResultSet)rs).getSourceResultSet() instanceof SnappySelectResultSet;
+							  if (sendMetadata || (stmt.sqldaType ==
 							      CodePoint.TYPSQLDA_LIGHT_OUTPUT &&
-							      currentVersion != sentVersion) {
+							      currentVersion != sentVersion)) {
 							  // DERBY-5459. The prepared statement has a
 							  // result set and has changed on the server
 							  // since we last informed the client about its
 							  // shape, so re-send metadata.
-							  //
+
+							  // also send metadata after the execution of query for
+							  // PreparedStatement that is routed to lead node
+							  // as we did not have metadata for at prepare time
+
 							  // NOTE: This is an extension of the standard
 							  // DRDA protocol since we send the SQLDARD
 							  // even if it isn't requested in this case.
@@ -1087,7 +1097,6 @@ class DRDAConnThread extends Thread {
 // GemStone changes BEGIN
 							}
 // GemStone changes END
-
 							writeQRYDSC(stmt, false);
 
 							stmt.rsSuspend();
@@ -8983,9 +8992,7 @@ class DRDAConnThread extends Thread {
      * <p>
      * This method should behave like the corresponding method for
      * {@code ResultSet}, and changes made to one of these methods, must be
-     * reflected in the other method. See
-     * {@link #getObjectForWriteFdoca(java.sql.ResultSet, int, int)}
-     * for details.
+     * reflected in the other method.
      * </p>
      *
      * @param cs the callable statement to fetch the object from
@@ -8993,7 +9000,6 @@ class DRDAConnThread extends Thread {
      * @param drdaType the DRDA type of the object to fetch
      * @return an object with the value of the output parameter
      * @throws if a database error occurs while fetching the parameter value
-     * @see #getObjectForWriteFdoca(java.sql.ResultSet, int, int)
      */
     private Object getObjectForWriteFdoca(CallableStatement cs,
                                           int index, int drdaType)

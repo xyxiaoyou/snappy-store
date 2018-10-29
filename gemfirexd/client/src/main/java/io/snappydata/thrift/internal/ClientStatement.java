@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -35,7 +35,6 @@
 
 package io.snappydata.thrift.internal;
 
-import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
@@ -45,6 +44,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.pivotal.gemfirexd.internal.shared.common.reference.SQLState;
 import io.snappydata.thrift.*;
@@ -60,35 +60,41 @@ public class ClientStatement extends ClientFetchColumnValue implements
   protected final ClientConnection conn;
   protected final StatementAttrs attrs;
   // volatile for cancel which can happen from another thread
-  protected volatile int statementId;
+  protected volatile long statementId;
   protected RowSet currentRowSet;
   protected int currentUpdateCount;
   protected RowSet currentGeneratedKeys;
   protected volatile SnappyExceptionData warnings;
-  protected volatile boolean isOpen;
+  protected volatile boolean isClosed;
   protected ArrayList<String> batchSQLs;
 
   private ClientStatement(ClientConnection conn, int holdability) {
-    super(conn.clientService, (byte)snappydataConstants.INVALID_ID);
+    super(conn.getClientService(), (byte)snappydataConstants.INVALID_ID);
     this.conn = conn;
-    this.attrs = new StatementAttrs().setPendingTransactionAttrs(conn
-        .getPendingTXFlags());
+    this.attrs = (conn.commonAttrs != null
+        ? new StatementAttrs(conn.commonAttrs) : new StatementAttrs())
+        .setPendingTransactionAttrs(conn.getPendingTXFlags());
     if (holdability == ResultSet.HOLD_CURSORS_OVER_COMMIT) {
       this.attrs.setHoldCursorsOverCommit(true);
+    }
+    if (this.service.lobChunkSize > 0) {
+      this.attrs.setLobChunkSize(this.service.lobChunkSize);
     }
     this.currentUpdateCount = -1;
   }
 
   ClientStatement(ClientConnection conn) {
     this(conn, conn.getHoldability());
-    this.isOpen = true;
+    this.isClosed = false;
   }
 
   ClientStatement(ClientConnection conn, int rsType, int rsConcurrency,
       int rsHoldability) {
     this(conn, conn.getHoldability());
-    this.attrs.setResultSetType((byte)Converters
-        .getThriftResultSetType(rsType));
+    byte attrsRsType = (byte)Converters.getThriftResultSetType(rsType);
+    if (attrsRsType != snappydataConstants.DEFAULT_RESULTSET_TYPE) {
+      this.attrs.setResultSetType(attrsRsType);
+    }
     if (rsConcurrency == ResultSet.CONCUR_UPDATABLE) {
       this.attrs.setUpdatable(true);
     }
@@ -97,30 +103,50 @@ public class ClientStatement extends ClientFetchColumnValue implements
     } else if (rsHoldability == ResultSet.CLOSE_CURSORS_AT_COMMIT) {
       this.attrs.setHoldCursorsOverCommit(false);
     }
-    this.isOpen = true;
+    this.isClosed = false;
   }
 
   protected final void checkClosed() throws SQLException {
-    if (this.conn.isOpen) {
-      if (this.isOpen) {
-        return;
-      }
-      else {
+    if (this.service.isClosed()) {
+      throw ThriftExceptionUtil.newSQLException(
+          SQLState.NO_CURRENT_CONNECTION, null);
+    } else {
+      if (this.isClosed) {
         throw ThriftExceptionUtil.newSQLException(SQLState.ALREADY_CLOSED,
             null, "Statement");
       }
-    }
-    else {
-      throw ThriftExceptionUtil.newSQLException(
-          SQLState.NO_CURRENT_CONNECTION, null);
     }
   }
 
   public final StatementAttrs getAttributes() {
     final StatementAttrs attrs = this.attrs;
     return attrs.__isset_bitfield == 0 && attrs.autoIncColumnNames == null
-        && attrs.autoIncColumns == null
-        && attrs.pendingTransactionAttrs == null ? null : attrs;
+        && attrs.autoIncColumns == null && attrs.cursorName == null
+        && attrs.pendingTransactionAttrs == null && attrs.bucketIds == null
+        && attrs.snapshotTransactionId == null ? null : attrs;
+  }
+
+  public final void setLocalExecutionBucketIds(Set<Integer> bucketIds,
+      String tableName, boolean retain) {
+    setLocalExecutionBucketIds(this.attrs, bucketIds, tableName, retain);
+  }
+
+  public static StatementAttrs setLocalExecutionBucketIds(StatementAttrs attrs,
+      Set<Integer> bucketIds, String tableName, boolean retain) {
+    return attrs.setBucketIds(bucketIds).setBucketIdsTable(tableName)
+        .setRetainBucketIds(retain);
+  }
+
+  public final void setMetadataVersion(int version) {
+    this.attrs.setMetadataVersion(version);
+  }
+
+  public final void setSnapshotTransactionId(String txId) {
+    if (txId != null && !txId.isEmpty()) {
+      this.attrs.setSnapshotTransactionId(txId);
+    } else {
+      this.attrs.unsetSnapshotTransactionId();
+    }
   }
 
   final void clearPendingTransactionAttrs() {
@@ -157,13 +183,12 @@ public class ClientStatement extends ClientFetchColumnValue implements
   }
 
   protected void setCurrentRowSet(RowSet rs) {
-    if (rs != null) {
+    if (rs != null && (rs.getMetadata() != null || rs.getRowsSize() > 0)) {
       this.currentRowSet = rs;
       this.statementId = rs.statementId;
       setCurrentSource(snappydataConstants.BULK_CLOSE_STATEMENT,
           rs.statementId, rs);
-    }
-    else {
+    } else {
       this.currentRowSet = null;
       setCurrentSource(snappydataConstants.BULK_CLOSE_STATEMENT,
           snappydataConstants.INVALID_ID, null);
@@ -213,11 +238,9 @@ public class ClientStatement extends ClientFetchColumnValue implements
 
     if (max > 0) {
       this.attrs.setMaxFieldSize(max);
-    }
-    else if (max == 0) {
+    } else if (max == 0) {
       this.attrs.unsetMaxFieldSize();
-    }
-    else {
+    } else {
       throw ThriftExceptionUtil.newSQLException(
           SQLState.INVALID_MAXFIELD_SIZE, null, max);
     }
@@ -240,11 +263,9 @@ public class ClientStatement extends ClientFetchColumnValue implements
 
     if (max > 0) {
       this.attrs.setMaxRows(max);
-    }
-    else if (max == 0) {
+    } else if (max == 0) {
       this.attrs.unsetMaxRows();
-    }
-    else {
+    } else {
       throw ThriftExceptionUtil.newSQLException(
           SQLState.INVALID_MAX_ROWS_VALUE, null, max);
     }
@@ -276,11 +297,9 @@ public class ClientStatement extends ClientFetchColumnValue implements
 
     if (seconds > 0) {
       this.attrs.setTimeout(seconds);
-    }
-    else if (seconds == 0) {
+    } else if (seconds == 0) {
       this.attrs.unsetTimeout();
-    }
-    else {
+    } else {
       throw ThriftExceptionUtil.newSQLException(
           SQLState.INVALID_QUERYTIMEOUT_VALUE, null, seconds);
     }
@@ -294,13 +313,18 @@ public class ClientStatement extends ClientFetchColumnValue implements
     // get the source before clearing the finalizer
     final HostConnection source = getLobSource(false, "closeStatement");
     clearFinalizer();
-    this.conn.checkClosedConnection();
+
+    // closing an already closed Statement is a no-op as per JDBC spec
+    if (isClosed()) {
+      return;
+    }
+
     try {
       this.service.closeStatement(source, this.statementId, 0);
     } catch (SnappyException se) {
       throw ThriftExceptionUtil.newSQLException(se);
     } finally {
-      this.isOpen = false;
+      this.isClosed = true;
       reset();
     }
   }
@@ -328,8 +352,7 @@ public class ClientStatement extends ClientFetchColumnValue implements
     SnappyExceptionData warning;
     if (rs != null) {
       warning = rs.getWarnings();
-    }
-    else {
+    } else {
       warning = this.warnings;
     }
     if (warning != null) {
@@ -376,8 +399,7 @@ public class ClientStatement extends ClientFetchColumnValue implements
     final RowSet rs = this.currentRowSet;
     if (rs != null) {
       return new ClientResultSet(this.conn, this, rs);
-    }
-    else {
+    } else {
       return null;
     }
   }
@@ -407,11 +429,9 @@ public class ClientStatement extends ClientFetchColumnValue implements
     checkClosed();
     if (direction == ResultSet.FETCH_REVERSE) {
       this.attrs.setFetchReverse(true);
-    }
-    else if (direction == ResultSet.FETCH_FORWARD) {
+    } else if (direction == ResultSet.FETCH_FORWARD) {
       this.attrs.setFetchReverse(false);
-    }
-    else if (this.attrs.isSetFetchReverse()) {
+    } else if (this.attrs.isSetFetchReverse()) {
       this.attrs.setFetchReverseIsSet(false);
       this.attrs.setFetchReverse(false);
     }
@@ -425,8 +445,7 @@ public class ClientStatement extends ClientFetchColumnValue implements
     if (this.attrs.isSetFetchReverse()) {
       return this.attrs.isFetchReverse() ? ResultSet.FETCH_REVERSE
           : ResultSet.FETCH_FORWARD;
-    }
-    else {
+    } else {
       return ResultSet.FETCH_UNKNOWN;
     }
   }
@@ -441,11 +460,9 @@ public class ClientStatement extends ClientFetchColumnValue implements
     final int maxRows;
     if (rows > 0 && ((maxRows = getMaxRows()) == 0 || rows <= maxRows)) {
       this.attrs.setBatchSize(rows);
-    }
-    else if (rows == 0) {
+    } else if (rows == 0) {
       this.attrs.unsetBatchSize();
-    }
-    else {
+    } else {
       throw ThriftExceptionUtil.newSQLException(SQLState.INVALID_FETCH_SIZE,
           null, rows);
     }
@@ -476,8 +493,7 @@ public class ClientStatement extends ClientFetchColumnValue implements
   public int getResultSetType() throws SQLException {
     if (this.attrs.isSetResultSetType()) {
       return Converters.getJdbcResultSetType(this.attrs.getResultSetType());
-    }
-    else {
+    } else {
       return ResultSet.TYPE_FORWARD_ONLY;
     }
   }
@@ -498,8 +514,12 @@ public class ClientStatement extends ClientFetchColumnValue implements
    * {@inheritDoc}
    */
   @Override
-  public void clearBatch() throws SQLException {
+  public final void clearBatch() throws SQLException {
     checkClosed();
+    clearBatchData();
+  }
+
+  protected void clearBatchData() {
     this.batchSQLs = null;
     reset();
   }
@@ -519,15 +539,15 @@ public class ClientStatement extends ClientFetchColumnValue implements
         this.warnings = ur.getWarnings();
         this.currentGeneratedKeys = ur.getGeneratedKeys();
         List<Integer> updateCounts = ur.getBatchUpdateCounts();
+        clearBatchData();
         if (updateCounts != null) {
           int[] result = new int[updateCounts.size()];
           for (int i = 0; i < result.length; i++) {
             result[i] = updateCounts.get(i);
           }
           return result;
-        }
-        else if (batch.size() == 1) {
-          return new int[] { ur.getUpdateCount() };
+        } else if (batch.size() == 1) {
+          return new int[]{ur.getUpdateCount()};
         }
       } catch (SnappyException se) {
         throw ThriftExceptionUtil.newSQLException(se);
@@ -540,7 +560,7 @@ public class ClientStatement extends ClientFetchColumnValue implements
    * {@inheritDoc}
    */
   @Override
-  public Connection getConnection() throws SQLException {
+  public final ClientConnection getConnection() throws SQLException {
     checkClosed();
     return this.conn;
   }
@@ -572,12 +592,11 @@ public class ClientStatement extends ClientFetchColumnValue implements
             getLobSource(true, "getMoreResults"), rs.cursorId, rsFlag);
         reset();
         setCurrentRowSet(rs);
-        return true;
+        return this.currentRowSet != null;
       } catch (SnappyException se) {
         throw ThriftExceptionUtil.newSQLException(se);
       }
-    }
-    else {
+    } else {
       return false;
     }
   }
@@ -591,8 +610,7 @@ public class ClientStatement extends ClientFetchColumnValue implements
     final RowSet rs = this.currentGeneratedKeys;
     if (rs != null) {
       return new ClientResultSet(this.conn, this, rs);
-    }
-    else {
+    } else {
       return null;
     }
   }
@@ -644,21 +662,18 @@ public class ClientStatement extends ClientFetchColumnValue implements
       int[] autoIncColumns, String[] autoIncColumnNames) {
     if (getAutoInc) {
       this.attrs.setRequireAutoIncCols(true);
-    }
-    else if (this.attrs.isSetRequireAutoIncCols()) {
+    } else if (this.attrs.isSetRequireAutoIncCols()) {
       this.attrs.setRequireAutoIncCols(false);
       this.attrs.setRequireAutoIncColsIsSet(false);
     }
     if (autoIncColumns != null) {
       this.attrs.setAutoIncColumns(getIntegerList(autoIncColumns));
-    }
-    else {
+    } else {
       this.attrs.setAutoIncColumns(null);
     }
     if (autoIncColumnNames != null) {
       this.attrs.setAutoIncColumnNames(Arrays.asList(autoIncColumnNames));
-    }
-    else {
+    } else {
       this.attrs.setAutoIncColumnNames(null);
     }
   }
@@ -732,8 +747,7 @@ public class ClientStatement extends ClientFetchColumnValue implements
       if (rs != null) {
         setCurrentRowSet(rs);
         return true;
-      }
-      else {
+      } else {
         this.currentUpdateCount = sr.getUpdateCount();
         return false;
       }
@@ -753,16 +767,16 @@ public class ClientStatement extends ClientFetchColumnValue implements
   public int getResultSetHoldability() throws SQLException {
     return this.attrs.isSetHoldCursorsOverCommit()
         && this.attrs.isHoldCursorsOverCommit()
-            ? ResultSet.HOLD_CURSORS_OVER_COMMIT
-            : ResultSet.CLOSE_CURSORS_AT_COMMIT;
+        ? ResultSet.HOLD_CURSORS_OVER_COMMIT
+        : ResultSet.CLOSE_CURSORS_AT_COMMIT;
   }
 
   /**
    * {@inheritDoc}
    */
   @Override
-  public boolean isClosed() throws SQLException {
-    return !this.isOpen;
+  public final boolean isClosed() {
+    return this.isClosed || this.service.isClosed();
   }
 
   /**

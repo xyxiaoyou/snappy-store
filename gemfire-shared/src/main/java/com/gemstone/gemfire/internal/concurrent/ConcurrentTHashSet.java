@@ -44,13 +44,12 @@ import com.gemstone.gnu.trove.TObjectProcedure;
  *          the type of elements maintained by this set
  */
 @SuppressWarnings("serial")
-public final class ConcurrentTHashSet<T> extends THashParameters implements
-    Set<T>, TObjectHashingStrategy {
+public class ConcurrentTHashSet<T> extends THashParameters implements Set<T> {
 
   public static final int DEFAULT_CONCURRENCY = 16;
 
-  private final ConcurrentTHashSegment<T>[] segments;
-  private final int numSegments;
+  protected final ConcurrentTHashSegment<T>[] segments;
+  protected final int numSegments;
   private final AtomicLong totalSize;
 
   public ConcurrentTHashSet() {
@@ -66,6 +65,10 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
   public ConcurrentTHashSet(int concurrency) {
     this(concurrency, THash.DEFAULT_INITIAL_CAPACITY,
         THash.DEFAULT_LOAD_FACTOR, null, null);
+  }
+
+  public ConcurrentTHashSet(int concurrency, int initialCapacity) {
+    this(concurrency, initialCapacity, THash.DEFAULT_LOAD_FACTOR, null, null);
   }
 
   public ConcurrentTHashSet(TObjectHashingStrategy strategy,
@@ -94,7 +97,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
     this.segments = new ConcurrentTHashSegment[concurrency];
     this.numSegments = concurrency;
     for (int index = 0; index < concurrency; index++) {
-      this.segments[index] = new ConcurrentTHashSegment<T>(segSize, this,
+      this.segments[index] = new ConcurrentTHashSegment<>(segSize, this,
           this.totalSize);
     }
   }
@@ -107,12 +110,12 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * {@inheritDoc}
    */
   @Override
-  public int size() {
+  public final int size() {
     final long size = this.totalSize.get();
     return size < Integer.MAX_VALUE ? (int)size : Integer.MAX_VALUE;
   }
 
-  public long capacity() {
+  public final long capacity() {
     long capacity = 0;
     acquireAllLocks(false);
     try {
@@ -129,7 +132,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * {@inheritDoc}
    */
   @Override
-  public boolean isEmpty() {
+  public final boolean isEmpty() {
     return this.totalSize.get() == 0;
   }
 
@@ -137,7 +140,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * {@inheritDoc}
    */
   @Override
-  public boolean contains(Object o) {
+  public final boolean contains(Object o) {
     if (o != null) {
       final int hash = computeHashCode(o, this.hashingStrategy);
       return segmentFor(hash).contains(o, hash);
@@ -154,7 +157,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * the object in set.
    */
   @SuppressWarnings("unchecked")
-  public T get(Object o) {
+  public final T get(Object o) {
     if (o != null) {
       final int hash = computeHashCode(o, this.hashingStrategy);
       return (T)segmentFor(hash).getKey(o, hash);
@@ -170,7 +173,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * not wait for locks and is not affected much by inaccurate results.
    */
   @SuppressWarnings("unchecked")
-  public T getUnsafe(Object o) {
+  public final T getUnsafe(Object o) {
     if (o != null) {
       final int hash = computeHashCode(o, this.hashingStrategy);
       Object result = segmentFor(hash).getKeyNoLock(o, hash);
@@ -192,7 +195,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * {@inheritDoc}
    */
   @Override
-  public boolean add(T e) {
+  public final boolean add(T e) {
     if (e != null) {
       final int hash = computeHashCode(e, this.hashingStrategy);
       return segmentFor(hash).add(e, hash) == null;
@@ -206,12 +209,24 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * Like {@link #add(Object)} but returns the current key if already present in
    * set (instead of false) else null (instead of true).
    */
-  public Object addKey(T e) {
+  public final Object addKey(T e) {
     if (e != null) {
       final int hash = computeHashCode(e, this.hashingStrategy);
       return segmentFor(hash).add(e, hash);
     }
     else {
+      throw new NullPointerException("null element");
+    }
+  }
+
+  /**
+   * Like {@link #addKey(Object)} but replaces the current key if present.
+   */
+  public final Object put(T e) {
+    if (e != null) {
+      final int hash = computeHashCode(e, this.hashingStrategy);
+      return segmentFor(hash).put(e, hash);
+    } else {
       throw new NullPointerException("null element");
     }
   }
@@ -262,7 +277,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * {@inheritDoc}
    */
   @Override
-  public boolean remove(Object o) {
+  public final boolean remove(Object o) {
     if (o != null) {
       final int hash = computeHashCode(o, this.hashingStrategy);
       return segmentFor(hash).remove(o, hash) != null;
@@ -277,7 +292,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * and removed (instead of true) else null (instead of false).
    */
   @SuppressWarnings("unchecked")
-  public T removeKey(Object o) {
+  public final T removeKey(Object o) {
     if (o != null) {
       final int hash = computeHashCode(o, this.hashingStrategy);
       return (T)segmentFor(hash).remove(o, hash);
@@ -298,7 +313,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * @return true if replace was successful, and false if old value was not
    *         found
    */
-  public boolean replace(Object o, T e) {
+  public final boolean replace(Object o, T e) {
     if (o != null && e != null) {
       final int hashOld = computeHashCode(o, this.hashingStrategy);
       final int hashNew = computeHashCode(e, this.hashingStrategy);
@@ -355,94 +370,72 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * {@inheritDoc}
    */
   @Override
-  public boolean containsAll(Collection<?> c) {
-    if (c != null) {
-      for (Object o : c) {
-        if (!contains(o)) {
-          return false;
-        }
+  public final boolean containsAll(Collection<?> c) {
+    for (Object o : c) {
+      if (!contains(o)) {
+        return false;
       }
-      return true;
     }
-    else {
-      throw new NullPointerException("null collection");
-    }
+    return true;
   }
 
   /**
    * {@inheritDoc}
    */
   @Override
-  public boolean addAll(Collection<? extends T> c) {
-    if (c != null) {
-      boolean result = false;
-      for (T e : c) {
-        result |= add(e);
-      }
-      return result;
+  public final boolean addAll(Collection<? extends T> c) {
+    boolean result = false;
+    for (T e : c) {
+      result |= add(e);
     }
-    else {
-      throw new NullPointerException("null collection");
-    }
+    return result;
   }
 
   /**
    * {@inheritDoc}
    */
   @Override
-  public boolean retainAll(Collection<?> c) {
-    if (c != null) {
-      int hash, segIndex;
-      boolean result = false;
-      final int nsegs = this.numSegments;
-      // split by segment
-      @SuppressWarnings("unchecked")
-      final ArrayList<Object>[] cs = new ArrayList[nsegs];
-      for (Object o : c) {
-        if (o != null) {
-          hash = computeHashCode(o, this.hashingStrategy);
-          segIndex = hash % nsegs;
-          if (cs[segIndex] == null) {
-            cs[segIndex] = new ArrayList<Object>();
-          }
-          cs[segIndex].add(o);
+  public final boolean retainAll(Collection<?> c) {
+    int hash, segIndex;
+    boolean result = false;
+    final int nsegs = this.numSegments;
+    // split by segment
+    @SuppressWarnings("unchecked")
+    final ArrayList<Object>[] cs = new ArrayList[nsegs];
+    for (Object o : c) {
+      if (o != null) {
+        hash = computeHashCode(o, this.hashingStrategy);
+        segIndex = hash % nsegs;
+        if (cs[segIndex] == null) {
+          cs[segIndex] = new ArrayList<Object>();
         }
-        else {
-          throw new NullPointerException("null element");
-        }
+        cs[segIndex].add(o);
+      } else {
+        throw new NullPointerException("null element");
       }
-      for (segIndex = 0; segIndex < nsegs; segIndex++) {
-        ArrayList<Object> a = cs[segIndex];
-        ConcurrentTHashSegment<T> seg = this.segments[segIndex];
-        if (a != null) {
-          result |= seg.retainAll(a);
-        }
-        else {
-          result |= seg.clear();
-        }
+    }
+    for (segIndex = 0; segIndex < nsegs; segIndex++) {
+      ArrayList<Object> a = cs[segIndex];
+      ConcurrentTHashSegment<T> seg = this.segments[segIndex];
+      if (a != null) {
+        result |= seg.retainAll(a);
+      } else {
+        result |= seg.clear();
       }
-      return result;
     }
-    else {
-      throw new NullPointerException("null collection");
-    }
+    return result;
   }
 
   /**
    * {@inheritDoc}
    */
   @Override
-  public boolean removeAll(Collection<?> c) {
-    if (c != null) {
-      boolean result = false;
-      for (Object o : c) {
-        result |= remove(o);
-      }
-      return result;
+  public final boolean removeAll(Collection<?> c) {
+    boolean result = false;
+    for (Object o : c) {
+      result |= remove(o);
     }
-    else {
-      throw new NullPointerException("null collection");
-    }
+    return result;
   }
 
   /**
@@ -452,7 +445,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * Usually you will want to use this when size of collection is greater than
    * the concurreny level of the map.
    */
-  public boolean bulkRemoveAll(Collection<?> c) {
+  public final boolean bulkRemoveAll(Collection<?> c) {
     if (c != null) {
       boolean result = false;
       // segregate by segment
@@ -517,7 +510,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * {@inheritDoc}
    */
   @Override
-  public Itr iterator() {
+  public final Itr iterator() {
     return new Itr();
   }
 
@@ -534,7 +527,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
    * operation on this set directly from inside the body of procedure itself
    * else it will result in a deadlock.
    */
-  public boolean forEach(TObjectProcedure proc) {
+  public final boolean forEach(TObjectProcedure proc) {
     acquireAllLocks(false);
     try {
       for (ConcurrentTHashSegment<T> seg : this.segments) {
@@ -612,6 +605,34 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
   @Override
   public <E> E[] toArray(E[] a) {
     return toArray(a, null, null);
+  }
+
+  /** copy the contents in array and clear the map as atomic operation */
+  @SuppressWarnings("unchecked")
+  public <E> E[] drainTo(E[] a) {
+    int size = 0;
+    int offset = 0;
+    E[] result;
+    acquireAllLocks(true);
+    try {
+      for (ConcurrentTHashSegment<T> seg : this.segments) {
+        size += seg.size;
+      }
+      if (a.length >= size) {
+        result = a;
+      } else {
+        Class<?> c = a.getClass();
+        result = (E[])(c == Object[].class ? new Object[size]
+            : Array.newInstance(c.getComponentType(), size));
+      }
+      for (ConcurrentTHashSegment<T> seg : this.segments) {
+        offset = seg.toArray(result, seg.set, offset);
+        seg.clear();
+      }
+    } finally {
+      releaseAllLocks(true);
+    }
+    return result;
   }
 
   /**
@@ -779,17 +800,18 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
     }
 
     private void moveNext() {
-      Object o;
       this.nextObj = null;
 
+      Object o;
       while (true) {
-        final int size = this.set.length;
+        final Object[] set = this.set;
+        final int size = set.length;
         for (int i = this.nextIndex; i < size; i++) {
-          o = this.set[i];
+          o = set[i];
           if (o != null && o != ConcurrentTHashSegment.REMOVED) {
             this.nextIndex = i + 1;
             this.nextObj = o;
-            break;
+            return;
           }
         }
         if (this.nextObj != null) {
@@ -799,8 +821,7 @@ public final class ConcurrentTHashSet<T> extends THashParameters implements
         // move to next segment
         if (++this.segIndex < numSegments) {
           setSet(segments[this.segIndex]);
-        }
-        else {
+        } else {
           return;
         }
       }

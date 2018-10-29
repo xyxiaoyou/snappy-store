@@ -17,9 +17,8 @@
 
 package com.gemstone.gemfire.internal.cache;
 
-import java.util.Collections;
-import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.gemstone.gemfire.StatisticDescriptor;
 import com.gemstone.gemfire.Statistics;
@@ -28,9 +27,6 @@ import com.gemstone.gemfire.StatisticsType;
 import com.gemstone.gemfire.StatisticsTypeFactory;
 import com.gemstone.gemfire.cache.Region;
 import com.gemstone.gemfire.internal.StatisticsTypeFactoryImpl;
-import com.gemstone.gemfire.internal.cache.BucketRegion;
-import com.gemstone.gemfire.internal.cache.PartitionedRegion;
-import com.gemstone.gemfire.internal.concurrent.CFactory;
 
 /**
  * Represents a statistics type that can be archived to vsd. Loading of this
@@ -172,8 +168,9 @@ public class PartitionedRegionStats {
 
 
   //Column table Stats
-  private static final int prNumRowsInCachedBatches;
-  
+  private static final int prNumRowsInColumnBatches;
+  private static final int prOffHeapSizeInBytes;
+
   static {
     final boolean largerIsBetter = true;
     StatisticsTypeFactory f = StatisticsTypeFactoryImpl.singleton();
@@ -551,11 +548,13 @@ public class PartitionedRegionStats {
                 "total number of times meta data refreshed sent on client's request.",
                 "operation", false),
         f.createLongCounter(
-              "prNumRowsInCachedBatches",
-              "total number of rows which are part of cached batches.",
+              "prNumRowsInColumnBatches",
+              "total number of rows which are part of column batches.",
               "entries", false),
-
-
+        f.createLongCounter(
+            "prOffHeapSizeInBytes",
+            "total bytes occupied by off-heap in the partitioned region",
+            "bytes", false),
       });
     
     bucketCountId = type.nameToId("bucketCount");
@@ -653,7 +652,8 @@ public class PartitionedRegionStats {
     putLocalTimeId = type.nameToId("putLocalTime");
     
     prMetaDataSentCountId = type.nameToId("prMetaDataSentCount");
-    prNumRowsInCachedBatches = type.nameToId("prNumRowsInCachedBatches");
+    prNumRowsInColumnBatches = type.nameToId("prNumRowsInColumnBatches");
+    prOffHeapSizeInBytes = type.nameToId("prOffHeapSizeInBytes");
   }
   
   private final Statistics stats;
@@ -669,7 +669,7 @@ public class PartitionedRegionStats {
    * implications of a HashMap lookup is small and preferrable to so many
    * longs. Key: BucketAdvisor, Value: Long
    */
-  private final Map startTimeMap;
+  private final ConcurrentHashMap<Object, Long> startTimeMap;
 
   public static long startTime() {
     return CachePerfStats.getStatTime();
@@ -680,11 +680,10 @@ public class PartitionedRegionStats {
 
   public PartitionedRegionStats(StatisticsFactory factory, String name) {
     this.stats = factory.createAtomicStatistics(
-type, name /* fixes bug 42343 */);
-    
-    this.startTimeMap = CFactory.createCM();
+        type, name /* fixes bug 42343 */);
+    this.startTimeMap = new ConcurrentHashMap<>();
   }
-  
+
   public void close() {
     this.stats.close();
   }
@@ -1002,7 +1001,7 @@ type, name /* fixes bug 42343 */);
   }
   /** Remove stat start time from holding map to complete a clock stat */
   public long removeStartTime(Object key) {
-    Long startTime = (Long)this.startTimeMap.remove(key);
+    Long startTime = this.startTimeMap.remove(key);
     return startTime == null ? 0 : startTime.longValue();
   }
 
@@ -1233,12 +1232,19 @@ type, name /* fixes bug 42343 */);
     return this.stats.getLong(prMetaDataSentCountId);
   }
 
-
-  public void incPRNumRowsInCachedBatches(int inc){
-    this.stats.incLong(prNumRowsInCachedBatches, inc);
+  public void setPRNumRowsInColumnBatches(long value) {
+    this.stats.setLong(prNumRowsInColumnBatches, value);
   }
 
-  public long getPRNumRowsInCachedBatches() {
-    return this.stats.getLong(prNumRowsInCachedBatches);
+  public long getPRNumRowsInColumnBatches() {
+    return this.stats.getLong(prNumRowsInColumnBatches);
+  }
+
+  public void setOffHeapSizeInBytes(long value) {
+    this.stats.setLong(prOffHeapSizeInBytes, value);
+  }
+
+  public long getOffHeapSizeInBytes() {
+    return this.stats.getLong(prOffHeapSizeInBytes);
   }
 }

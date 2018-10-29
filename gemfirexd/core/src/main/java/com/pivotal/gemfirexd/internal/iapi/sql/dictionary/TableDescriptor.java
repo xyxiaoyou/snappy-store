@@ -56,6 +56,7 @@ import com.pivotal.gemfirexd.internal.engine.sql.catalog.DistributionDescriptor;
 import com.pivotal.gemfirexd.internal.catalog.Dependable;
 import com.pivotal.gemfirexd.internal.catalog.DependableFinder;
 import com.pivotal.gemfirexd.internal.catalog.UUID;
+import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.internal.iapi.reference.SQLState;
 import com.pivotal.gemfirexd.internal.iapi.services.context.ContextService;
@@ -131,6 +132,7 @@ public class TableDescriptor extends TupleDescriptor
 	public static final char	ROW_LOCK_GRANULARITY = 'R';
 	public static final char	TABLE_LOCK_GRANULARITY = 'T';
 	public static final char	DEFAULT_LOCK_GRANULARITY = ROW_LOCK_GRANULARITY;
+	public static final boolean  DEFAULT_ROW_LEVEL_SECURITY_ENABLED = false;
 
 	/**
 	*/
@@ -150,6 +152,7 @@ public class TableDescriptor extends TupleDescriptor
 	private	GenericDescriptorList	triggerDescriptorList;
 	ViewDescriptor					viewDescriptor;
 	FormatableBitSet							referencedColumnMap;
+	private boolean rowLevelSecurityEnabled;
 
 	/** A list of statistics pertaining to this table-- 
 	 */
@@ -176,7 +179,7 @@ public class TableDescriptor extends TupleDescriptor
 		boolean				onRollbackDeleteRows
     )
 	{
-		this(dataDictionary, tableName, schema, tableType, '\0');
+		this(dataDictionary, tableName, schema, tableType, '\0', false);
 
 		this.onCommitDeleteRows = onCommitDeleteRows;
 		this.onRollbackDeleteRows = onRollbackDeleteRows;
@@ -191,6 +194,7 @@ public class TableDescriptor extends TupleDescriptor
 	 * @param tableType	An integer identifier for the type of the table
 	 *			(base table, view, etc.)
 	 * @param lockGranularity	The lock granularity.
+	 * @param rlsEnabled	Row Level Security Enabled.
 	 */
 
 	public TableDescriptor
@@ -199,7 +203,8 @@ public class TableDescriptor extends TupleDescriptor
 		String				tableName,
 		SchemaDescriptor	schema,
 		int					tableType,
-		char				lockGranularity
+		char				lockGranularity,
+		boolean     rlsEnabled
     )
 	{
 		super( dataDictionary );
@@ -208,6 +213,7 @@ public class TableDescriptor extends TupleDescriptor
 		this.tableName = tableName;
 		this.tableType = tableType;
 		this.lockGranularity = lockGranularity;
+		this.rowLevelSecurityEnabled = rlsEnabled;
 
 		this.conglomerateDescriptorList = new ConglomerateDescriptorList();
 		this.columnDescriptorList = new ColumnDescriptorList();
@@ -434,6 +440,26 @@ public class TableDescriptor extends TupleDescriptor
 	public void	setLockGranularity(char lockGranularity)
 	{
 		this.lockGranularity = lockGranularity;
+	}
+
+	/**
+	 * Sets the row level security flag for the table to the specified value.
+	 *
+	 * @param rowLevelSecurityEnabled	The new rowLevelSecurity flag.
+	 */
+	public void	setRowLevelSecurityEnabledFlag(boolean rowLevelSecurityEnabled)
+	{
+		this.rowLevelSecurityEnabled = rowLevelSecurityEnabled;
+	}
+
+	/**
+	 * Get Row Level Security enabled flag
+	 *
+	 * @return  boolean
+	 */
+	public boolean	getRowLevelSecurityEnabledFlag()
+	{
+		return this.rowLevelSecurityEnabled;
 	}
 
 	/**
@@ -1468,7 +1494,7 @@ public class TableDescriptor extends TupleDescriptor
     return this.tableType == VTI_TYPE && !this.skipRouteQueryToAllNodes;
   }
 
-  public DistributionDescriptor getDistributionDescriptorFromResolver() throws StandardException {
+  public DistributionDescriptor getDistributionDescriptorFromContainer() throws StandardException {
     
     Region<?,?> region = getRegion();
     
@@ -1486,9 +1512,8 @@ public class TableDescriptor extends TupleDescriptor
               0, null, false, new java.util.TreeSet<String>());
     }
     
-    GfxdPartitionResolver partResolver = getPartitionResolver(partAttributes);
-    assert partResolver != null: "Resolver is not expected to be null at this point.";
-    return partResolver.getDistributionDescriptor();
+    GemFireContainer container = (GemFireContainer)region.getUserAttribute();
+    return container != null ? container.getDistributionDescriptor() : null;
   }
 
   public Region<?, ?> getRegion() {
@@ -1502,7 +1527,8 @@ public class TableDescriptor extends TupleDescriptor
     return region;
   }
   
-  public GfxdPartitionResolver getPartitionResolver(final PartitionAttributes<?, ?> pAttribs) {
+  public GfxdPartitionResolver getGfxdPartitionResolver(
+      final PartitionAttributes<?, ?> pAttribs) {
     
     final PartitionAttributes<?, ?> partAttributes ;
     if (pAttribs == null) {
@@ -1522,11 +1548,12 @@ public class TableDescriptor extends TupleDescriptor
     
     final PartitionResolver<?, ?> partResolver = partAttributes
         .getPartitionResolver();
-    
-    assert partResolver instanceof GfxdPartitionResolver: "partResolver = "
-        + partResolver + " which is expected to be non-null & instanceof GfxdPR.";
-    
-    return (GfxdPartitionResolver)partResolver;
+    if (partResolver instanceof GfxdPartitionResolver) {
+      return (GfxdPartitionResolver)partResolver;
+    } else {
+      // can be an object table with custom PartitionResolver
+      return null;
+    }
   }
 
   @Override

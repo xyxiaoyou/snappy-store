@@ -216,20 +216,23 @@ public class Main {
 		  }
 
 		  final String historyFileName = System.getProperty(
-		      "gfxd.history", ".gfxd.history");
+		      utilMain.basePrompt + ".history", "." + utilMain.basePrompt + ".history");
 		  // setup the input stream
 		  final ConsoleReader reader = new ConsoleReader();
 		  reader.setBellEnabled(false);
 		  File histFile = new File(historyFileName);
 		  if (historyFileName.length() > 0) {
 		    final FileHistory hist;
+		    // skip doInit in FileHistory to enable setting max-size before load
 		    if (histFile.isAbsolute()) {
-		      hist = new FileHistory(new File(historyFileName));
+		      hist = new FileHistory(new File(historyFileName), false);
 		    }
 		    else {
 		      hist = new FileHistory(new File((System
-		          .getProperty("user.home")), historyFileName));
+		          .getProperty("user.home")), historyFileName), false);
 		    }
+		    hist.setMaxSize(50000);
+		    hist.load();
 		    reader.setHistory(hist);
 		  }
 			Runtime.getRuntime().addShutdownHook(new Thread() {

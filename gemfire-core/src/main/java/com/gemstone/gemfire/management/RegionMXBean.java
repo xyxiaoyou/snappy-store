@@ -363,7 +363,12 @@ public interface RegionMXBean {
   public boolean isColumnTable();
 
   /**
-   * get number of rows which have been overflown to cached batches
+   * get number of rows which have been overflown to column batches
    */
-  public long getRowsInCachedBatches();
+  public long getRowsInColumnBatches();
+
+  /**
+   * get number of rows in Reservoir
+   */
+  public long getRowsInReservoir();
 }

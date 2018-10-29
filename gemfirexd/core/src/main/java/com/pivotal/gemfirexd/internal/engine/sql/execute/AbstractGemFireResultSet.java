@@ -53,8 +53,6 @@ public abstract class AbstractGemFireResultSet implements ResultSet {
 
   protected final GemFireTransaction tran;
 
-  protected SQLWarning warnings;
-
   protected boolean isClosed;
 
   protected final GemFireXDQueryObserver observer = GemFireXDQueryObserverHolder
@@ -114,7 +112,6 @@ public abstract class AbstractGemFireResultSet implements ResultSet {
     }
     
     this.tran = (GemFireTransaction)act.getTransactionController();
-    this.warnings = null;
     this.isClosed = true;
   }
 
@@ -357,20 +354,17 @@ public abstract class AbstractGemFireResultSet implements ResultSet {
 
   @Override
   public final ExecRow getAbsoluteRow(int row) throws StandardException {
-    throw StandardException.newException(SQLState.LANG_DOES_NOT_RETURN_ROWS,
-        "absolute");
+    throw StandardException.newException(SQLState.SCROLL_NOT_SUPPORTED);
   }
 
   @Override
   public final ExecRow getFirstRow() throws StandardException {
-    throw StandardException.newException(SQLState.LANG_DOES_NOT_RETURN_ROWS,
-        "first");
+    throw StandardException.newException(SQLState.SCROLL_NOT_SUPPORTED);
   }
 
   @Override
   public final ExecRow getLastRow() throws StandardException {
-    throw StandardException.newException(SQLState.LANG_DOES_NOT_RETURN_ROWS,
-        "last");
+    throw StandardException.newException(SQLState.SCROLL_NOT_SUPPORTED);
   }
 
   @Override
@@ -381,14 +375,12 @@ public abstract class AbstractGemFireResultSet implements ResultSet {
 
   @Override
   public final ExecRow getPreviousRow() throws StandardException {
-    throw StandardException.newException(SQLState.LANG_DOES_NOT_RETURN_ROWS,
-        "previous");
+    throw StandardException.newException(SQLState.SCROLL_NOT_SUPPORTED);
   }
 
   @Override
   public final ExecRow getRelativeRow(int row) throws StandardException {
-    throw StandardException.newException(SQLState.LANG_DOES_NOT_RETURN_ROWS,
-        "relative");
+    throw StandardException.newException(SQLState.SCROLL_NOT_SUPPORTED);
   }
 
   @Override
@@ -398,27 +390,21 @@ public abstract class AbstractGemFireResultSet implements ResultSet {
 
   @Override
   public final ExecRow setBeforeFirstRow() throws StandardException {
-    throw StandardException.newException(SQLState.LANG_DOES_NOT_RETURN_ROWS,
-        "beforeFirst");
+    throw StandardException.newException(SQLState.SCROLL_NOT_SUPPORTED);
   }
 
   @Override
   public final ExecRow setAfterLastRow() throws StandardException {
-    throw StandardException.newException(SQLState.LANG_DOES_NOT_RETURN_ROWS,
-        "afterLast");
+    throw StandardException.newException(SQLState.SCROLL_NOT_SUPPORTED);
   }
 
   protected final void addWarning(SQLWarning w) {
-    if (warnings == null)
-      warnings = w;
-    else
-      warnings.setNextWarning(w);
-    return;
+    this.activation.addResultsetWarning(w);
   }
 
   @Override
   public final SQLWarning getWarnings() {
-    return this.warnings;
+    return this.activation.getResultsetWarnings();
   }
 
   @Override

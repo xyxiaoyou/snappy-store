@@ -21,7 +21,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-import com.gemstone.gemfire.internal.cache.CacheServerLauncher;
+import com.gemstone.gemfire.internal.shared.LauncherBase;
 import com.pivotal.gemfirexd.Attribute;
 import com.pivotal.gemfirexd.internal.iapi.reference.Property;
 import com.pivotal.gemfirexd.internal.iapi.services.property.PropertyUtil;
@@ -50,6 +50,8 @@ public interface GfxdConstants {
 
   final String GFXD_PREFIX = PropertyUtil.isSQLFire ? Attribute.SQLF_PREFIX
       : Attribute.GFXD_PREFIX;
+
+  String SNAPPY_PREFIX = "snappydata.";
 
   /** property name for schema name */
   final String PROPERTY_SCHEMA_NAME = GFXD_PREFIX + "schema-name";
@@ -131,6 +133,8 @@ public interface GfxdConstants {
    * by INITSIZE directive of CREATE TABLE
    */
   final String REGION_INITSIZE_KEY = "GEMFIRE_REGION_INITSIZE";
+
+  String TABLE_ROW_ENCODER_CLASS_KEY = "TABLE_ROW_ENCODER_CLASS";
 
   /**
    * this string is used to pass the DistributionDescriptor between the
@@ -242,11 +246,6 @@ public interface GfxdConstants {
   final String PROTOCOL = Attribute.PROTOCOL;
 
   /**
-   * Protocol string used for thin network clients.
-   */
-  final String NET_PROTOCOL = Attribute.THRIFT_PROTOCOL;
-
-  /**
    * A random date selected to represent infinity value
    */
   final String INFINITY_DATE_STR = "1900-01-01";
@@ -266,7 +265,7 @@ public interface GfxdConstants {
   final String DDL_LOCK_SERVICE = "gfxd-ddl-lock-service";
 
   /** Default value of {@link #MAX_LOCKWAIT}. */
-  final int MAX_LOCKWAIT_DEFAULT = 300000;
+  int MAX_LOCKWAIT_DEFAULT = 180000;
 
   /**
    * An int representing max wait time for distributed lock in milliseconds.
@@ -278,8 +277,8 @@ public interface GfxdConstants {
   /** property to set max size of chunks in DML operations */
   final String DML_MAX_CHUNK_SIZE_PROP = GFXD_PREFIX + "dml-max-chunk-size";
 
-  /** default max size of chunks in DML operations */
-  final long DML_MAX_CHUNK_SIZE_DEFAULT = 4194304L;
+  /** default max size of chunks in DML operations or query results */
+  final long DML_MAX_CHUNK_SIZE_DEFAULT = 4L * 1024L * 1024L;
 
   /**
    * property to set min size of results for which streaming or throttling is
@@ -312,7 +311,7 @@ public interface GfxdConstants {
    * default number of iterations after which a sample of ResultHolder timings
    * is taken
    */
-  final int DML_SAMPLE_INTERVAL_DEFAULT = 15;
+  final int DML_SAMPLE_INTERVAL_DEFAULT = 16;
 
   /**
    * property to set whether DAP should send results in order from execution
@@ -335,7 +334,28 @@ public interface GfxdConstants {
 
   /** Name of disk store used by global indexes */ 
   final String GFXD_GLOBALINDEX_DISKSTORE_NAME ="GFXD-GLOBALINDEX-DISKSTORE";
-  
+
+  /**
+   * Name of default disk store used by snappydata's delta regions.
+   */
+  final String SNAPPY_DEFAULT_DELTA_DISKSTORE = "SNAPPY-INTERNAL-DELTA";
+
+  /**
+   * Suffix of disk store used by snappydata's delta regions
+   * (appended to main diskstore name except for default diskstore).
+   */
+  final String SNAPPY_DELTA_DISKSTORE_SUFFIX = "-SNAPPY-DELTA";
+
+  /**
+   * default sub-directory to use for delta store
+   */
+  final String SNAPPY_DELTA_SUBDIR = "snappy-internal-delta";
+
+  /**
+   * maximum size of each oplog file used for delta disk stores
+   */
+  final int SNAPPY_DELTA_DISKSTORE_SIZEMB = 50;
+
   /** Name of meta-region used to store the max identity column value */ 
   final String IDENTITY_REGION_NAME ="__IDENTITYREGION2";
 
@@ -439,9 +459,9 @@ public interface GfxdConstants {
    */
   final Set<String> validExtraGFXDProperties = new HashSet<String>(
       Arrays.asList(new String[] {
-          Attribute.CONFIG_SCRIPTS,
           Attribute.DEFAULT_INITIAL_CAPACITY_PROP,
           Attribute.DEFAULT_RECOVERY_DELAY_PROP,
+          DEFAULT_STARTUP_RECOVERY_DELAY_PROP,
           Attribute.DUMP_TIME_STATS_FREQ,
           Attribute.ENABLE_STATS,
           Attribute.ENABLE_TIMESTATS,
@@ -449,6 +469,7 @@ public interface GfxdConstants {
           Attribute.SERVER_GROUPS,
           Attribute.GFXD_HOST_DATA,
           Attribute.GFXD_PERSIST_DD,
+          Attribute.READ_TIMEOUT,
           Attribute.KEEPALIVE_IDLE,
           Attribute.KEEPALIVE_INTVL,
           Attribute.KEEPALIVE_CNT,
@@ -457,6 +478,7 @@ public interface GfxdConstants {
           Attribute.SYS_HDFS_ROOT_DIR,
           Attribute.TABLE_DEFAULT_PARTITIONED,
           com.pivotal.gemfirexd.internal.iapi.reference.Attribute.COLLATE,
+          Attribute.INTERNAL_CONNECTION,
           Attribute.COLLATION,
           Attribute.CREATE_ATTR,
           Attribute.DISABLE_STREAMING,
@@ -470,6 +492,7 @@ public interface GfxdConstants {
           Attribute.SHUTDOWN_ATTR,
           Attribute.SKIP_LISTENERS,
           Attribute.SKIP_LOCKS,
+          Attribute.DEFAULT_SCHEMA,
           Attribute.CLIENT_SECURITY_MECHANISM,
           com.pivotal.gemfirexd.internal.iapi.reference.Attribute.SOFT_UPGRADE_NO_FEATURE_CHECK,
           com.pivotal.gemfirexd.internal.iapi.reference.Attribute.TERRITORY,
@@ -482,14 +505,16 @@ public interface GfxdConstants {
           Property.HADOOP_IS_GFXD_LONER,
           Property.GFXD_HD_HOMEDIR,
           Property.GFXD_HD_NAMENODEURL,
-          CacheServerLauncher.CRITICAL_HEAP_PERCENTAGE,
-          CacheServerLauncher.EVICTION_HEAP_PERCENTAGE,
-          CacheServerLauncher.CRITICAL_OFF_HEAP_PERCENTAGE,
-          CacheServerLauncher.EVICTION_OFF_HEAP_PERCENTAGE,
+          LauncherBase.CRITICAL_HEAP_PERCENTAGE,
+          LauncherBase.EVICTION_HEAP_PERCENTAGE,
+          LauncherBase.CRITICAL_OFF_HEAP_PERCENTAGE,
+          LauncherBase.EVICTION_OFF_HEAP_PERCENTAGE,
           Attribute.THRIFT_USE_BINARY_PROTOCOL,
+          Attribute.THRIFT_USE_FRAMED_TRANSPORT,
           Attribute.THRIFT_USE_SSL,
           Attribute.THRIFT_SSL_PROPERTIES,
           Attribute.PREFER_NETSERVER_IP_ADDRESS,
+          Attribute.HOSTNAME_FOR_CLIENTS,
           Attribute.QUERY_HDFS,
           Attribute.NCJ_BATCH_SIZE,
           Attribute.NCJ_CACHE_SIZE,
@@ -743,6 +768,8 @@ public interface GfxdConstants {
   final String GFXD_QUERY_HDFS = GFXD_PREFIX + Attribute.QUERY_HDFS;
 
   final String GFXD_ROUTE_QUERY = GFXD_PREFIX + Attribute.ROUTE_QUERY;
+
+  final String INTERNAL_CONNECTION = GFXD_PREFIX + Attribute.INTERNAL_CONNECTION;
   /*
    * @see Attribute.NCJ_BATCH_SIZE
    */
@@ -803,6 +830,9 @@ public interface GfxdConstants {
 
   final String GFXD_ROUTE_SELECTED_STORE_QUERIES_TO_SPARK =
       GFXD_PREFIX + "enable-routing-arbiter";
+
+//  public static final String GFXD_COST_OPTIMIZED_ROUTING_THRESHOLD =
+//      GFXD_PREFIX +"cost-optimized-routing-threshold";
 
   // --------------------- Defaults for GFXD connection/transaction props
 

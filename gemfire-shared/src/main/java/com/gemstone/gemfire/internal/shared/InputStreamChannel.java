@@ -17,14 +17,11 @@
 
 package com.gemstone.gemfire.internal.shared;
 
-import java.io.Closeable;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
-import java.util.concurrent.locks.LockSupport;
 
 /**
  * Intermediate class that extends both an InputStream and ReadableByteChannel.
@@ -33,17 +30,11 @@ import java.util.concurrent.locks.LockSupport;
  * @since gfxd 1.1
  */
 public abstract class InputStreamChannel extends InputStream implements
-    ReadableByteChannel, Closeable {
+    ReadableByteChannel, StreamChannel {
 
   protected final ReadableByteChannel channel;
-  protected volatile Thread parkedThread;
-
-  /**
-   * nanos to park reader thread to wait for reading data in non-blocking mode
-   * (will be explicitly signalled by selector if data is received)
-   */
-  protected static final long PARK_NANOS = 200L;
-  protected static final long PARK_NANOS_MAX = 15000000000L;
+  private volatile Thread parkedThread;
+  protected volatile long bytesRead;
 
   protected InputStreamChannel(ReadableByteChannel channel) {
     this.channel = channel;
@@ -110,12 +101,14 @@ public abstract class InputStreamChannel extends InputStream implements
         final int pos = channelBuffer.position();
         // reduce this buffer's limit temporarily to the required len
         channelBuffer.limit(pos + dstLen);
-        dst.put(channelBuffer);
-        // restore the limit
-        channelBuffer.limit(pos + remaining);
+        try {
+          dst.put(channelBuffer);
+        } finally {
+          // restore the limit
+          channelBuffer.limit(pos + remaining);
+        }
         return dstLen;
-      }
-      else {
+      } else {
         return 0;
       }
     }
@@ -128,34 +121,34 @@ public abstract class InputStreamChannel extends InputStream implements
       dstLen -= remaining;
       readBytes += remaining;
     }
-    // if dst is a direct byte buffer that is larger than ours, then refill from
-    // channel directly else use our direct byte buffer for best performance
-    if (dstLen >= channelBuffer.limit() && dst.isDirect()) {
-      final int bufBytes = readIntoBufferNonBlocking(dst);
+    // if dst is a reasonably large direct byte buffer, then refill from
+    // channel directly else use channel direct buffer for best performance
+    if (dstLen >= (channelBuffer.limit() >>> 1) && dst.isDirect()) {
+      final int bufBytes = readIntoBufferNoWait(dst);
       if (bufBytes > 0) {
         return (readBytes + bufBytes);
-      }
-      else {
+      } else {
         return readBytes > 0 ? readBytes : bufBytes;
       }
-    }
-    else {
-      final int bufBytes = refillBuffer(channelBuffer, -1, null);
+    } else {
+      final int bufBytes = refillBufferBase(channelBuffer, -1, null);
       if (bufBytes > 0) {
         if (dstLen >= bufBytes) {
           dst.put(channelBuffer);
           return (readBytes + bufBytes);
-        }
-        else {
-          // reduce this buffer's limit temporarily to the required len
-          channelBuffer.limit(dstLen);
-          dst.put(channelBuffer);
-          // restore the limit
-          channelBuffer.limit(bufBytes);
+        } else {
+          final int pos = channelBuffer.position();
+          // reduce this buffer's limit temporarily to the required length
+          channelBuffer.limit(pos + dstLen);
+          try {
+            dst.put(channelBuffer);
+          } finally {
+            // restore the limit
+            channelBuffer.limit(pos + bufBytes);
+          }
           return (readBytes + dstLen);
         }
-      }
-      else {
+      } else {
         return readBytes > 0 ? readBytes : bufBytes;
       }
     }
@@ -163,10 +156,16 @@ public abstract class InputStreamChannel extends InputStream implements
 
   protected int refillBuffer(final ByteBuffer channelBuffer,
       final int tryReadBytes, final String eofMessage) throws IOException {
+    return refillBufferBase(channelBuffer, tryReadBytes, eofMessage);
+  }
+
+  protected final int refillBufferBase(final ByteBuffer channelBuffer,
+      final int tryReadBytes, final String eofMessage) throws IOException {
     resetAndCopyLeftOverBytes(channelBuffer);
-    int totalReadBytes = channelBuffer.position();
+    int initPosition = channelBuffer.position();
+    int totalReadBytes = initPosition;
     final int channelBytes = readIntoBuffer(channelBuffer);
-    if (channelBytes >= 0) {
+    if (channelBytes > 0) {
       totalReadBytes += channelBytes;
     }
     // eof on stream but we may still have remaining bytes in channelBuffer
@@ -195,6 +194,9 @@ public abstract class InputStreamChannel extends InputStream implements
     assert (totalReadBytes == channelBuffer.limit()) || (totalReadBytes == -1
         && channelBuffer.limit() == 0): "readBytes=" + totalReadBytes
             + " != limit=" + channelBuffer.limit();
+    if (totalReadBytes > initPosition) {
+      this.bytesRead += (totalReadBytes - initPosition);
+    }
     return totalReadBytes;
   }
 
@@ -214,23 +216,36 @@ public abstract class InputStreamChannel extends InputStream implements
    * @return number of bytes read or -1 on end-of-stream
    */
   protected int readIntoBuffer(ByteBuffer buffer) throws IOException {
-    long parkNanos = 0;
-    int readBytes;
-    while ((readBytes = this.channel.read(buffer)) == 0) {
+    long parkedNanos = 0L;
+    int numTries = 0;
+    int numBytes;
+    while ((numBytes = this.channel.read(buffer)) == 0) {
       if (!buffer.hasRemaining()) {
         break;
       }
-      // at this point we are out of the selector thread and don't want to
-      // create unlimited size buffers upfront in selector, so will use simple
-      // signalling between selector and this thread to proceed
-      this.parkedThread = Thread.currentThread();
-      LockSupport.parkNanos(this, PARK_NANOS);
-      this.parkedThread = null;
-      if ((parkNanos += PARK_NANOS) > PARK_NANOS_MAX) {
-        throw new SocketTimeoutException("Connection read timed out.");
-      }
+      // wait for a bit after some retries
+      parkedNanos = ClientSharedUtils.parkThreadForAsyncOperationIfRequired(
+          this, parkedNanos, ++numTries);
     }
-    return readBytes;
+    if (numBytes > 0) {
+      this.bytesRead += numBytes;
+    }
+    return numBytes;
+  }
+
+  @Override
+  public final Thread getParkedThread() {
+    return this.parkedThread;
+  }
+
+  @Override
+  public final void setParkedThread(Thread thread) {
+    this.parkedThread = thread;
+  }
+
+  @Override
+  public long getParkNanosMax() {
+    return ClientSharedUtils.PARK_NANOS_MAX;
   }
 
   /**
@@ -239,12 +254,16 @@ public abstract class InputStreamChannel extends InputStream implements
    * 
    * @return number of bytes read (can be zero) or -1 on end-of-stream
    */
-  protected int readIntoBufferNonBlocking(ByteBuffer buffer)
+  protected int readIntoBufferNoWait(ByteBuffer buffer)
       throws IOException {
-    return this.channel.read(buffer);
+    final int numBytes = this.channel.read(buffer);
+    if (numBytes > 0) {
+      this.bytesRead += numBytes;
+    }
+    return numBytes;
   }
 
-  public final Thread getParkedThread() {
-    return this.parkedThread;
+  public final long getBytesRead() {
+    return this.bytesRead;
   }
 }

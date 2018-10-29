@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -35,13 +35,22 @@
 
 package io.snappydata.thrift.common;
 
+import java.io.EOFException;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.EnumMap;
 
+import com.gemstone.gemfire.internal.shared.ClientSharedData;
+import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
+import com.gemstone.gemfire.internal.shared.unsafe.DirectBufferAllocator;
+import com.pivotal.gemfirexd.Attribute;
 import com.pivotal.gemfirexd.internal.shared.common.SharedUtils;
 import io.snappydata.thrift.HostAddress;
-import io.snappydata.thrift.SnappyException;
 import io.snappydata.thrift.TransactionAttribute;
+import org.apache.thrift.transport.TNonblockingTransport;
+import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
 
 /**
  * Some Thrift utility methods shared by client and server code. Only has static
@@ -57,7 +66,7 @@ public abstract class ThriftUtils {
 
   public static boolean isThriftSelectorServer() {
     return SystemProperties.getServerInstance().getBoolean(
-        SystemProperties.THRIFT_SELECTOR_SERVER, false);
+        Attribute.THRIFT_SELECTOR_SERVER, false);
   }
 
   public static HostAddress getHostAddress(final String hostNameAndAddress,
@@ -86,8 +95,14 @@ public abstract class ThriftUtils {
       if (eqIndex > 0) {
         String key = str.substring(0, eqIndex).trim();
         String value = str.substring(eqIndex + 1).trim();
-        SocketParameters.findSSLParameterByPropertyName(key, true)
-            .setParameter(sslParams, value);
+        try {
+          SocketParameters.findSSLParameterByPropertyName(key).setParameter(
+              sslParams, value);
+        } catch (NumberFormatException nfe) {
+          throw new IllegalArgumentException(
+              "Expected numeric format for SSL property '" + key +
+                  "' but got: " + value, nfe);
+        }
       } else {
         throw new IllegalArgumentException("Missing equality: expected "
             + "comma-separated <property>=<value> pairs");
@@ -100,14 +115,117 @@ public abstract class ThriftUtils {
    * parameters list.
    */
   public static void getSSLParameters(SocketParameters socketParams,
-      String sslProperties) throws SnappyException {
+      String sslProperties) {
     if (sslProperties != null && sslProperties.length() > 0) {
-      socketParams.setHasSSLParams(true);
+      socketParams.setHasSSLParams();
       SharedUtils.splitCSV(sslProperties, parseSSLParams, socketParams, null);
     }
   }
 
   public static EnumMap<TransactionAttribute, Boolean> newTransactionFlags() {
     return new EnumMap<>(TransactionAttribute.class);
+  }
+
+  public static byte[] toBytes(ByteBuffer buffer) {
+    return ClientSharedUtils.toBytes(buffer);
+  }
+
+  public static ByteBuffer readByteBuffer(TNonblockingTransport transport,
+      int length) throws TTransportException {
+    if (length == 0) {
+      return ClientSharedData.NULL_BUFFER;
+    }
+    if (transport.getBytesRemainingInBuffer() >= length) {
+      ByteBuffer buffer = ByteBuffer.wrap(transport.getBuffer(),
+          transport.getBufferPosition(), length);
+      transport.consumeBuffer(length);
+      return buffer;
+    }
+
+    // use normal byte array if length is not large since direct byte buffer
+    // has additional overheads of allocation and finalization
+    if (length <= (SocketParameters.DEFAULT_BUFFER_SIZE >>> 2)) {
+      byte[] buffer = new byte[length];
+      transport.readAll(buffer, 0, length);
+      return ByteBuffer.wrap(buffer);
+    }
+
+    // this might be too big for ByteBuffer.allocateDirect -- see
+    // sun.misc.VM.maxDirectMemory()
+    ByteBuffer buffer;
+    try {
+      buffer = DirectBufferAllocator.instance().allocateWithFallback(
+          length, "THRIFT");
+    } catch (OutOfMemoryError | RuntimeException ignored) {
+      // fallback to heap buffer
+      buffer = ByteBuffer.allocate(length);
+    }
+    buffer.limit(length);
+    try {
+      long parkedNanos = 0L;
+      int numTries = 0;
+      while (length > 0) {
+        int numReadBytes = transport.read(buffer);
+        if (numReadBytes > 0) {
+          length -= numReadBytes;
+        } else if (numReadBytes == 0) {
+          // sleep a bit after some retries
+          // TODO: this should use selector signal if available
+          parkedNanos = ClientSharedUtils.parkThreadForAsyncOperationIfRequired(
+              null, parkedNanos, ++numTries);
+        } else {
+          throw new EOFException("Socket channel closed in read.");
+        }
+      }
+    } catch (IOException e) {
+      throw new TTransportException(e instanceof EOFException
+          ? TTransportException.END_OF_FILE : TTransportException.UNKNOWN);
+    }
+    buffer.flip();
+    return buffer;
+  }
+
+  public static void writeByteBuffer(ByteBuffer buffer,
+      TTransport transport, TNonblockingTransport nonBlockingTransport,
+      int length) throws TTransportException {
+    if (buffer.hasArray()) {
+      transport.write(buffer.array(), buffer.position() + buffer.arrayOffset(),
+          length);
+    } else if (nonBlockingTransport != null) {
+      try {
+        long parkedNanos = 0L;
+        int numTries = 0;
+        final int position = buffer.position();
+        boolean flushed = false;
+        while (length > 0) {
+          int numWrittenBytes = nonBlockingTransport.write(buffer);
+          if (numWrittenBytes > 0) {
+            length -= numWrittenBytes;
+          } else if (numWrittenBytes == 0) {
+            // flush the buffers before retry
+            if (!flushed) {
+              nonBlockingTransport.flush();
+              flushed = true;
+            } else {
+              // sleep a bit after some retries
+              flushed = false;
+              parkedNanos = ClientSharedUtils.parkThreadForAsyncOperationIfRequired(
+                  null, parkedNanos, ++numTries);
+            }
+          } else {
+            throw new EOFException("Socket channel closed in write.");
+          }
+        }
+        // move back to original position
+        buffer.position(position);
+      } catch (IOException e) {
+        throw new TTransportException(e instanceof EOFException
+            ? TTransportException.END_OF_FILE : TTransportException.UNKNOWN);
+      }
+    } else {
+      final byte[] bytes = ClientSharedUtils.toBytes(
+          buffer, buffer.remaining(), length);
+      transport.write(bytes, 0, length);
+    }
   }
 }

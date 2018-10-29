@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -36,24 +36,30 @@
 package com.gemstone.gemfire.internal.shared;
 
 import java.io.Console;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectStreamClass;
+import java.lang.management.LockInfo;
+import java.lang.management.MonitorInfo;
+import java.lang.management.ThreadInfo;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.math.BigInteger;
-import java.net.Inet4Address;
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.net.Socket;
-import java.net.SocketException;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.channels.Channel;
+import java.nio.channels.SocketChannel;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.CodeSource;
 import java.security.PrivilegedAction;
 import java.util.*;
+import java.util.concurrent.locks.LockSupport;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -65,8 +71,10 @@ import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
 
+import com.gemstone.gemfire.internal.shared.unsafe.DirectBufferAllocator;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.PropertyConfigurator;
+import org.apache.spark.unsafe.Platform;
 
 /**
  * Some shared methods now also used by GemFireXD clients so should not have any
@@ -101,8 +109,7 @@ public abstract class ClientSharedUtils {
    * True if using Thrift as default network server and client, false if using
    * DRDA (default).
    */
-  public static final boolean USE_THRIFT_AS_DEFAULT = SystemProperties
-      .getClientInstance().getBoolean(USE_THRIFT_AS_DEFAULT_PROP, false);
+  private static boolean USE_THRIFT_AS_DEFAULT = isUsingThrift(true);
 
   private static final Object[] staticZeroLenObjectArray = new Object[0];
 
@@ -122,6 +129,37 @@ public abstract class ClientSharedUtils {
           return System.getProperty("line.separator");
         }
       });
+
+  /**
+   * The default wait to use when waiting to read/write a channel
+   * (when there is no selector to signal)
+   */
+  public static final long PARK_NANOS_FOR_READ_WRITE = 100L;
+
+  /**
+   * Retries before waiting for {@link #PARK_NANOS_FOR_READ_WRITE}
+   * (when there is no selector to signal)
+   */
+  public static final int RETRIES_BEFORE_PARK = 20;
+
+  /**
+   * Maximum nanos to park thread to wait for reading/writing data in
+   * non-blocking mode (if selector is present then it will explicitly signal)
+   */
+  public static final long PARK_NANOS_MAX = 30000000000L;
+
+  public static boolean isUsingThrift(boolean defaultValue) {
+    return SystemProperties.getClientInstance().getBoolean(
+        USE_THRIFT_AS_DEFAULT_PROP, defaultValue);
+  }
+
+  public static boolean isThriftDefault() {
+    return USE_THRIFT_AS_DEFAULT;
+  }
+
+  public static void setThriftDefault(boolean defaultValue) {
+    USE_THRIFT_AS_DEFAULT = isUsingThrift(defaultValue);
+  }
 
   /** we cache localHost to avoid bug #40619, access-violation in native code */
   private static final InetAddress localHost;
@@ -169,8 +207,9 @@ public abstract class ClientSharedUtils {
 
   // ------- End constants for date formatting
 
-  private static Logger DEFAULT_LOGGER = Logger.getLogger("");
-  private static Logger logger = DEFAULT_LOGGER;
+  private static volatile Logger _DEFAULT_LOGGER;
+  private static Logger logger;
+  private static final Properties baseLoggerProperties = new Properties();
 
   private static final Constructor<?> stringInternalConstructor;
   private static final int stringInternalConsVersion;
@@ -248,6 +287,74 @@ public abstract class ClientSharedUtils {
       }
     }
     bigIntMagnitude = mag;
+  }
+
+  private static synchronized Logger DEFAULT_LOGGER() {
+    final Logger logger = _DEFAULT_LOGGER;
+    if (logger != null) {
+      return logger;
+    }
+    return (_DEFAULT_LOGGER = Logger.getLogger(""));
+  }
+
+  private static int getShiftMultipler(char unitChar) {
+    switch (Character.toLowerCase(unitChar)) {
+      case 'p': return 50;
+      case 't': return 40;
+      case 'g': return 30;
+      case 'm': return 20;
+      case 'k': return 10;
+      case 'b': return 0;
+      default: return -1;
+    }
+  }
+
+  public static long parseMemorySize(String v, long defaultValue,
+      int defaultShiftMultiplier) {
+    if (v == null || v.length() == 0) {
+      return defaultValue;
+    }
+    final int len = v.length();
+    int unitShiftMultiplier = getShiftMultipler(v.charAt(len - 1));
+    int trimChars = unitShiftMultiplier >= 0 ? 1 : 0;
+    if (unitShiftMultiplier == 0) {
+      // ends with 'b' so could be 'mb', 'gb' etc
+      if (len > 1) {
+        unitShiftMultiplier = getShiftMultipler(v.charAt(len - 2));
+        if (unitShiftMultiplier > 0) {
+          trimChars = 2;
+        } else {
+          unitShiftMultiplier = 0;
+        }
+      }
+    } else if (unitShiftMultiplier < 0) {
+      unitShiftMultiplier = defaultShiftMultiplier;
+    }
+    if (trimChars > 0) {
+      v = v.substring(0, len - trimChars);
+    }
+    try {
+      return Long.parseLong(v) << unitShiftMultiplier;
+    } catch (NumberFormatException nfe) {
+      throw new IllegalArgumentException("Memory size specification = " + v +
+          ": memory size must be specified as <n>[p|t|g|m|k], where <n> is " +
+          "the size and and [p|t|g|m|k] specifies the units in peta|tera|giga|" +
+          "mega|kilobytes. No unit or with 'b' specifies in bytes. " +
+          "Each of these units can be followed optionally by 'b' i.e. " +
+          "pb|tb|gb|mb|kb.", nfe);
+    }
+  }
+
+  public static boolean parseBoolean(String s) {
+    if (s != null) {
+      if (s.length() == 1) {
+        return Integer.parseInt(s) != 0;
+      } else {
+        return Boolean.parseBoolean(s);
+      }
+    } else {
+      return false;
+    }
   }
 
   public static String newWrappedString(final char[] chars, final int offset,
@@ -384,6 +491,49 @@ public abstract class ClientSharedUtils {
     return lh;
   }
 
+  public static Method getAnyMethod(Class<?> c, String name, Class<?> returnType,
+       Class<?>... parameterTypes) throws NoSuchMethodException, SecurityException {
+    NoSuchMethodException firstEx = null;
+    Method method = null;
+    for (;;) {
+      try {
+        method =  c.getDeclaredMethod(name, parameterTypes);
+
+        if (returnType == null ||
+           (returnType != null && method.getReturnType().equals(returnType))) {
+          return method;
+        } else {
+          throw new NoSuchMethodException();
+        }
+      } catch (NoSuchMethodException nsme) {
+        if (firstEx == null) {
+          firstEx = nsme;
+        }
+        if ((c = c.getSuperclass()) == null) {
+          throw firstEx;
+        }
+        // else continue searching in superClass
+      }
+    }
+  }
+
+  public static Field getAnyField(Class<?> c, String name)
+          throws NoSuchFieldException, SecurityException {
+    NoSuchFieldException firstEx = null;
+    for (;;) {
+      try {
+        return c.getDeclaredField(name);
+      } catch (NoSuchFieldException nsfe) {
+        if (firstEx == null) {
+          firstEx = nsfe;
+        }
+        if ((c = c.getSuperclass()) == null) {
+          throw firstEx;
+        }
+        // else continue searching in superClass
+      }
+    }
+  }
   /**
    * This method uses JNDI to look up an address in DNS and return its name.
    * 
@@ -482,44 +632,50 @@ public abstract class ClientSharedUtils {
   }
 
   /**
+   * Set the keep-alive options on the socket from server-side properties.
+   *
+   * @see #setKeepAliveOptions
+   */
+  public static void setKeepAliveOptionsServer(Socket socket,
+      InputStream socketStream) throws SocketException {
+    final SystemProperties props = SystemProperties
+        .getServerInstance();
+    int defaultIdle = props.getInteger(SystemProperties.KEEPALIVE_IDLE,
+        SystemProperties.DEFAULT_KEEPALIVE_IDLE);
+    int defaultInterval = props.getInteger(SystemProperties.KEEPALIVE_INTVL,
+        SystemProperties.DEFAULT_KEEPALIVE_INTVL);
+    int defaultCount = props.getInteger(SystemProperties.KEEPALIVE_CNT,
+        SystemProperties.DEFAULT_KEEPALIVE_CNT);
+    ClientSharedUtils.setKeepAliveOptions(socket, socketStream,
+        defaultIdle, defaultInterval, defaultCount);
+  }
+
+  /**
    * Enable TCP KeepAlive settings for the socket. This will use the native OS
    * API to set per-socket configuration, if available, else will log warning
    * (only once) if one or more settings cannot be enabled.
-   * 
-   * @param sock
-   *          the underlying Java {@link Socket} to set the keep-alive
-   * @param sockStream
-   *          the InputStream of the socket (can be null); if non-null then it
-   *          is used to determine the underlying socket kernel handle else if
-   *          null then reflection on the socket itself is used
-   * @param keepIdle
-   *          keep-alive time between two transmissions on socket in idle
-   *          condition (in seconds)
-   * @param keepInterval
-   *          keep-alive duration between successive transmissions on socket if
-   *          no reply to packet sent after idle timeout (in seconds)
-   * @param keepCount
-   *          number of retransmissions to be sent before declaring the other
-   *          end to be dead
-   * 
-   * @throws SocketException
-   *           if the base keep-alive cannot be enabled on the socket
-   * 
-   * @see <a
-   *      href="http://tldp.org/HOWTO/html_single/TCP-Keepalive-HOWTO/#programming">
-   *      TCP Keepalive HOWTO</a>
-   * @see <a
-   *      href="http://docs.oracle.com/cd/E19082-01/819-2724/6n50b07lr/index.html">
-   *      TCP Tunable Parameters</a>
-   * @see <a
-   *      href="http://msdn.microsoft.com/en-us/library/ms741621%28VS.85%29.aspx">
-   *      WSAIoctl function</a>
-   * @see <a 
-   *      href="http://technet.microsoft.com/en-us/library/dd349797%28WS.10%29.aspx>
-   *      TCP/IP-Related Registry Entries</a>
-   * @see <a
-   *      href="http://msdn.microsoft.com/en-us/library/dd877220%28v=vs.85%29.aspx">
-   *      SIO_KEEPALIVE_VALS control code</a>
+   *
+   * @param sock         the underlying Java {@link Socket} to set the keep-alive
+   * @param sockStream   the InputStream of the socket (can be null); if non-null then it
+   *                     is used to determine the underlying socket kernel handle else if
+   *                     null then reflection on the socket itself is used
+   * @param keepIdle     keep-alive time between two transmissions on socket in idle
+   *                     condition (in seconds)
+   * @param keepInterval keep-alive duration between successive transmissions on socket if
+   *                     no reply to packet sent after idle timeout (in seconds)
+   * @param keepCount    number of retransmissions to be sent before declaring the other
+   *                     end to be dead
+   * @throws SocketException if the base keep-alive cannot be enabled on the socket
+   * @see <a href="http://tldp.org/HOWTO/html_single/TCP-Keepalive-HOWTO/#programming">
+   * TCP Keepalive HOWTO</a>
+   * @see <a href="http://docs.oracle.com/cd/E19082-01/819-2724/6n50b07lr/index.html">
+   * TCP Tunable Parameters</a>
+   * @see <a href="http://msdn.microsoft.com/en-us/library/ms741621%28VS.85%29.aspx">
+   * WSAIoctl function</a>
+   * @see <a href="http://technet.microsoft.com/en-us/library/dd349797%28WS.10%29.aspx>
+   * TCP/IP-Related Registry Entries</a>
+   * @see <a href="http://msdn.microsoft.com/en-us/library/dd877220%28v=vs.85%29.aspx">
+   * SIO_KEEPALIVE_VALS control code</a>
    */
   public static void setKeepAliveOptions(Socket sock, InputStream sockStream,
       int keepIdle, int keepInterval, int keepCount) throws SocketException {
@@ -533,19 +689,17 @@ public abstract class ClientSharedUtils {
     sock.setKeepAlive(true);
     // now the OS-specific settings using NativeCalls
     NativeCalls nc = NativeCalls.getInstance();
-    Map<TCPSocketOptions, Object> optValueMap =
-        new HashMap<TCPSocketOptions, Object>(4);
+    Map<TCPSocketOptions, Object> optValueMap = new HashMap<>(4);
     if (keepIdle >= 0) {
-      optValueMap.put(TCPSocketOptions.OPT_KEEPIDLE, Integer.valueOf(keepIdle));
+      optValueMap.put(TCPSocketOptions.OPT_KEEPIDLE, keepIdle);
     }
     if (keepInterval >= 0) {
-      optValueMap.put(TCPSocketOptions.OPT_KEEPINTVL,
-          Integer.valueOf(keepInterval));
+      optValueMap.put(TCPSocketOptions.OPT_KEEPINTVL, keepInterval);
     }
     if (keepCount >= 0) {
-      optValueMap.put(TCPSocketOptions.OPT_KEEPCNT, Integer.valueOf(keepCount));
+      optValueMap.put(TCPSocketOptions.OPT_KEEPCNT, keepCount);
     }
-    Map<TCPSocketOptions, Throwable> failed = null;
+    Map<TCPSocketOptions, Throwable> failed;
     try {
       failed = nc.setSocketOptions(sock, sockStream, optValueMap);
     } catch (UnsupportedOperationException e) {
@@ -574,12 +728,11 @@ public abstract class ClientSharedUtils {
               if (ex instanceof UnsupportedOperationException) {
                 if (!socketKeepAliveIdleWarningLogged) {
                   socketKeepAliveIdleWarningLogged = true;
-                  // KEEPIDLE is the minumum required for this, so
+                  // KEEPIDLE is the minimum required for this, so
                   // log as a warning
                   doLogWarning = 1;
                 }
-              }
-              else {
+              } else {
                 doLogWarning = 1;
               }
               break;
@@ -590,9 +743,12 @@ public abstract class ClientSharedUtils {
                   // KEEPINTVL is not critical to have so log as information
                   doLogWarning = 2;
                 }
-              }
-              else {
+              } else {
                 doLogWarning = 2;
+              }
+              // skip logging for default setting
+              if (keepInterval == SystemProperties.DEFAULT_KEEPALIVE_INTVL) {
+                doLogWarning = 0;
               }
               break;
             case OPT_KEEPCNT:
@@ -602,19 +758,21 @@ public abstract class ClientSharedUtils {
                   // KEEPCNT is not critical to have so log as information
                   doLogWarning = 2;
                 }
-              }
-              else {
+              } else {
                 doLogWarning = 2;
+              }
+              // skip logging for default setting
+              if (keepCount == SystemProperties.DEFAULT_KEEPALIVE_CNT) {
+                doLogWarning = 0;
               }
               break;
           }
           if (doLogWarning > 0) {
             if (doLogWarning == 1) {
               log.warning("Failed to set " + opt + " on socket: " + ex);
-            }
-            else if (doLogWarning == 2) {
+            } else {
               // just log as an information rather than warning
-              if (log != DEFAULT_LOGGER) { // SNAP-255
+              if (log != DEFAULT_LOGGER()) { // SNAP-255
                 log.info("Failed to set " + opt + " on socket: "
                     + ex.getMessage());
               }
@@ -627,8 +785,7 @@ public abstract class ClientSharedUtils {
           }
         }
       }
-    }
-    else if (log != null && log.isLoggable(Level.FINE)) {
+    } else if (log != null && log.isLoggable(Level.FINE)) {
       log.fine("setKeepAliveOptions(): successful for " + sock);
     }
   }
@@ -648,6 +805,68 @@ public abstract class ClientSharedUtils {
   public static void getStackTrace(final Throwable t, StringBuilder sb,
       String lineSep) {
     t.printStackTrace(new StringPrintWriter(sb, lineSep));
+  }
+
+  public static void dumpThreadStack(final ThreadInfo tInfo,
+      final StringBuilder msg, final String lineSeparator) {
+    msg.append('"').append(tInfo.getThreadName()).append('"').append(" Id=")
+        .append(tInfo.getThreadId()).append(' ')
+        .append(tInfo.getThreadState());
+    if (tInfo.getLockName() != null) {
+      msg.append(" on ").append(tInfo.getLockName());
+    }
+    if (tInfo.getLockOwnerName() != null) {
+      msg.append(" owned by \"").append(tInfo.getLockOwnerName())
+          .append("\" Id=").append(tInfo.getLockOwnerId());
+    }
+    if (tInfo.isSuspended()) {
+      msg.append(" (suspended)");
+    }
+    if (tInfo.isInNative()) {
+      msg.append(" (in native)");
+    }
+    msg.append(lineSeparator);
+    final StackTraceElement[] stackTrace = tInfo.getStackTrace();
+    for (int index = 0; index < stackTrace.length; ++index) {
+      msg.append("\tat ").append(stackTrace[index].toString())
+          .append(lineSeparator);
+      if (index == 0 && tInfo.getLockInfo() != null) {
+        final Thread.State ts = tInfo.getThreadState();
+        switch (ts) {
+          case BLOCKED:
+            msg.append("\t-  blocked on ").append(tInfo.getLockInfo())
+                .append(lineSeparator);
+            break;
+          case WAITING:
+            msg.append("\t-  waiting on ").append(tInfo.getLockInfo())
+                .append(lineSeparator);
+            break;
+          case TIMED_WAITING:
+            msg.append("\t-  waiting on ").append(tInfo.getLockInfo())
+                .append(lineSeparator);
+            break;
+          default:
+        }
+      }
+
+      for (MonitorInfo mi : tInfo.getLockedMonitors()) {
+        if (mi.getLockedStackDepth() == index) {
+          msg.append("\t-  locked ").append(mi)
+              .append(lineSeparator);
+        }
+      }
+    }
+
+    final LockInfo[] locks = tInfo.getLockedSynchronizers();
+    if (locks.length > 0) {
+      msg.append(lineSeparator)
+          .append("\tNumber of locked synchronizers = ").append(locks.length)
+          .append(lineSeparator);
+      for (LockInfo li : locks) {
+        msg.append("\t- ").append(li).append(lineSeparator);
+      }
+    }
+    msg.append(lineSeparator);
   }
 
   public static Object[] getZeroLenObjectArray() {
@@ -1029,6 +1248,24 @@ public abstract class ClientSharedUtils {
         && byteBuffer.remaining() == byteBuffer.capacity();
   }
 
+  public static String toString(final ByteBuffer buffer) {
+    if (buffer != null) {
+      StringBuilder sb = new StringBuilder();
+      final int len = buffer.remaining();
+      for (int i = buffer.position(); i < len; i++) {
+        // terminate with ... for large number of bytes
+        if (i > 128 * 1024) {
+          sb.append(" ...");
+          break;
+        }
+        sb.append(buffer.get(i)).append(", ");
+      }
+      return sb.toString();
+    } else {
+      return "null";
+    }
+  }
+
   /**
    * Convert a ByteBuffer to a string appending to given {@link StringBuilder}
    * with a hexidecimal format. The string may be converted back to a byte array
@@ -1048,18 +1285,16 @@ public abstract class ClientSharedUtils {
     if (wrapsFullArray(buffer)) {
       final byte[] bytes = buffer.array();
       sb.append(toHexChars(bytes, 0, bytes.length));
-    }
-    else {
-      int pos = buffer.position();
+    } else {
       final int limit = buffer.limit();
-      while (pos++ < limit) {
+      for (int pos = buffer.position(); pos < limit; pos++) {
         byte b = buffer.get(pos);
         toHexChars(b, sb);
       }
     }
   }
 
-  static final int toHexChars(final byte b, final char[] chars, int index) {
+  static int toHexChars(final byte b, final char[] chars, int index) {
     final int highByte = (b & 0xf0) >>> 4;
     final int lowByte = (b & 0x0f);
     chars[index] = HEX_DIGITS[highByte];
@@ -1138,36 +1373,109 @@ public abstract class ClientSharedUtils {
     return cre.newRunTimeException(message, cause);
   }
 
-  public static void initLog4J(String logFile,
+  public static Path getProductJarsDirectory(Class<?> c) throws IOException {
+    CodeSource cs = c.getProtectionDomain().getCodeSource();
+    URL jarURL = cs != null ? cs.getLocation() : null;
+    if (jarURL != null) {
+      return Paths.get(URLDecoder.decode(jarURL.getFile(), "UTF-8"))
+          .getParent().toRealPath(LinkOption.NOFOLLOW_LINKS);
+    } else {
+      // try in SNAPPY_HOME and SPARK_HOME
+      String productHome = System.getenv("SNAPPY_HOME");
+      if (productHome == null) {
+        productHome = System.getenv("SPARK_HOME");
+      }
+      if (productHome != null) {
+        return Paths.get(productHome, "jars")
+            .toRealPath(LinkOption.NOFOLLOW_LINKS);
+      } else {
+        throw new IllegalStateException("Unable to locate product install " +
+            "location. Set SNAPPY_HOME or SPARK_HOME explicitly if not using " +
+            "the standard scripts.");
+      }
+    }
+  }
+
+  // Convert log4j.Level to java.util.logging.Level
+  public static Level convertToJavaLogLevel(org.apache.log4j.Level log4jLevel) {
+    Level javaLevel = Level.CONFIG;
+    if (log4jLevel != null) {
+      if (log4jLevel == org.apache.log4j.Level.ERROR) {
+        javaLevel = Level.SEVERE;
+      } else if (log4jLevel == org.apache.log4j.Level.WARN) {
+        javaLevel = Level.WARNING;
+      } else if (log4jLevel == org.apache.log4j.Level.INFO) {
+        javaLevel = Level.INFO;
+      } else if (log4jLevel == org.apache.log4j.Level.TRACE) {
+        javaLevel = Level.FINE;
+      } else if (log4jLevel == org.apache.log4j.Level.DEBUG) {
+        javaLevel = Level.ALL;
+      } else if (log4jLevel == org.apache.log4j.Level.OFF) {
+        javaLevel = Level.OFF;
+      }
+    }
+    return javaLevel;
+  }
+
+  public static String convertToLog4LogLevel(Level level) {
+    String levelStr = "INFO";
+    // convert to log4j level
+    if (level == Level.SEVERE) {
+      levelStr = "ERROR";
+    } else if (level == Level.WARNING) {
+      levelStr = "WARN";
+    } else if (level == Level.INFO || level == Level.CONFIG) {
+      levelStr = "INFO";
+    } else if (level == Level.FINE || level == Level.FINER ||
+        level == Level.FINEST) {
+      levelStr = "TRACE";
+    } else if (level == Level.ALL) {
+      levelStr = "DEBUG";
+    } else if (level == Level.OFF) {
+      levelStr = "OFF";
+    }
+    return levelStr;
+  }
+
+  public static void initLog4j(String logFile,
       Level level) throws IOException {
-    // set the log file location
+    initLog4j(logFile, null, level);
+  }
+
+  public static Properties getLog4jConfProperties(
+      String snappyHome) throws IOException {
+    Path confFile = Paths.get(snappyHome, "conf", "log4j.properties");
+    if (Files.isReadable(confFile)) {
+      try (InputStream in = Files.newInputStream(confFile)) {
+        Properties props = new Properties();
+        props.load(in);
+        return props;
+      }
+    }
+    return null;
+  }
+
+  private static Properties getLog4jProperties(String logFile,
+      Level level) throws IOException {
+    // check for user provided properties file in "conf/"
+    String snappyHome = NativeCalls.getInstance().getEnvironment("SNAPPY_HOME");
+    if (snappyHome != null) {
+      Properties props = getLog4jConfProperties(snappyHome);
+      if (props != null) {
+        return props;
+      }
+    }
+
     Properties props = new Properties();
-    InputStream in = ClientSharedUtils.class.getResourceAsStream(
-        "/store-log4j.properties");
-    try {
+    // fallback to defaults
+    try (InputStream in = ClientSharedUtils.class.getResourceAsStream(
+        "/store-log4j.properties")) {
       props.load(in);
-    } finally {
-      in.close();
     }
 
     // override file location and level
     if (level != null) {
-      String levelStr = "INFO";
-      // convert to log4j level
-      if (level == Level.SEVERE) {
-        levelStr = "ERROR";
-      } else if (level == Level.WARNING) {
-        levelStr = "WARN";
-      } else if (level == Level.INFO || level == Level.CONFIG) {
-        levelStr = "INFO";
-      } else if (level == Level.FINE || level == Level.FINER ||
-          level == Level.FINEST) {
-        levelStr = "TRACE";
-      } else if (level == Level.ALL) {
-        levelStr = "DEBUG";
-      } else if (level == Level.OFF) {
-        levelStr = "OFF";
-      }
+      final String levelStr = convertToLog4LogLevel(level);
       if (logFile != null) {
         props.setProperty("log4j.rootCategory", levelStr + ", file");
       } else {
@@ -1178,59 +1486,83 @@ public abstract class ClientSharedUtils {
       props.setProperty("log4j.appender.file.file", logFile);
     }
     // override with any user provided properties file
-    in = ClientSharedUtils.class.getResourceAsStream("/log4j.properties");
-    if (in != null) {
-      Properties setProps = new Properties();
-      try {
-        setProps.load(in);
-      } finally {
-        in.close();
-      }
-      props.putAll(setProps);
-    }
-    // lastly override with user provided properties file in "conf/"
-    String snappyDir = NativeCalls.getInstance().getEnvironment("SNAPPY_HOME");
-    if (snappyDir != null) {
-      File confFile = new File(snappyDir + "/conf", "log4j.properties");
-      if (confFile.canRead()) {
+    try (InputStream in = ClientSharedUtils.class.getResourceAsStream(
+        "/log4j.properties")) {
+      if (in != null) {
         Properties setProps = new Properties();
-        in = new FileInputStream(confFile);
-        try {
-          setProps.load(in);
-        } finally {
-          in.close();
-        }
+        setProps.load(in);
         props.putAll(setProps);
       }
     }
-    LogManager.resetConfiguration();
-    PropertyConfigurator.configure(props);
+    return props;
   }
 
-  public static void initLogger(String loggerName, String logFile,
-      boolean initLog4j, Level level, final Handler handler) {
+  public static synchronized void initLog4j(String logFile,
+      Properties userProps, Level level) throws IOException {
+    Properties props;
+    if (baseLoggerProperties.isEmpty() || logFile != null) {
+      props = getLog4jProperties(logFile, level);
+      baseLoggerProperties.clear();
+      baseLoggerProperties.putAll(props);
+    } else {
+      props = (Properties)baseLoggerProperties.clone();
+    }
+    if (userProps != null) {
+      props.putAll(userProps);
+    }
+    LogManager.resetConfiguration();
+    PropertyConfigurator.configure(props);
+
+    // explicitly set the root log-level
+    String rootLogLevel = props.getProperty("log4j.rootCategory");
+    if (rootLogLevel != null) {
+      int idx = rootLogLevel.indexOf(',');
+      if (idx != -1) {
+        rootLogLevel = rootLogLevel.substring(0, idx).trim();
+      }
+      LogManager.getRootLogger().setLevel(
+          org.apache.log4j.Level.toLevel(rootLogLevel));
+    }
+  }
+
+  public static synchronized void initLogger(String loggerName, String logFile,
+      boolean initLog4j, boolean skipIfInitialized, Level level,
+      final Handler handler) {
+    Logger log = logger;
+    if (skipIfInitialized && log != null && log != DEFAULT_LOGGER()) {
+      return;
+    }
     clearLogger();
     if (initLog4j) {
       try {
-        initLog4J(logFile, level);
+        initLog4j(logFile, level);
       } catch (IOException ioe) {
         throw newRuntimeException(ioe.getMessage(), ioe);
       }
     }
-    Logger log = Logger.getLogger(loggerName);
+    log = Logger.getLogger(loggerName);
     log.addHandler(handler);
     log.setLevel(level);
     log.setUseParentHandlers(false);
     logger = log;
   }
 
-  public static void setLogger(Logger log) {
+  public static synchronized void setLogger(Logger log) {
     clearLogger();
     logger = log;
   }
 
+  public static boolean isLoggerInitialized() {
+    final Logger log = logger;
+    return log != null && log != DEFAULT_LOGGER();
+  }
+
   public static Logger getLogger() {
-    return logger;
+    Logger log = logger;
+    if (log == null) {
+      logger = log = DEFAULT_LOGGER();
+    }
+    return log;
   }
 
   public static final long MAG_MASK = 0xFFFFFFFFL;
@@ -1286,20 +1618,20 @@ public abstract class ClientSharedUtils {
     socketKeepAliveCntWarningLogged = false;
   }
 
-  private static void clearLogger() {
+  private static synchronized void clearLogger() {
     final Logger log = logger;
-    if (log != null) {
-      logger = DEFAULT_LOGGER;
+    if (log != null && log != DEFAULT_LOGGER()) {
       for (Handler h : log.getHandlers()) {
         log.removeHandler(h);
         // try and close the handler ignoring any exceptions
         try {
           h.close();
-        } catch (Exception ex) {
-          // ignore
+        } catch (Exception ignore) {
         }
       }
     }
+    logger = null;
+    baseLoggerProperties.clear();
   }
 
   /**
@@ -1376,27 +1708,181 @@ public abstract class ClientSharedUtils {
     }
   }
 
-  public static boolean equalBuffers(final ByteBuffer connToken,
-      final ByteBuffer otherId) {
-    if (connToken == otherId) {
-      return true;
+  public static byte[] toBytes(ByteBuffer buffer) {
+    final int bufferSize = buffer.remaining();
+    return toBytes(buffer, bufferSize, bufferSize);
+  }
+
+  public static byte[] toBytes(ByteBuffer buffer, int bufferSize, int length) {
+    if (length >= bufferSize && wrapsFullArray(buffer)) {
+      return buffer.array();
+    } else {
+      return toBytesCopy(buffer, bufferSize, length);
+    }
+  }
+
+  public static byte[] toBytesCopy(ByteBuffer buffer, int bufferSize,
+      int length) {
+    final int numBytes = Math.min(bufferSize, length);
+    final byte[] bytes = new byte[numBytes];
+    final int initPosition = buffer.position();
+    buffer.get(bytes, 0, numBytes);
+    buffer.position(initPosition);
+    return bytes;
+  }
+
+  /**
+   * State constants used by the FSM inside getStatementToken.
+   *
+   * @see #getStatementToken
+   */
+  private static final int TOKEN_OUTSIDE = 0;
+  private static final int TOKEN_INSIDE_SIMPLECOMMENT = 1;
+  private static final int TOKEN_INSIDE_BRACKETED_COMMENT = 2;
+
+  /**
+   * Minion of getStatementToken. If the input string starts with an
+   * identifier consisting of letters only (like "select", "update"..),return
+   * it, else return supplied string.
+   *
+   * @param sql input string
+   * @return identifier or unmodified string
+   * @see #getStatementToken
+   */
+  private static String isolateAnyInitialIdentifier(String sql) {
+    int idx;
+    for (idx = 0; idx < sql.length(); idx++) {
+      char ch = sql.charAt(idx);
+      if (!Character.isLetter(ch)
+          && ch != '<' /* for <local>/<global> tags */) {
+        // first non-token char found
+        break;
+      }
+    }
+    // return initial token if one is found, or the entire string otherwise
+    return (idx > 0) ? sql.substring(0, idx) : sql;
+  }
+
+  /**
+   * Moved from Derby's <code>Statement.getStatementToken</code> to shared between
+   * client and server code.
+   * <p>
+   * Step past any initial non-significant characters to find first
+   * significant SQL token so we can classify statement.
+   *
+   * @return first significant SQL token
+   */
+  public static String getStatementToken(String sql, int idx) {
+    int bracketNesting = 0;
+    int state = TOKEN_OUTSIDE;
+    String tokenFound = null;
+    char next;
+
+    final int sqlLen = sql.length();
+    while (idx < sqlLen && tokenFound == null) {
+      next = sql.charAt(idx);
+
+      switch (state) {
+        case TOKEN_OUTSIDE:
+          switch (next) {
+            case '\n':
+            case '\t':
+            case '\r':
+            case '\f':
+            case ' ':
+            case '(':
+            case '{': // JDBC escape characters
+            case '=': //
+            case '?': //
+              idx++;
+              break;
+            case '/':
+              if (idx == sql.length() - 1) {
+                // no more characters, so this is the token
+                tokenFound = "/";
+              } else if (sql.charAt(idx + 1) == '*') {
+                state = TOKEN_INSIDE_BRACKETED_COMMENT;
+                bracketNesting++;
+                idx++; // step two chars
+              }
+
+              idx++;
+              break;
+            case '-':
+              if (idx == sql.length() - 1) {
+                // no more characters, so this is the token
+                tokenFound = "/";
+              } else if (sql.charAt(idx + 1) == '-') {
+                state = TOKEN_INSIDE_SIMPLECOMMENT;
+                idx++;
+              }
+
+              idx++;
+              break;
+            default:
+              // a token found
+              tokenFound = isolateAnyInitialIdentifier(
+                  sql.substring(idx));
+
+              break;
+          }
+
+          break;
+        case TOKEN_INSIDE_SIMPLECOMMENT:
+          switch (next) {
+            case '\n':
+            case '\r':
+            case '\f':
+
+              state = TOKEN_OUTSIDE;
+              idx++;
+
+              break;
+            default:
+              // anything else inside a simple comment is ignored
+              idx++;
+              break;
+          }
+
+          break;
+        case TOKEN_INSIDE_BRACKETED_COMMENT:
+          switch (next) {
+            case '/':
+              if (idx != sql.length() - 1 &&
+                  sql.charAt(idx + 1) == '*') {
+
+                bracketNesting++;
+                idx++; // step two chars
+              }
+              idx++;
+
+              break;
+            case '*':
+              if (idx != sql.length() - 1 &&
+                  sql.charAt(idx + 1) == '/') {
+
+                bracketNesting--;
+
+                if (bracketNesting == 0) {
+                  state = TOKEN_OUTSIDE;
+                  idx++; // step two chars
+                }
+              }
+
+              idx++;
+              break;
+            default:
+              idx++;
+              break;
+          }
+
+          break;
+        default:
+          break;
+      }
     }
 
-    // this.connId always wraps full array
-    assert ClientSharedUtils.wrapsFullArray(connToken);
-
-    if (otherId != null) {
-      if (ClientSharedUtils.wrapsFullArray(otherId)) {
-        return Arrays.equals(otherId.array(), connToken.array());
-      }
-      else {
-        // don't create intermediate byte[]
-        return equalBuffers(connToken.array(), otherId);
-      }
-    }
-    else {
-      return false;
-    }
+    return tokenFound;
   }
 
   public static boolean equalBuffers(final byte[] bytes,
@@ -1406,101 +1892,152 @@ public abstract class ClientSharedUtils {
       return false;
     }
     // read in longs to minimize ByteBuffer get() calls
-    int index = 0;
     int pos = buffer.position();
     final int endPos = (pos + len);
+    final boolean sameOrder = ByteOrder.nativeOrder() == buffer.order();
     // round off to nearest factor of 8 to read in longs
     final int endRound8Pos = (len % 8) != 0 ? (endPos - 8) : endPos;
-    byte b;
-    if (buffer.order() == ByteOrder.BIG_ENDIAN) {
-      while (pos < endRound8Pos) {
-        // splitting into longs is faster than reading one byte at a time even
-        // though it costs more operations (about 20% in micro-benchmarks)
-        final long v = buffer.getLong(pos);
-        b = (byte)(v >>> 56);
-        if (b != bytes[index++]) {
+    long indexPos = Platform.BYTE_ARRAY_OFFSET;
+    while (pos < endRound8Pos) {
+      // splitting into longs is faster than reading one byte at a time even
+      // though it costs more operations (about 20% in micro-benchmarks)
+      final long s = Platform.getLong(bytes, indexPos);
+      final long v = buffer.getLong(pos);
+      if (sameOrder) {
+        if (s != v) {
           return false;
         }
-        b = (byte)(v >>> 48);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 40);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 32);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 24);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 16);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 8);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 0);
-        if (b != bytes[index++]) {
-          return false;
-        }
-
-        pos += 8;
+      } else if (s != Long.reverseBytes(v)) {
+        return false;
       }
-    }
-    else {
-      while (pos < endRound8Pos) {
-        // splitting into longs is faster than reading one byte at a time even
-        // though it costs more operations (about 20% in micro-benchmarks)
-        final long v = buffer.getLong(pos);
-        b = (byte)(v >>> 0);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 8);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 16);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 24);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 32);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 40);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 48);
-        if (b != bytes[index++]) {
-          return false;
-        }
-        b = (byte)(v >>> 56);
-        if (b != bytes[index++]) {
-          return false;
-        }
-
-        pos += 8;
-      }
+      pos += 8;
+      indexPos += 8;
     }
     while (pos < endPos) {
-      if (bytes[index] != buffer.get(pos)) {
+      if (Platform.getByte(bytes, indexPos) != buffer.get(pos)) {
         return false;
       }
       pos++;
-      index++;
+      indexPos++;
     }
     return true;
+  }
+
+  /**
+   * Allocate new ByteBuffer if capacity of given ByteBuffer has exceeded.
+   * The passed ByteBuffer may no longer be usable after this call.
+   */
+  public static ByteBuffer ensureCapacity(ByteBuffer buffer,
+      int newLength, boolean useDirectBuffer, String owner) {
+    if (newLength <= buffer.capacity()) {
+      return buffer;
+    }
+    BufferAllocator allocator = useDirectBuffer ? DirectBufferAllocator.instance()
+        : HeapBufferAllocator.instance();
+    ByteBuffer newBuffer = allocator.allocateWithFallback(newLength, owner);
+    newBuffer.order(buffer.order());
+    buffer.flip();
+    newBuffer.put(buffer);
+    allocator.release(buffer);
+    return newBuffer;
+  }
+
+  public static int getUTFLength(final String str, final int strLen) {
+    int utfLen = strLen;
+    for (int i = 0; i < strLen; i++) {
+      final char c = str.charAt(i);
+      if ((c >= 0x0001) && (c <= 0x007F)) {
+        // 1 byte for character
+        continue;
+      } else if (c > 0x07FF) {
+        utfLen += 2; // 3 bytes for character
+      } else {
+        utfLen++; // 2 bytes for character
+      }
+    }
+    return utfLen;
+  }
+
+  public static boolean isSocketToSameHost(Channel channel) {
+    try {
+      if (channel instanceof SocketChannel) {
+        SocketChannel socketChannel = (SocketChannel)channel;
+        return isSocketToSameHost(socketChannel.getLocalAddress(),
+            socketChannel.getRemoteAddress());
+      }
+    } catch (IOException ignored) {
+    }
+    return false;
+  }
+
+  public static boolean isSocketToSameHost(SocketAddress localSockAddress,
+      SocketAddress remoteSockAddress) {
+    if ((localSockAddress instanceof InetSocketAddress) &&
+        (remoteSockAddress instanceof InetSocketAddress)) {
+      InetAddress localAddress = ((InetSocketAddress)localSockAddress)
+          .getAddress();
+      return localAddress != null && localAddress.equals(
+          ((InetSocketAddress)remoteSockAddress).getAddress());
+    } else {
+      return false;
+    }
+  }
+
+  public static long parkThreadForAsyncOperationIfRequired(
+      final StreamChannel channel, long parkedNanos, int numTries)
+      throws SocketTimeoutException {
+    // at this point we are out of the selector thread and don't want to
+    // create unlimited size buffers upfront in selector, so will use
+    // simple signalling between selector and this thread to proceed
+    if ((numTries % RETRIES_BEFORE_PARK) == 0) {
+      if (channel != null) {
+        channel.setParkedThread(Thread.currentThread());
+      }
+      LockSupport.parkNanos(PARK_NANOS_FOR_READ_WRITE);
+      if (channel != null) {
+        channel.setParkedThread(null);
+        if ((parkedNanos += ClientSharedUtils.PARK_NANOS_FOR_READ_WRITE) >
+            channel.getParkNanosMax()) {
+          throw new SocketTimeoutException("Connection operation timed out.");
+        }
+      }
+    }
+    return parkedNanos;
+  }
+
+  public static final ThreadLocal ALLOW_THREADCONTEXT_CLASSLOADER =
+      new ThreadLocal();
+
+  /**
+   * allow using Thread context ClassLoader to load classes
+   */
+  public static final class ThreadContextObjectInputStream extends
+      ObjectInputStream {
+
+    protected ThreadContextObjectInputStream() throws IOException,
+        SecurityException {
+      super();
+    }
+
+    public ThreadContextObjectInputStream(final InputStream in)
+        throws IOException {
+      super(in);
+    }
+
+    protected Class resolveClass(final ObjectStreamClass desc)
+        throws IOException, ClassNotFoundException {
+      try {
+        return super.resolveClass(desc);
+      } catch (ClassNotFoundException cnfe) {
+        // try to load using Thread context ClassLoader, if required
+        final Object allowTCCL = ALLOW_THREADCONTEXT_CLASSLOADER.get();
+        if (allowTCCL == null || !Boolean.TRUE.equals(allowTCCL)) {
+          throw cnfe;
+        } else {
+          return Thread.currentThread().getContextClassLoader()
+              .loadClass(desc.getName());
+        }
+      }
+    }
   }
 }

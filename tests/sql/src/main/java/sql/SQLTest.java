@@ -70,7 +70,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
 import java.util.Stack;
@@ -78,26 +77,22 @@ import java.util.Vector;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import rollingupgrade.RollingUpgradeBB;
 import splitBrain.SplitBrainBB;
 import splitBrain.SplitBrainPrms;
-import sql.datagen.DataGeneratorClient;
 import sql.ddlStatements.DDLStmtIF;
 import sql.ddlStatements.FunctionDDLStmt;
 import sql.ddlStatements.IndexDDLStmt;
 import sql.ddlStatements.Procedures;
-import sql.dmlStatements.AbstractDMLStmt;
 import sql.dmlStatements.TradeCustomersDMLStmt;
 import sql.dmlStatements.DMLStmtIF;
 import sql.generic.SQLOldTest;
-import sql.generic.ddl.Executor;
-import sql.generic.ddl.TableInfoGenerator;
 import sql.hdfs.HDFSSqlTest;
 import sql.hdfs.HDFSTestPrms;
 import sql.hdfs.TriggerQueryObserver;
 import sql.mbeans.listener.CallBackListener;
 import sql.rollingUpgrade.SQLRollingUpgradeBB;
 import sql.rollingUpgrade.SQLRollingUpgradePrms;
+import sql.snappy.SnappyTest;
 import sql.sqlutil.DDLStmtsFactory;
 import sql.sqlutil.DMLStmtsFactory;
 import sql.sqlutil.JoinTableStmtsFactory;
@@ -127,7 +122,6 @@ import com.gemstone.gemfire.internal.cache.PartitionedRegion;
 import com.gemstone.gemfire.internal.cache.wan.AbstractGatewaySender;
 import com.gemstone.gemfire.internal.cache.wan.parallel.ParallelGatewaySenderImpl;
 import com.gemstone.gemfire.internal.cache.wan.serial.SerialGatewaySenderImpl;
-import com.gemstone.org.jgroups.util.LinkedListQueue;
 import com.pivotal.gemfirexd.Attribute;
 import com.pivotal.gemfirexd.FabricServer;
 import com.pivotal.gemfirexd.FabricService;
@@ -198,6 +192,7 @@ public class SQLTest {
   public static boolean hasPersistentTables = TestConfig.tab().booleanAt(GfxdHelperPrms.persistTables, false);
   public static boolean isWanTest = TestConfig.tab().booleanAt(SQLWanPrms.isWanTest, false);
   public static boolean isSnappyTest = TestConfig.tab().booleanAt(SQLPrms.isSnappyTest, false);
+  public static boolean isSnappyMode = false;
   protected static boolean useWriterForWriteThrough = TestConfig.tab().booleanAt(SQLPrms.useWriterForWriteThrough, false);
   protected static boolean testLoaderCreateRandomRow = TestConfig.tab().booleanAt(SQLPrms.testLoaderCreateRandomRow, false);  
   public static boolean hasTx = TestConfig.tab().booleanAt(SQLPrms.hasTx, false);
@@ -334,8 +329,11 @@ public class SQLTest {
   public static boolean dumpThreads = TestConfig.tab().booleanAt(SQLPrms.dumpThreads, false);
   public static int dumpThreadsInterval = (int) TestConfig.tab().longAt(SQLPrms.dumpThreadsInterval, 10000);
   public static int dumpThreadsTotalTime = (int) TestConfig.tab().longAt(SQLPrms.dumpThreadsTotalTime, 600); //maxResultWaitSec
-  //public static boolean enableConcurrencyCheck = isHATest ? true : (random.nextBoolean() && testUniqueKeys? false: true);
-  public static boolean enableConcurrencyCheck = false; //Not covered in this 1.0 cheetah release, and removed from docs
+  //public static boolean enableConcurrencyCheck = isHATest ? true : (random.nextBoolean() &&  testUniqueKeys? false: true);
+  //enableConcurrecyChecks : needs to true in case of snapshotIsolation is enabled.
+  //Was set to false earlier (Not covered in this 1.0 cheetah release, and removed from docs)
+  public static boolean enableConcurrencyCheck = TestConfig.tab().booleanAt(SQLPrms
+      .isSnapshotEnabled,true);
   public static String ENABLECONCURRENCYCHECKS = " ENABLE CONCURRENCY CHECKS ";
   private static boolean isTicket51584Fixed = false;
   public static boolean reproduceTicket51628 = false;
@@ -399,6 +397,13 @@ public class SQLTest {
     HydraTask_initializeGFXD();
   }
   
+  public static synchronized void HydraTask_initializeForSnappy(){
+    if (sqlTest == null) {
+      sqlTest = new SQLTest();
+    }
+    isSnappyMode = SQLPrms.isSnappyMode();
+    sqlTest.initialize();
+  }
 
   public static synchronized void HydraTask_initializeGFXD() {
     if (sqlTest == null) {
@@ -422,8 +427,6 @@ public class SQLTest {
     }
     sqlTest.initialize();
   }
-
-   
 
   protected void initialize() {
     hasDerbyServer = TestConfig.tab().booleanAt(Prms.manageDerbyServer, false);
@@ -718,11 +721,12 @@ public class SQLTest {
   //use gfe conn to create schemas
   protected void createGFESchemas() {
     ddlThread = getMyTid();
-    Connection conn = getGFEConnection();  
+    Connection conn = getGFEConnection();
+
     Log.getLogWriter().info("testServerGroupsInheritence is set to " + testServerGroupsInheritence);
     Log.getLogWriter().info("creating schemas in gfe.");
     if (!testServerGroupsInheritence) createSchemas(conn);
-    else { 
+    else {
       String[] schemas = SQLPrms.getGFESchemas(); //with server group
       createSchemas(conn, schemas);
     }
@@ -873,7 +877,8 @@ public class SQLTest {
   }
 
   public static void HydraTask_createGFETables(){
-    sqlTest.createFuncMonth();  //partition by expression
+    if(!SQLPrms.isSnappyMode())
+      sqlTest.createFuncMonth();  //partition by expression
     if(useGenericSQL) sqlGen.createGFETables();
     else sqlTest.createGFETables();
     if (supportDuplicateTables) {
@@ -1006,19 +1011,21 @@ public class SQLTest {
     tables.add("trade.networth");
     tables.add("trade.customers");
     tables.add("trade.securities");
-    
+
     boolean testDropTableIfExists = SQLTest.random.nextBoolean();
     if (testDropTableIfExists)
       sql = "drop table if exists ";
     else
       sql = "drop table ";
+
     try {
       for (String table: tables) {
         Statement s = conn.createStatement();
         s.execute(sql + table);
       }
     } catch (SQLException se) {
-      if (se.getSQLState().equalsIgnoreCase("42Y55") && !testDropTableIfExists) {
+      if ((se.getSQLState().equalsIgnoreCase("42Y55") || se.getSQLState().equalsIgnoreCase
+          ("42000")) && !testDropTableIfExists) {
         Log.getLogWriter().info("Got expected table not exists exception, continuing tests");
       } else {
         SQLHelper.handleSQLException(se);
@@ -1067,6 +1074,7 @@ public class SQLTest {
     String driver;
     //gfe and derby use same drivers, it could be used when client server driver is used in gfe.
     String url;
+
     try {
       driver = conn.getMetaData().getDriverName();
       url = conn.getMetaData().getURL();
@@ -1087,8 +1095,11 @@ public class SQLTest {
           Log.getLogWriter().info("about to create table " + derbyTables[i]);
           s.execute(derbyTables[i]);
         }
+
       } else if (url.equals(GFEDBManager.getUrl())
-          || url.startsWith(GFEDBClientManager.getProtocol())){
+          || url.startsWith(GFEDBClientManager.getProtocol())
+          || url.startsWith(GFEDBClientManager.getSnappyThriftProtocol())
+          || url.startsWith(GFEDBClientManager.getDRDAProtocol())) {
 
         if (hasHdfs) {
           SQLPrms.setHdfsDDL(SQLPrms.getCreateTablesStatements(false));
@@ -1101,34 +1112,35 @@ public class SQLTest {
           Log.getLogWriter().info("creating hdfs extn...");
           gfeDDL = SQLPrms.getHdfsDDL(gfeDDL);
         }
-        
-        // enable offheap
-        if (isOffheap && randomizeOffHeap) {
-          throw new TestException("SqlPrms.isOffheap and SqlPrms.randomizeOffHeap are both set to true");
-        }
-        if (isOffheap){
-          Log.getLogWriter().info("enabling offheap." );
-          for (int i =0; i<gfeDDL.length; i++) {
-            if (gfeDDL[i].toLowerCase().indexOf(SQLTest.OFFHEAPCLAUSE.toLowerCase()) < 0) { // don't add twice
-              gfeDDL[i] += OFFHEAPCLAUSE;
-            }
-          }          
-        }
-        if (randomizeOffHeap) {
-          Log.getLogWriter().info("Randomizing off-heap in some tables but not others");
-          for (int i =0; i<gfeDDL.length; i++) {
-            if (gfeDDL[i].toLowerCase().indexOf(SQLTest.OFFHEAPCLAUSE.toLowerCase()) < 0) { // don't add twice
-              if (TestConfig.tab().getRandGen().nextInt(1, 100) <= 50) {
+        if(!isSnappyMode) {
+          // enable offheap
+          if (isOffheap && randomizeOffHeap) {
+            throw new TestException("SqlPrms.isOffheap and SqlPrms.randomizeOffHeap are both set to true");
+          }
+          if (isOffheap) {
+            Log.getLogWriter().info("enabling offheap.");
+            for (int i = 0; i < gfeDDL.length; i++) {
+              if (gfeDDL[i].toLowerCase().indexOf(SQLTest.OFFHEAPCLAUSE.toLowerCase()) < 0) { // don't add twice
                 gfeDDL[i] += OFFHEAPCLAUSE;
               }
             }
           }
-        }
-        
-        if (enableConcurrencyCheck) {
-          for (int i =0; i<gfeDDL.length; i++) {
-            gfeDDL[i] += ENABLECONCURRENCYCHECKS;
-          }   
+          if (randomizeOffHeap) {
+            Log.getLogWriter().info("Randomizing off-heap in some tables but not others");
+            for (int i = 0; i < gfeDDL.length; i++) {
+              if (gfeDDL[i].toLowerCase().indexOf(SQLTest.OFFHEAPCLAUSE.toLowerCase()) < 0) { // don't add twice
+                if (TestConfig.tab().getRandGen().nextInt(1, 100) <= 50) {
+                  gfeDDL[i] += OFFHEAPCLAUSE;
+                }
+              }
+            }
+          }
+
+          if (enableConcurrencyCheck) {
+            for (int i = 0; i < gfeDDL.length; i++) {
+              gfeDDL[i] += ENABLECONCURRENCYCHECKS;
+            }
+          }
         }
 
         for (int i =0; i<gfeDDL.length; i++) {
@@ -1232,8 +1244,10 @@ public class SQLTest {
       for (int i = 0; i < tables.length; i++) {
         aStr.append(tables[i] + "\n");
       }
-    } else if (url.equals(GFEDBManager.getUrl())||
-        url.startsWith(GFEDBClientManager.getProtocol())){
+    } else if (url.equals(GFEDBManager.getUrl())
+        || url.startsWith(GFEDBClientManager.getProtocol())
+        || url.startsWith(GFEDBClientManager.getSnappyThriftProtocol())
+        || url.startsWith(GFEDBClientManager.getDRDAProtocol())) {
       for (int i = 0; i < gfeDDL.length; i++) {
         aStr.append(gfeDDL[i] + "\n");
       }
@@ -2285,50 +2299,69 @@ public class SQLTest {
   //provide connection to gfxd/GFE
   public Connection getGFEConnection() {
     Connection conn = null;
+    if(SQLPrms.isSnappyMode()) {
+      try {
+        conn = getSnappyConnection();
+        //conn.createStatement().execute("set snappydata.sql.planCachingAll=false");
+        return conn;
+      } catch (SQLException se) {
+        throw new TestException("Got exception while getting snappy data connection.", se);
+      }
+    }
     if (isEdge) {
       conn = getGFXDClientConnection();
       return conn;
     }
-    
-    if (!hasTx && setTx) {
-      //TODO to be modified once default isolation changed to Connection.TRANSACTION_READ_COMMITTED
-      //and set Connection.TRANSACTION_NONE explicitly for the original non txn testing
-      Properties p = new Properties();
-      if (!reproduceTicket51628) {
-        p.put(Attribute.TX_SYNC_COMMITS, "true");
-        log().info("using connection property : " + Attribute.TX_SYNC_COMMITS 
-            + " set to true");
-      }
-      try {
-        conn = GFEDBManager.getConnection(p);
-        executeListener("CREATE", "NETWORK_STATE");
-        
-        //conn.setAutoCommit(false);
-        //conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-        //after r50570 product has default Connection.TRANSACTION_READ_COMMITTED
-        Log.getLogWriter().info("using product default isolation Connection.TRANSACTION_READ_COMMITTED " );
-      } catch (SQLException se) {
-        SQLHelper.printSQLException(se);
-        throw new TestException ("Not able to get connection " + TestHelper.getStackTrace(se));
-      }
-    } else {
-      try {
-        conn = GFEDBManager.getConnection();
-        
-        conn.setTransactionIsolation(Connection.TRANSACTION_NONE); 
-        //use none txn isolation when setTx is false
-        log().info("Connection isolation is set to " + Connection.TRANSACTION_NONE
-            + " and getTransactionIsolation() is "+ conn.getTransactionIsolation());
-        
-        executeListener("CREATE", "NETWORK_STATE");
-      } catch (SQLException e) {
-        SQLHelper.printSQLException(e);
-        throw new TestException ("Not able to get connection " + TestHelper.getStackTrace(e));
+    else {
+      if (!hasTx && setTx) {
+        //TODO to be modified once default isolation changed to Connection.TRANSACTION_READ_COMMITTED
+        //and set Connection.TRANSACTION_NONE explicitly for the original non txn testing
+        Properties p = new Properties();
+        if (!reproduceTicket51628) {
+          p.put(Attribute.TX_SYNC_COMMITS, "true");
+          log().info("using connection property : " + Attribute.TX_SYNC_COMMITS
+              + " set to true");
+        }
+        try {
+          conn = GFEDBManager.getConnection(p);
+          executeListener("CREATE", "NETWORK_STATE");
+
+          //conn.setAutoCommit(false);
+          //conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+          //after r50570 product has default Connection.TRANSACTION_READ_COMMITTED
+          Log.getLogWriter().info("using product default isolation Connection.TRANSACTION_READ_COMMITTED ");
+        } catch (SQLException se) {
+          SQLHelper.printSQLException(se);
+          throw new TestException("Not able to get connection " + TestHelper.getStackTrace(se));
+        }
+      } else {
+        try {
+          conn = GFEDBManager.getConnection();
+
+          conn.setTransactionIsolation(Connection.TRANSACTION_NONE);
+          //use none txn isolation when setTx is false
+          log().info("Connection isolation is set to " + Connection.TRANSACTION_NONE
+              + " and getTransactionIsolation() is " + conn.getTransactionIsolation());
+
+          executeListener("CREATE", "NETWORK_STATE");
+        } catch (SQLException e) {
+          SQLHelper.printSQLException(e);
+          throw new TestException("Not able to get connection " + TestHelper.getStackTrace(e));
+        }
       }
     }
-    
     return conn;
   }
+
+  /**
+   * Gets Client connection.
+   */
+  public static Connection getSnappyConnection() throws SQLException {
+    Connection conn = null;
+    conn = SnappyTest.getLocatorConnection();
+    return conn;
+  }
+
 
   //provide connection to gfxd/GFE -- used to set up dataStore in server groups
   //TODO may need to provide both non_transactional vs default read committed isolation level support
@@ -3018,6 +3051,13 @@ public class SQLTest {
   protected void createIndex(Connection conn) {
     //createIndex will be independent
     if (createIndex) {
+      if(SQLPrms.isSnappyMode()) {
+        try {
+          conn.createStatement().execute("set schema TRADE");
+        } catch(SQLException se){
+          Log.getLogWriter().info("Got exception while setting trade schema");
+        }
+      }
       sql.ddlStatements.IndexDDLStmt indexStmt = new sql.ddlStatements.IndexDDLStmt();
       indexStmt.doDDLOp(null, conn);
     }
@@ -3080,7 +3120,13 @@ public class SQLTest {
     if (setCriticalHeap) resetCanceledFlag();
     if (setTx && isHATest) resetNodeFailureFlag();
     if (setTx && testEviction) resetEvictionConflictFlag();
-
+    if (SQLPrms.isSnappyMode()) {
+      try {
+        gConn.createStatement().execute("set spark.sql.crossJoin.enabled=true");
+      } catch(SQLException se) {
+        throw new TestException("Got exception while enabling crossJoin in snappy",se);
+      }
+    }
     //perform the opeartions
     queryOnJoinOp(dConn, gConn);
 
@@ -3096,6 +3142,7 @@ public class SQLTest {
   }
   
   protected void queryOnJoinOp(Connection dConn, Connection gConn) {
+
     int[] joinTables = SQLPrms.getJoinTables();
     int join = joinTables[random.nextInt(joinTables.length)]; //get random table to perform dml
     sql.joinStatements.JoinTableStmtIF joinQueryStmt= joinFactory.createQueryStmt(join); //dmlStmt of a table
@@ -3249,8 +3296,7 @@ public class SQLTest {
         verifyResultSets(dConn, gConn, table[0], table[1]);
         dumpDiagnostics(gConn, table[0], table[1]);
       }catch (TestException te) {
-        if (verifyUsingOrderBy) throw te; //avoid OOME on accessor due to failure with large resultset 
-        
+        if (verifyUsingOrderBy) throw te; //avoid OOME on accessor due to failure with large resultset
         Log.getLogWriter().info("verifyResultSets-do not throw Exception yet, until all tables are verified");
         throwException = true;
         //Log.getLogWriter().info("Logged test failure:\n" + te.getMessage());
@@ -3547,7 +3593,7 @@ public class SQLTest {
       return;
     }
       
-    select = "select count (*) from " + schema + "." + table;
+    select = "select CAST(count (*) as integer) as numRows from " + schema + "." + table;
     if ( (verifyByTid && getMyTid() == 0 ) || (!verifyByTid) ) 
     verifyResultSets(dConn, gConn, schema, table, select, hasHdfs);
     
@@ -3636,7 +3682,7 @@ public class SQLTest {
         verifyResultSets(dConn,gConn,schema,table,select);
       }
     } else{
-      if (verifyUsingOrderBy && !select.contains("select count")) {
+      if (verifyUsingOrderBy && !select.contains("select CAST(count")) {
         select += getOrderByClause(gConn, schema, table);    
       }
       
@@ -3904,7 +3950,8 @@ public class SQLTest {
           .executeQuery(
               "select tableschemaname, tablename "
                   + "from sys.systables where tabletype = 'T' and tableschemaname != '"
-                  + GfxdConstants.PLAN_SCHEMA + "' ");
+                  + GfxdConstants.PLAN_SCHEMA + "' "
+                  + (SQLPrms.isSnappyMode()?" and tableschemaname != 'SNAPPY_HIVE_METASTORE'": ""));
       
       if (!setTx) {
         while (rs.next()) {
@@ -4913,9 +4960,12 @@ public class SQLTest {
       vecAt(SQLPrms.redundancyClause, new HydraVector());
     if (statements.size() == 0)
       return tables;
-    
     String[] strArr = new String[statements.size()];
     for (int i = 0; i < statements.size(); i++) {
+      if(SQLPrms.isSnappyMode() && !statements.elementAt(i).contains("USING ROW")) {
+        throw new TestException("GFXD syntax for create table is not supported, please use snappy" +
+            " syntax");
+      }
       if (testUniqIndex) {
         tables[0] = "create table trade.securities (sec_id int not null, " +
                         "symbol varchar(10) not null, price decimal (30, 20), " +
@@ -4926,7 +4976,11 @@ public class SQLTest {
       }
       
       String currentTable = tables[i].substring(0,tables[i].indexOf("(")).toLowerCase();
-      if (SQLTest.hasJSON && ( currentTable.contains("trade.securities") || currentTable.contains("trade.buyorders") || currentTable.contains("trade.networth") || currentTable.contains("trade.customers") )) {
+      if (SQLTest.hasJSON &&
+          ( currentTable.contains("trade.securities")
+              || currentTable.contains("trade.buyorders")
+              || currentTable.contains("trade.networth")
+              || currentTable.contains("trade.customers") )) {
       tables[i]=tables[i].trim().substring(0,tables[i].trim().length() - 1);
       //customer table is used for multiple json objects in table testing and json with array and json with-in json testing
       if ( currentTable.contains("trade.customers"))
@@ -4939,31 +4993,50 @@ public class SQLTest {
       // when alter table is ready, this can be conver to alter table remove constraint
       String tableName = statements.elementAt(i);
       String partition = getTablePartition(tableName);
+      String redundClause = "";
       if (redundancyClause.size()>0) {
-        strArr[i] = tables[i] + " " + partition + getRedundancyClause(partition, redundancyClause.elementAt(i));
+        redundClause = getRedundancyClause(partition, redundancyClause.elementAt(i));
         //following setting is used for gfxd tx with batching test case
         //assume all tables will be using redundancy
         SQLBB.getBB().getSharedMap().put(hasRedundancy, true);
       }
       else {
-        strArr[i] = tables[i] + " " + partition;
         SQLBB.getBB().getSharedMap().put(hasRedundancy, false);
       }
+
+
 /*
       if (hasDerbyServer && populateThruLoader && i==5) {
         strArr[i] += " LOADER (sql.loader.BuyOrdersLoader.createRowLoader) ";
       } // table[5] is buyorder and for loader test, this can be removed when loader, writer trigger tests are ready
 */
-    }
 
     //add persistent table clause
-    for (int i = 0; i < statements.size(); i++) {
-      String tableName = statements.elementAt(i);
-      strArr[i] +=  /*getLoader(i) + */ getPersistence(i) + 
+      String persistClause = getPersistence(i);
+      //persistClause =  /*getLoader(i) + */ getPersistence(i) ;
+      String evictionClause =
         (useHeapPercentage? 
             (alterTableDropColumn? getEvictionHeapPercentageOverflowForAlterTable() : getEvictionHeapPercentageOverflow() )
             : getEvictionOverflow(tableName));  //loader is being taken out from the ddl
+
+      if (SQLPrms.isSnappyMode()) {
+        if(partition.trim().length()>0 && redundClause.trim().length()>0)
+          partition = partition + ", " ;
+        partition = partition + redundClause;
+        if (partition.trim().length()>0 && persistClause.trim().length()>0)
+          partition = partition + ", ";
+        partition = partition + persistClause;
+        if (partition.trim().length()>0 && evictionClause.trim().length()>0)
+          partition = partition + ", ";
+        partition = partition + evictionClause;
+        partition = tableName.replace
+            (tableName.substring(tableName.indexOf("(") + 1, tableName.indexOf(")")), partition);
+      }
+      else
+        partition = partition + " " + redundClause + " " + persistClause + " " + evictionClause;
+      strArr[i] = tables[i] + " " + partition;
     }
+
     return strArr;
   }
 
@@ -5392,7 +5465,8 @@ public class SQLTest {
     try {
       rs = conn.createStatement().executeQuery("select tableschemaname, tablename "
                   + "from sys.systables where tabletype = 'T' and tableschemaname != '"
-                  + GfxdConstants.PLAN_SCHEMA + "'");
+                  + GfxdConstants.PLAN_SCHEMA + "'"
+                  + (SQLPrms.isSnappyMode()?" and tableschemaname != 'SNAPPY_HIVE_METASTORE'":""));
       while (rs.next()) {
         String[] str = new String[2];
         str[0] = rs.getString(1);
@@ -6016,7 +6090,8 @@ public class SQLTest {
     
     try {
       rs = gConn.createStatement().executeQuery("select tableschemaname, tablename "
-          + "from sys.systables where tabletype = 'T' ");
+          + "from sys.systables where tabletype = 'T' "
+          + (SQLPrms.isSnappyMode()?" and tableschemaname != 'SNAPPY_HIVE_METASTORE'":""));
       while (rs.next()) {
         String schemaName = rs.getString(1);
         String tableName = rs.getString(2);
@@ -6053,7 +6128,8 @@ public class SQLTest {
     StringBuffer str = new StringBuffer();
     try {
       ResultSet rs = gConn.createStatement().executeQuery("select tableschemaname, tablename "
-          + "from sys.systables where tabletype = 'T' and tableschemaname not like 'SYS%'");
+          + "from sys.systables where tabletype = 'T' and tableschemaname not like 'SYS%'"
+          + (SQLPrms.isSnappyMode()?" and tableschemaname != 'SNAPPY_HIVE_METASTORE'":""));
       while (rs.next()) {
         String schemaName = rs.getString(1);
         String tableName = rs.getString(2);
@@ -7041,8 +7117,7 @@ public class SQLTest {
   
   protected void removeUniqueKeyContraint(Connection conn) {
     try {
-      String sql = "alter table trade.securities "
-        + "drop unique SEC_UQ ";
+      String sql = "alter table trade.securities " + "drop unique SEC_UQ ";
       Log.getLogWriter().info(sql);
       conn.createStatement().execute(sql);
     } catch (SQLException se) {
@@ -7550,6 +7625,7 @@ public class SQLTest {
   }
   
   protected void createUDTPriceFunction(Connection conn) {
+
     String getLowPrice = "create function trade.getLowPrice(DP1 trade.UDTPrice) " +
     "RETURNS NUMERIC " +
     "PARAMETER STYLE JAVA " +
@@ -7563,7 +7639,7 @@ public class SQLTest {
     "LANGUAGE JAVA " +
     "NO SQL " +
     "EXTERNAL NAME 'sql.sqlutil.UDTPrice.getHighPrice'";
-   
+
     try {
       log().info("xecuting " + getLowPrice);
       executeStatement(conn, getLowPrice);          
@@ -8778,7 +8854,7 @@ public class SQLTest {
       dConn = getDiscConnection();
     }  //when not test uniqueKeys and not in serial execution, only connection to gfe is provided.
     Connection gConn = getGFEConnection();
-    alterTableAlterConstraint(dConn, gConn); 
+    alterTableAlterConstraint(dConn, gConn);
     closeDiscConnection(dConn);
     closeGFEConnection(gConn);
   }
@@ -8859,8 +8935,8 @@ public class SQLTest {
   
   /**
    * Copy diskstore directory sourcePath into directory destPath
-   * @param sourcePath Directory to copy
-   * @param destPath Directory to copy into
+   *  sourcePath Directory to copy
+   *  destPath Directory to copy into
    * @throws IOException If copying failed.
    */
   public static void HydraTask_copyDiskstore() throws IOException {

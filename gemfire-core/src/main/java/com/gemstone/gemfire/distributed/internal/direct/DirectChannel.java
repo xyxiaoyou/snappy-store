@@ -48,17 +48,8 @@ import com.gemstone.gemfire.i18n.LogWriterI18n;
 import com.gemstone.gemfire.internal.ManagerLogWriter;
 import com.gemstone.gemfire.internal.SocketCreator;
 import com.gemstone.gemfire.internal.cache.DirectReplyMessage;
-import com.gemstone.gemfire.internal.concurrent.S;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
-import com.gemstone.gemfire.internal.tcp.BaseMsgStreamer;
-import com.gemstone.gemfire.internal.tcp.ConnectExceptions;
-import com.gemstone.gemfire.internal.tcp.Connection;
-import com.gemstone.gemfire.internal.tcp.ConnectionException;
-import com.gemstone.gemfire.internal.tcp.ConnectionTable;
-import com.gemstone.gemfire.internal.tcp.MemberShunnedException;
-import com.gemstone.gemfire.internal.tcp.MsgStreamer;
-import com.gemstone.gemfire.internal.tcp.Stub;
-import com.gemstone.gemfire.internal.tcp.TCPConduit;
+import com.gemstone.gemfire.internal.tcp.*;
 import com.gemstone.gemfire.internal.util.Breadcrumbs;
 import com.gemstone.gemfire.internal.util.concurrent.ReentrantSemaphore;
 import com.gemstone.org.jgroups.util.StringId;
@@ -234,15 +225,15 @@ public final class DirectChannel {
    * The maximum number of concurrent senders sending a message to a group of recipients.
    */
   static private final int MAX_GROUP_SENDERS = Integer.getInteger("p2p.maxGroupSenders", DEFAULT_CONCURRENCY_LEVEL).intValue();
-  private S groupUnorderedSenderSem; // TODO this should be final?
-  private S groupOrderedSenderSem; // TODO this should be final?
+  private ReentrantSemaphore groupUnorderedSenderSem; // TODO this should be final?
+  private ReentrantSemaphore groupOrderedSenderSem; // TODO this should be final?
 
 //  /**
 //   * cause of abnormal shutdown, if any
 //   */
 //  private volatile Exception shutdownCause;
 
-  private S getGroupSem(boolean ordered) {
+  private ReentrantSemaphore getGroupSem(boolean ordered) {
     if (ordered) {
       return this.groupOrderedSenderSem;
     } else {
@@ -254,7 +245,7 @@ public final class DirectChannel {
       throw new com.gemstone.gemfire.distributed.DistributedSystemDisconnectedException(LocalizedStrings.DirectChannel_DIRECT_CHANNEL_HAS_BEEN_STOPPED.toLocalizedString());
     }
     // @todo darrel: add some stats
-    final S s = getGroupSem(ordered);
+    final ReentrantSemaphore s = getGroupSem(ordered);
     for (;;) {
       this.conduit.getCancelCriterion().checkCancelInProgress(null);
       boolean interrupted = Thread.interrupted();
@@ -277,7 +268,7 @@ public final class DirectChannel {
     }
   }
   private void releaseGroupSendPermission(boolean ordered) {
-    final S s = getGroupSem(ordered);
+    final ReentrantSemaphore s = getGroupSem(ordered);
     s.release();
   }
 
@@ -369,8 +360,6 @@ public final class DirectChannel {
         ((tssFlags & ConnectionTable.IS_READER_TSS_MASK) != 0);
 
     msg.setProcessorType(isReaderThread);
-    //Connections we actually sent messages to.
-    final List totalSentCons = new ArrayList(destinations.length);
     boolean interrupted = false;
 
     long ackTimeout = 0;
@@ -412,9 +401,12 @@ public final class DirectChannel {
     final boolean orderedMsg = msg.orderedDelivery(threadOwnsResources)
         || ((tssFlags & ConnectionTable.SHOULD_DOMINO_TSS_MASK) != 0);
 
-    try {
+    // Connections obtained to send the message
+    final ArrayList<Connection> allCons = new ArrayList<>(destinations.length);
+    final boolean useNIOStream = getConduit().useNIOStream();
     do {
-      interrupted = interrupted || Thread.interrupted();
+    try {
+      interrupted = Thread.interrupted() || interrupted;
       /**
        * Exceptions that happened during one attempt to send
        */
@@ -427,9 +419,14 @@ public final class DirectChannel {
         retryInfo = null;
         retry = true;
       }
-      final List cons = new ArrayList(destinations.length);
-      ConnectExceptions ce = getConnections(mgr, msg, destinations, orderedMsg,
+      final ArrayList<Connection> cons = new ArrayList<>(destinations.length);
+      ConnectExceptions ce;
+      try {
+        ce = getConnections(mgr, msg, destinations, orderedMsg,
             retry, ackTimeout, ackSDTimeout, threadOwnsResources, cons);
+      } finally {
+        allCons.addAll(cons);
+      }
       if (directReply && msg.getProcessorId() > 0) { // no longer a direct-reply message?
         directReply = false;
       }
@@ -457,7 +454,7 @@ public final class DirectChannel {
       }
       else {
         // sending to just one guy
-        permissionCon = (Connection)cons.get(0);
+        permissionCon = cons.get(0);
         if (permissionCon != null) {
           try {
             permissionCon.acquireSendPermission(isReaderThread);
@@ -484,9 +481,13 @@ public final class DirectChannel {
         DMStats stats = getDMStats();
         List<?> sentCons; // used for cons we sent to this time
 
-        final BaseMsgStreamer ms = MsgStreamer.create(cons, msg, directReply,
-            stats);
+        BaseMsgStreamer ms = null;
         try {
+          if (useNIOStream) {
+            ms = MsgChannelStreamer.create(cons, msg, directReply, stats);
+          } else {
+            ms = MsgStreamer.create(cons, msg, directReply, stats);
+          }
           startTime = 0;
           if (ackTimeout > 0) {
             startTime = System.currentTimeMillis();
@@ -502,9 +503,7 @@ public final class DirectChannel {
           }
           ce = ms.getConnectExceptions();
           sentCons = ms.getSentConnections();
-
-          totalSentCons.addAll(sentCons);
-        } 
+        }
         catch (NotSerializableException e) {
           throw e;
         } 
@@ -516,7 +515,9 @@ public final class DirectChannel {
         }
         finally {
           try {
-            ms.close(logger);
+            if (ms != null) {
+              ms.close(logger);
+            }
           } catch (IOException e) {
             throw new InternalGemFireException(
                 "Unknown error serializing message", e);
@@ -561,17 +562,17 @@ public final class DirectChannel {
       if (retryInfo != null) {
         this.conduit.getCancelCriterion().checkCancelInProgress(null);
       }
-    } while (retryInfo != null);
-    }
-    finally {
+    } finally {
+      for (Connection con : allCons) {
+        con.setInUse(false, 0, 0, 0, null);
+        this.conduit.releasePooledConnection(con);
+      }
+      allCons.clear();
       if (interrupted) {
         Thread.currentThread().interrupt();
       }
-      for (Iterator it=totalSentCons.iterator(); it.hasNext();) {
-        Connection con = (Connection)it.next();
-        con.setInUse(false, 0, 0, 0, null);
-      }
     }
+    } while (retryInfo != null);
     if (failedCe != null) {
       throw failedCe;
     }
@@ -665,7 +666,8 @@ public final class DirectChannel {
         //but this is not worth doing and isShunned is not public.
         // SO the assert has been deadcoded.
         if (ce == null) ce = new ConnectExceptions();
-        ce.addFailure(destination, new MissingStubException(LocalizedStrings.DirectChannel_NO_STUB_0.toLocalizedString()));
+        ce.addFailure(destination, new MissingStubException(
+            LocalizedStrings.DirectChannel_NO_STUB_0.toLocalizedString(destination)));
       }
       else {
         try {

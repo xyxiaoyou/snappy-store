@@ -49,12 +49,9 @@ import com.pivotal.gemfirexd.internal.iapi.services.cache.ClassSize;
 import com.pivotal.gemfirexd.internal.iapi.services.io.ArrayInputStream;
 import com.pivotal.gemfirexd.internal.iapi.services.io.Storable;
 import com.pivotal.gemfirexd.internal.iapi.services.sanity.SanityManager;
-import com.pivotal.gemfirexd.internal.iapi.types.BooleanDataValue;
-import com.pivotal.gemfirexd.internal.iapi.types.DataValueDescriptor;
-import com.pivotal.gemfirexd.internal.iapi.types.TypeId;
-import com.pivotal.gemfirexd.internal.iapi.util.StringUtil;
 import com.pivotal.gemfirexd.internal.shared.common.ResolverUtils;
 import com.pivotal.gemfirexd.internal.shared.common.StoredFormatIds;
+import org.apache.spark.unsafe.Platform;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -607,6 +604,7 @@ public final class SQLBoolean
 			*/
 // GemStone changes BEGIN
 			this.value = getBoolean(theValue);
+			this.isnull = false;
 			/* (original code)
 			String cleanedValue = StringUtil.SQLToUpperCase(theValue.trim());
 			if (cleanedValue.equals("TRUE"))
@@ -1228,6 +1226,7 @@ public final class SQLBoolean
       final int columnWidth) {
     assert columnWidth == 1: columnWidth;
     this.value = (inBytes[offset] == 1);
+    this.isnull = false;
     return 1;
   }
 
@@ -1235,10 +1234,10 @@ public final class SQLBoolean
    * {@inheritDoc}
    */
   @Override
-  public int readBytes(final UnsafeWrapper unsafe, long memOffset,
-      final int columnWidth, ByteSource bs) {
+  public int readBytes(long memOffset, final int columnWidth, ByteSource bs) {
     assert columnWidth == 1: columnWidth;
-    this.value = (unsafe.getByte(memOffset) == 1);
+    this.value = (Platform.getByte(null, memOffset) == 1);
+    this.isnull = false;
     return 1;
   }
 

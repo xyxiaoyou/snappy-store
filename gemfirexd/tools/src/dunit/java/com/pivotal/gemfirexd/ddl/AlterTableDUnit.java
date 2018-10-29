@@ -29,7 +29,6 @@ import com.gemstone.gemfire.cache.EntryExistsException;
 import com.gemstone.gemfire.cache.EntryNotFoundException;
 import com.gemstone.gemfire.cache.persistence.PartitionOfflineException;
 import com.gemstone.gemfire.internal.AvailablePort;
-import com.gemstone.gemfire.internal.FileUtil;
 import com.gemstone.gemfire.internal.cache.ForceReattemptException;
 import com.pivotal.gemfirexd.Attribute;
 import com.pivotal.gemfirexd.DistributedSQLTestBase;
@@ -40,12 +39,13 @@ import com.pivotal.gemfirexd.internal.engine.distributed.metadata.SelectQueryInf
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.iapi.sql.ResultSet;
 import com.pivotal.gemfirexd.jdbc.AlterTableTest;
-import com.pivotal.gemfirexd.jdbc.CreateTableTest;
 import com.pivotal.gemfirexd.jdbc.AlterTableTest.ConstraintNumber;
-
+import com.pivotal.gemfirexd.jdbc.CreateTable2Test;
+import com.pivotal.gemfirexd.jdbc.CreateTableTest;
 import io.snappydata.test.dunit.RMIException;
 import io.snappydata.test.dunit.SerializableRunnable;
 import io.snappydata.test.dunit.VM;
+import org.apache.commons.io.FileUtils;
 
 /**
  * DUnit tests for "ALTER TABLE" with replay and persistence.
@@ -74,8 +74,8 @@ public class AlterTableDUnit extends DistributedSQLTestBase {
     super.tearDown2();
 
     // Delete the disk directories created during the test
-    FileUtil.delete(new File("DSYS"));
-    FileUtil.delete(new File("DSYS2"));
+    FileUtils.deleteQuietly(new File("DSYS"));
+    FileUtils.deleteQuietly(new File("DSYS2"));
   }
 
   /**
@@ -1072,7 +1072,7 @@ public class AlterTableDUnit extends DistributedSQLTestBase {
 
     final int numRows = 2000;
     // insertion in this table should start with maxValue
-    CreateTableTest.runIdentityChecksForCustomersTable(conn, numRows,
+    CreateTable2Test.runIdentityChecksForCustomersTable(conn, numRows,
         new int[] { 2 }, new String[] { "CID" }, 1, -maxValue, 3, this,true);
 
     // Now check for the same with BIGINT size
@@ -1097,7 +1097,7 @@ public class AlterTableDUnit extends DistributedSQLTestBase {
 
     assertNull(stmt.getWarnings());
 
-    CreateTableTest.runIdentityChecksForCustomersTable(conn, numRows,
+    CreateTable2Test.runIdentityChecksForCustomersTable(conn, numRows,
         new int[] { 2 }, new String[] { "CID" }, 1, -(maxValue * stepValue), 3,
         this,true);
 
@@ -1122,7 +1122,7 @@ public class AlterTableDUnit extends DistributedSQLTestBase {
     assertNull(sw);
 
     // insertion in this table should start with maxValue
-    CreateTableTest.runIdentityChecksForCustomersTable(conn, numRows,
+    CreateTable2Test.runIdentityChecksForCustomersTable(conn, numRows,
         new int[] { 2 }, new String[] { "CID" }, 1, -maxValue, 3, this,true);
 
     stopVMNums(1, -1, -2, -3);
@@ -1141,7 +1141,7 @@ public class AlterTableDUnit extends DistributedSQLTestBase {
     pstmt.executeBatch();
 
     // all bets are off now for insertion in this table
-    CreateTableTest.runIdentityChecksForCustomersTable(conn, numRows,
+    CreateTable2Test.runIdentityChecksForCustomersTable(conn, numRows,
         new int[] { 2 }, new String[] { "CID" }, 1, 0, 3, this,true);
 
     // Now check for the same with BIGINT size
@@ -1166,7 +1166,7 @@ public class AlterTableDUnit extends DistributedSQLTestBase {
 
     assertNull(stmt.getWarnings());
 
-    CreateTableTest.runIdentityChecksForCustomersTable(conn, numRows,
+    CreateTable2Test.runIdentityChecksForCustomersTable(conn, numRows,
         new int[] { 2 }, new String[] { "CID" }, 1, 0, 3, this,true);
 
     stopVMNums(1, -1, -2, -3);
@@ -1185,7 +1185,7 @@ public class AlterTableDUnit extends DistributedSQLTestBase {
     pstmt.executeBatch();
 
     // all bets are off now for insertion in this table
-    CreateTableTest.runIdentityChecksForCustomersTable(conn, numRows,
+    CreateTable2Test.runIdentityChecksForCustomersTable(conn, numRows,
         new int[] { 2 }, new String[] { "CID" }, 1, 0, 3, this,true);
 
     stmt.execute("drop table trade.customers");
@@ -1868,7 +1868,7 @@ public class AlterTableDUnit extends DistributedSQLTestBase {
 
     final int numRows = 2000;
     // insertion in this table should start with maxValue
-    CreateTableTest.runIdentityChecksForCustomersTable(conn, numRows,
+    CreateTable2Test.runIdentityChecksForCustomersTable(conn, numRows,
         new int[] { 2 }, new String[] { "CID" }, 1, -maxValue, 3, this,true);    
 
     stmt.execute("drop table trade.customers");

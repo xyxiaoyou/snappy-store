@@ -17,6 +17,7 @@
 
 package com.gemstone.gemfire.internal.cache;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -69,6 +70,10 @@ public final class TXRegionState extends ReentrantLock {
 
   // A map of Objects (entry keys) -> TXEntryState
   private final THashMapWithCreate entryMods;
+
+  // uncommitted/commit list for snapshot isolation
+  private ArrayDeque<RegionEntry> unCommittedEntryReference;
+  private ArrayDeque<Object> committedEntryReference;
 
   TObjectLongHashMapDSFID tailKeysForParallelWAN;
 
@@ -150,13 +155,22 @@ public final class TXRegionState extends ReentrantLock {
     this.expiryReadLock = r.getTxEntryExpirationReadLock();
     this.isValid = true;
 
-    if (r.isInitialized() || !r.getImageState().addPendingTXRegionState(this)) {
+    if (!r.isInitialized() && r.getImageState().lockPendingTXRegionStates(true, false)) {
+      try {
+        if (!r.getImageState().addPendingTXRegionState(this)) {
+          this.pendingTXOps = null;
+          this.pendingTXLockFlags = null;
+        } else {
+          this.pendingTXOps = new ArrayList<Object>();
+          this.pendingTXLockFlags = new TIntArrayList();
+        }
+      } finally {
+        r.getImageState().unlockPendingTXRegionStates(true);
+      }
+
+    } else {
       this.pendingTXOps = null;
       this.pendingTXLockFlags = null;
-    }
-    else {
-      this.pendingTXOps = new ArrayList<Object>();
-      this.pendingTXLockFlags = new TIntArrayList();
     }
   }
 
@@ -233,6 +247,8 @@ public final class TXRegionState extends ReentrantLock {
    * Returns either a {@link TXEntryState} object for a transactional entry
    * locked for write, while returns {@link RegionEntry} object for a
    * transactional entry locked for read.
+   *
+   * It should return old entry or new entry depending on version
    */
   public final Object readEntry(final Object entryKey) {
     return readEntry(entryKey, true);
@@ -260,6 +276,8 @@ public final class TXRegionState extends ReentrantLock {
                 + ",type=" + entryKey.getClass().getSimpleName() + "] for "
                 + toString() + ": " + txEntry);
       }
+
+      // suranjan we can check the version here, no need to check..as any entry in txr will have to be read anyway.
       return txEntry;
     }
     else {
@@ -457,9 +475,7 @@ public final class TXRegionState extends ReentrantLock {
         Operation.UPDATE, null, null, null, true, null);
     eventTemplate.setTXState(tx);
     // apply as PUT DML so duplicate entry inserts etc. will go through fine
-    // [sumedh] this is a strange duplication of functionality to combine
-    // fetchFromHDFS with PUT DML -- should have separate flag
-    //eventTemplate.setFetchFromHDFS(false);
+    eventTemplate.setPutDML(true);
     final LocalRegion region = this.region;
     final LocalRegion baseRegion;
     if (region.isUsedForPartitionedRegionBucket()) {
@@ -831,6 +847,37 @@ public final class TXRegionState extends ReentrantLock {
     return this.tmpEntryCount;
   }
 
+  /**
+   * Track uncommitted entry for snapshot isolation.
+   */
+  void addSnapshotRegionEntry(Object re, RegionEntry newRe) {
+    if (unCommittedEntryReference == null) {
+      unCommittedEntryReference = new ArrayDeque<>(4);
+      committedEntryReference = new ArrayDeque<>(4);
+    }
+    // add at front so will be rolled back in reverse order (LIFO)
+    unCommittedEntryReference.addFirst(newRe);
+    committedEntryReference.addFirst(re);
+  }
+
+  Object[] getAndClearSnapshotRegionEntries() {
+    if (unCommittedEntryReference != null) {
+      RegionEntry[] uncommittedEntries = unCommittedEntryReference.toArray(
+          new RegionEntry[unCommittedEntryReference.size()]);
+      Object[] committedEntries = committedEntryReference.toArray(
+          new Object[committedEntryReference.size()]);
+      cleanupSnapshotRegionEntries();
+      return new Object[] { uncommittedEntries, committedEntries };
+    } else {
+      return null;
+    }
+  }
+
+  void cleanupSnapshotRegionEntries() {
+    unCommittedEntryReference = null;
+    committedEntryReference = null;
+  }
+
   @Override
   public final void lock() {
     super.lock();
@@ -861,4 +908,5 @@ public final class TXRegionState extends ReentrantLock {
         + this.txState.txId.shortToString() + ",TXState@0x"
         + Integer.toHexString(System.identityHashCode(txState));
   }
+
 }

@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
@@ -41,7 +40,6 @@ import com.gemstone.gemfire.cache.Region.Entry;
 import com.gemstone.gemfire.cache.execute.Function;
 import com.gemstone.gemfire.cache.execute.FunctionException;
 import com.gemstone.gemfire.cache.execute.ResultSender;
-import com.gemstone.gemfire.cache.hdfs.HDFSIOException;
 import com.gemstone.gemfire.cache.hdfs.internal.AbstractBucketRegionQueue;
 import com.gemstone.gemfire.cache.query.internal.IndexUpdater;
 import com.gemstone.gemfire.cache.query.internal.QCompiler;
@@ -55,8 +53,6 @@ import com.gemstone.gemfire.i18n.LogWriterI18n;
 import com.gemstone.gemfire.internal.Assert;
 import com.gemstone.gemfire.internal.DebugLogWriter;
 import com.gemstone.gemfire.internal.LogWriterImpl;
-import com.gemstone.gemfire.internal.cache.BucketRegion;
-import com.gemstone.gemfire.internal.cache.ForceReattemptException;
 import com.gemstone.gemfire.internal.cache.BucketRegion.RawValue;
 import com.gemstone.gemfire.internal.cache.LocalRegion.RegionPerfStats;
 import com.gemstone.gemfire.internal.cache.PartitionedRegion.BucketLock;
@@ -81,9 +77,6 @@ import com.gemstone.gemfire.internal.cache.wan.AbstractGatewaySenderEventProcess
 import com.gemstone.gemfire.internal.cache.wan.GatewaySenderEventImpl;
 import com.gemstone.gemfire.internal.cache.wan.parallel.ConcurrentParallelGatewaySenderQueue;
 import com.gemstone.gemfire.internal.cache.wan.parallel.ParallelGatewaySenderImpl;
-import com.gemstone.gemfire.internal.cache.wan.parallel.ParallelGatewaySenderQueue;
-import com.gemstone.gemfire.internal.concurrent.CFactory;
-import com.gemstone.gemfire.internal.concurrent.CM;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.util.concurrent.StoppableReentrantReadWriteLock;
 import com.gemstone.gemfire.internal.util.concurrent.StoppableReentrantReadWriteLock.StoppableReadLock;
@@ -91,6 +84,7 @@ import com.gemstone.gemfire.internal.util.concurrent.StoppableReentrantReadWrite
 import com.gemstone.gnu.trove.THashSet;
 import com.gemstone.gnu.trove.TIntArrayList;
 import com.gemstone.org.jgroups.util.StringId;
+import io.snappydata.collection.OpenHashSet;
 
 /**
  * Implementation of DataStore (DS) for a PartitionedRegion (PR). This will be
@@ -140,7 +134,7 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
    * Keys are instances of {@link Integer}.
    * Values are instances of (@link BucketRegion}.
    */
-  final ConcurrentMap<Integer, BucketRegion> localBucket2RegionMap;
+  final ConcurrentHashMap<Integer, BucketRegion> localBucket2RegionMap;
 
   /**
    * A counter of the number of concurrent bucket creates in progress on
@@ -168,7 +162,7 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
    * The keysOfInterest contains a set of all keys in which any client has
    * interest in this PR.
    */
-  final CM keysOfInterest;
+  final ConcurrentHashMap<Object, AtomicInteger> keysOfInterest;
 
   private final Object keysOfInterestLock = new Object();
 
@@ -222,7 +216,7 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
 
 //    this.bucketStats = new CachePerfStats(pr.getSystem(), "partition-" + pr.getName());
     this.bucketStats = new RegionPerfStats(pr.getCache(), pr.getCachePerfStats(), CachePerfStats.REGIONPERFSTATS_TEXTID_PR_SPECIFIER + pr.getName());
-    this.keysOfInterest = CFactory.createCM();
+    this.keysOfInterest = new ConcurrentHashMap<>();
   }
 
   /**
@@ -296,17 +290,13 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
    * The result of this method is not stable.
    */
   public int getNumberOfPrimaryBucketsManaged() {
-    final AtomicInteger numPrimaries = new AtomicInteger();
-    visitBuckets(new BucketVisitor() {
-      @Override
-      public void visit(Integer bucketId, Region r) {
-        BucketRegion br = (BucketRegion) r;
-        if (br.getBucketAdvisor().isPrimary()) {
-          numPrimaries.incrementAndGet();
-        }
+    int numPrimaries = 0;
+    for (BucketRegion br : localBucket2RegionMap.values()) {
+      if (br.getBucketAdvisor().isPrimary()) {
+        numPrimaries++;
       }
-    });
-    return numPrimaries.get();
+    }
+    return numPrimaries;
   }
 
 
@@ -1747,9 +1737,11 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
         if (!forceRemovePrimary && bucketAdvisor.isPrimary()) {
           return false;
         }
-
         // recurse down to each tier of children to remove first
-        removeBucketForColocatedChildren(bucketId, forceRemovePrimary);
+        boolean childBucketRemoved = removeBucketForColocatedChildren(bucketId, forceRemovePrimary);
+        if (!childBucketRemoved) {
+          return false;
+        }
 
         if (bucketRegion.getPartitionedRegion().isShadowPR()) {
           if (bucketRegion.getPartitionedRegion().getColocatedWithRegion() != null) {
@@ -2984,8 +2976,8 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
    * store.
    *
    */
-  public final List getLocalBucketsListTestOnly() {
-    final List bucketList = new ArrayList();
+  public final List<Integer> getLocalBucketsListTestOnly() {
+    final List<Integer> bucketList = new ArrayList<Integer>();
     visitBuckets(new BucketVisitor() {
       @Override
       public void visit(Integer bucketId, Region r) {
@@ -3000,8 +2992,8 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
    * data store.
    *
    */
-  public final List getLocalPrimaryBucketsListTestOnly() {
-    final List primaryBucketList = new ArrayList();
+  public final List<Integer> getLocalPrimaryBucketsListTestOnly() {
+    final List<Integer> primaryBucketList = new ArrayList<Integer>();
     visitBuckets(new BucketVisitor() {
       @Override
       public void visit(Integer bucketId, Region r) {
@@ -3101,14 +3093,12 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
    * Returns a set of local buckets.
    * @return a snapshot of the current set of BucketRegions
    */
-  @SuppressWarnings("unchecked")
   public Set<BucketRegion> getAllLocalBucketRegions() {
-    return new THashSet(localBucket2RegionMap.values());
+    return new OpenHashSet<>(localBucket2RegionMap.values());
   }
 
-  @SuppressWarnings("unchecked")
   public Set<BucketRegion> getAllLocalPrimaryBucketRegions() {
-    THashSet retVal = new THashSet();
+    OpenHashSet<BucketRegion> retVal = new OpenHashSet<>();
     for (BucketRegion br : localBucket2RegionMap.values()) {
       if (br.getBucketAdvisor().isPrimary()) {
         retVal.add(br);
@@ -3117,9 +3107,8 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
     return retVal;
   }
 
-  @SuppressWarnings("unchecked")
   public Set<Integer> getAllLocalPrimaryBucketIds() {
-    THashSet bucketIds = new THashSet();
+    OpenHashSet<Integer> bucketIds = new OpenHashSet<>();
     for (BucketRegion bucket : localBucket2RegionMap.values()) {
       if (bucket.getBucketAdvisor().isPrimary()) {
         bucketIds.add(Integer.valueOf(bucket.getId()));
@@ -3477,7 +3466,7 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
       for (Iterator i = event.getKeysOfInterest().iterator(); i.hasNext();) {
         Object key = i.next();
         // Get the reference counter for this key
-        AtomicInteger references = (AtomicInteger)this.keysOfInterest.get(key);
+        AtomicInteger references = this.keysOfInterest.get(key);
         int newNumberOfReferences = 0;
         // If this is a registration event, add interest for this key
         if (isRegister) {

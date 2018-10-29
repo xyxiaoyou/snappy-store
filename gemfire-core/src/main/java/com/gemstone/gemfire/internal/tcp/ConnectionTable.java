@@ -16,33 +16,39 @@
  */
 package com.gemstone.gemfire.internal.tcp;
 
-import com.gemstone.gemfire.i18n.LogWriterI18n;
-import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
-import java.io.*;
-import java.lang.ref.*;
-import java.net.*;
-import java.util.*;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
+import java.io.IOException;
+import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
+import java.net.InetAddress;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.gemstone.gemfire.SystemFailure;
-import com.gemstone.gemfire.internal.Assert;
-import com.gemstone.gemfire.internal.LogWriterImpl;
-import com.gemstone.gemfire.internal.SocketCreator;
-import com.gemstone.gemfire.internal.SystemTimer;
-import com.gemstone.gemfire.internal.concurrent.*;
 import com.gemstone.gemfire.distributed.DistributedSystemDisconnectedException;
 import com.gemstone.gemfire.distributed.internal.DM;
 import com.gemstone.gemfire.distributed.internal.DistributionManager;
 import com.gemstone.gemfire.distributed.internal.InternalDistributedSystem;
-import com.gemstone.gemfire.distributed.internal.membership.*;
-import com.gemstone.gemfire.distributed.internal.membership.jgroup.JGroupMembershipManager;
+import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
+import com.gemstone.gemfire.distributed.internal.membership.MembershipManager;
+import com.gemstone.gemfire.i18n.LogWriterI18n;
+import com.gemstone.gemfire.internal.Assert;
+import com.gemstone.gemfire.internal.LogWriterImpl;
+import com.gemstone.gemfire.internal.SocketCreator;
+import com.gemstone.gemfire.internal.SystemTimer;
+import com.gemstone.gemfire.internal.cache.TXManagerImpl;
+import com.gemstone.gemfire.internal.concurrent.QueryKeyedObjectPool;
+import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
+import org.apache.commons.pool2.KeyedPooledObjectFactory;
+import org.apache.commons.pool2.PooledObject;
+import org.apache.commons.pool2.impl.DefaultPooledObject;
 
 /** <p>ConnectionTable holds all of the Connection objects in a conduit.
     Connections represent a pipe between two endpoints represented
@@ -75,8 +81,9 @@ public final class ConnectionTable  {
    * Only connections used for sending messages,
    * and receiving acks, will be put in this map.
    */
-  protected final Map orderedConnectionMap = CFactory.createCM();
-  
+  private final ConcurrentHashMap<Stub, Object> orderedConnectionMap =
+      new ConcurrentHashMap<>();
+
   /**
    * ordered connections local to this thread.  Note that accesses to
    * the resulting map must be synchronized because of static cleanup.
@@ -104,14 +111,53 @@ public final class ConnectionTable  {
    * The value is an ArrayList since we can have any number of connections
    * with the same key.
    */
-  private CM threadConnectionMap;
-  
+  private ConcurrentHashMap<Stub, ArrayList> threadConnectionMap;
+
+  private static final class ConnKey {
+    final Stub stub;
+    final long startTime;
+    final long ackTimeout;
+    final long ackSATimeout;
+
+    ConnKey(Stub stub) {
+      this(stub, 0, 0, 0);
+    }
+
+    ConnKey(Stub stub, long startTime, long ackTimeout,
+        long ackSATimeout) {
+      this.stub = stub;
+      this.startTime = startTime;
+      this.ackTimeout = ackTimeout;
+      this.ackSATimeout = ackSATimeout;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      return obj instanceof ConnKey && this.stub.equals(((ConnKey)obj).stub);
+    }
+
+    @Override
+    public int hashCode() {
+      return this.stub.hashCode();
+    }
+
+    @Override
+    public String toString() {
+      return this.stub.toString();
+    }
+  }
+
+  /** The connection pool used for sending messages keyed by members. */
+  private final QueryKeyedObjectPool<ConnKey, Connection> connectionPool;
+
   /**
    * Used for all non-ordered messages.
    * Only connections used for sending messages,
    * and receiving acks, will be put in this map.
    */
-  protected final Map unorderedConnectionMap = CFactory.createCM();
+  private final ConcurrentHashMap<Stub, Object> unorderedConnectionMap =
+      new ConcurrentHashMap<>();
+
   /**
    * Used for all accepted connections. These connections are read only;
    * we never send messages, except for acks; only receive.
@@ -139,7 +185,8 @@ public final class ConnectionTable  {
    * 
    * TODO this assumes no more than one instance is created at a time?
    */
-  private static final AR lastInstance = CFactory.createAR();
+  private static final AtomicReference<ConnectionTable> lastInstance =
+      new AtomicReference<>();
   
   /**
    * A set of sockets that are in the process of being connected
@@ -310,19 +357,74 @@ public final class ConnectionTable  {
         : null;
     this.threadOrderedConnMap = new ThreadLocal();
     this.threadConnMaps = new ArrayList();
-    this.threadConnectionMap = CFactory.createCM();
-    
-    
-      
+
     this.connRWThreadPool = createThreadPoolForIO(c.getDM().getSystem().isShareSockets()); 
-          
-    
-    
     
   /*  NOMUX: if (TCPConduit.useNIO) {
       inputMuxManager = new InputMuxManager(this);
       inputMuxManager.start(c.getLogger());
     }*/
+
+    if (!c.useNIOStream()) {
+      this.threadConnectionMap = new ConcurrentHashMap<>();
+      this.connectionPool = null;
+      return;
+    }
+    this.threadConnectionMap = null; // no thread-local maps with NIOStream
+    // The factory for creating new Connections for connectionPool.
+    KeyedPooledObjectFactory<ConnKey, Connection> connectionFactory;
+    connectionFactory = new KeyedPooledObjectFactory<ConnKey, Connection>() {
+      @Override
+      public PooledObject<Connection> makeObject(ConnKey key) throws Exception {
+        final TCPConduit owner = ConnectionTable.this.owner;
+        Connection newConn = Connection.createSender(owner.getMembershipManager(),
+            ConnectionTable.this, true /* preserveOrder */, key.stub,
+            owner.getMemberForStub(key.stub, false), false /* shared */,
+            true /* pooled */, key.startTime, key.ackTimeout, key.ackSATimeout);
+        final LogWriterI18n logger = owner.getLogger();
+        if (logger.fineEnabled()) {
+          logger.fine("ConnectionTable: created a pooled ordered connection: " +
+              newConn);
+        }
+        owner.stats.incSenders(false/* shared */, true /* preserveOrder */);
+        return new DefaultPooledObject<>(newConn);
+      }
+
+      @Override
+      public void destroyObject(ConnKey key,
+          PooledObject<Connection> p) throws Exception {
+        closeCon(LocalizedStrings.ConnectionTable_CONNECTION_TABLE_BEING_DESTROYED
+            .toLocalizedString(), p.getObject());
+      }
+
+      @Override
+      public boolean validateObject(ConnKey key, PooledObject<Connection> p) {
+        return !p.getObject().isClosing();
+      }
+
+      @Override
+      public void activateObject(ConnKey key,
+          PooledObject<Connection> p) throws Exception {
+      }
+
+      @Override
+      public void passivateObject(ConnKey key,
+          PooledObject<Connection> p) throws Exception {
+      }
+    };
+    this.connectionPool = new QueryKeyedObjectPool<>(connectionFactory,
+        c.getCancelCriterion());
+    final int numConnections = Math.max(DistributionManager.MAX_PR_THREADS_SET,
+        // SNAP-1682
+        Math.max(32, Math.min(64, DistributionManager.MAX_PR_THREADS)));
+    this.connectionPool.setMaxTotalPerKey(numConnections);
+    this.connectionPool.setMaxIdlePerKey(numConnections);
+    this.connectionPool.setTestOnBorrow(true);
+    this.connectionPool.setTestOnReturn(true);
+    final int connectionTimeout = owner.idleConnectionTimeout;
+    this.connectionPool.setTimeBetweenEvictionRunsMillis(connectionTimeout);
+    // default idle-timeout for a connection is 5 minutes
+    this.connectionPool.setMinEvictableIdleTimeMillis(connectionTimeout * 5);
   }
   
   private Executor createThreadPoolForIO(boolean conserveSockets) {
@@ -463,7 +565,7 @@ public final class ConnectionTable  {
     try {
       con = Connection.createSender(owner.getMembershipManager(), this, preserveOrder,
                                     id, this.owner.getMemberForStub(id, false),
-                                    sharedResource,
+                                    sharedResource, false /* pooled */,
                                     startTime, ackThreshold, ackSAThreshold);
       this.owner.stats.incSenders(sharedResource, preserveOrder);
     }
@@ -559,8 +661,8 @@ public final class ConnectionTable  {
     {
     Connection result = null;
     
-    final Map m = preserveOrder ? this.orderedConnectionMap 
-        : this.unorderedConnectionMap;
+    final ConcurrentHashMap<Stub, Object> m = preserveOrder
+        ? this.orderedConnectionMap : this.unorderedConnectionMap;
 
     PendingConnection pc = null; // new connection, if needed
     Object mEntry = null; // existing connection (if we don't create a new one)
@@ -613,6 +715,14 @@ public final class ConnectionTable  {
     return result;
     }
 
+  private void checkClosing() {
+    owner.getCancelCriterion().checkCancelInProgress(null);
+    if (this.closed) {
+      throw new DistributedSystemDisconnectedException(LocalizedStrings
+          .ConnectionTable_CONNECTION_TABLE_IS_CLOSED.toLocalizedString());
+    }
+  }
+
   /**
    * Must be looking for an ordered connection that this thread owns
    * 
@@ -626,6 +736,19 @@ public final class ConnectionTable  {
    */
   Connection getOrderedAndOwned(Stub id, long startTime, long ackTimeout, long ackSATimeout) 
       throws IOException, DistributedSystemDisconnectedException  {
+    if (this.connectionPool != null) {
+      try {
+        return this.connectionPool.borrowObject(
+            new ConnKey(id, startTime, ackTimeout, ackSATimeout));
+      } catch (IOException | RuntimeException e) {
+        checkClosing();
+        throw e;
+      } catch (Exception e) {
+        checkClosing();
+        throw new IllegalStateException(e);
+      }
+    }
+
     Connection result = null;
     
     // Look for result in the thread local
@@ -664,7 +787,7 @@ public final class ConnectionTable  {
     result = Connection.createSender(owner.getMembershipManager(), 
         this, true /* preserveOrder */, id,
         this.owner.getMemberForStub(id, false), false /* shared */,
-        startTime, ackTimeout, ackSATimeout);
+        false /* pooled */, startTime, ackTimeout, ackSATimeout);
     if (getLogger().fineEnabled()) {
       getLogger().fine("ConnectionTable: created an ordered connection:"+result);
     }
@@ -705,7 +828,19 @@ public final class ConnectionTable  {
     scheduleIdleTimeout(result);
     return result;
   }
-  
+
+  public final void releasePooledConnection(Connection conn) {
+    if (conn.isPooled() && this.connectionPool != null) {
+      try {
+        this.connectionPool.returnObject(new ConnKey(conn.remoteId), conn);
+      } catch (RuntimeException re) {
+        // log any exception in returning to pool and move on
+        getLogger().warning(LocalizedStrings.DEBUG,
+            "Unexpected exception in returning connection to pool " + re);
+      }
+    }
+  }
+
   /** schedule an idle-connection timeout task */
   private void scheduleIdleTimeout(Connection conn) {
     if (conn == null) {
@@ -896,6 +1031,9 @@ public final class ConnectionTable  {
         m.clear();
       }        
     }
+    if (this.connectionPool != null) {
+      this.connectionPool.close();
+    }
   }
 
   public void executeCommand(Runnable runnable) {
@@ -970,11 +1108,16 @@ public final class ConnectionTable  {
       }
     }
     if (!needsRemoval) {
-      CM cm = this.threadConnectionMap;
+      final ConcurrentHashMap<Stub, ArrayList> cm = this.threadConnectionMap;
       if (cm != null) {
-        ArrayList al = (ArrayList)cm.get(stub);
+        ArrayList al = cm.get(stub);
         needsRemoval = al != null && al.size() > 0;
       }
+    }
+    ConnKey connKey = null;
+    if (this.connectionPool != null) {
+      connKey = new ConnKey(stub);
+      needsRemoval = this.connectionPool.getNumTotal(connKey) > 0;
     }
 
     if (needsRemoval) {
@@ -986,9 +1129,9 @@ public final class ConnectionTable  {
       }
 
       {
-        CM cm = this.threadConnectionMap;
+        final ConcurrentHashMap<Stub, ArrayList> cm = this.threadConnectionMap;
         if (cm != null) {
-          ArrayList al = (ArrayList)cm.remove(stub);
+          ArrayList al = cm.remove(stub);
           if (al != null) {
             synchronized (al) {
               for (Iterator it=al.iterator(); it.hasNext();)
@@ -997,6 +1140,14 @@ public final class ConnectionTable  {
             }
           }
         }
+      }
+      // close all connections for the given stub
+      if (this.connectionPool != null) {
+        this.connectionPool.clear(connKey);
+        this.connectionPool.foreachObject(connKey, c -> {
+          closeCon(reason, c);
+          return true;
+        });
       }
 
       // close any sockets that are in the process of being connected
@@ -1061,9 +1212,10 @@ public final class ConnectionTable  {
     return false;
   }
   
-  private static void removeFromThreadConMap(CM cm, Stub stub, Connection c) {
+  private static void removeFromThreadConMap(
+      ConcurrentHashMap<Stub, ArrayList> cm, Stub stub, Connection c) {
     if (cm != null) {
-      ArrayList al = (ArrayList)cm.get(stub);
+      ArrayList al = cm.get(stub);
       if (al != null) {
         synchronized (al) {
           al.remove(c);
@@ -1075,6 +1227,8 @@ public final class ConnectionTable  {
     /*if (this.closed) {
       return;
     }*/
+    // no thread-locals when using NIOStream connection pooling
+    if (this.connectionPool != null) return;
     removeFromThreadConMap(this.threadConnectionMap, stub, c);
     Map m = (Map)this.threadOrderedConnMap.get();
     if (m != null) {
@@ -1121,7 +1275,7 @@ public final class ConnectionTable  {
    * @see SystemFailure#emergencyClose()
    */
   public static void emergencyClose() {
-    ConnectionTable ct = (ConnectionTable) lastInstance.get();
+    ConnectionTable ct = lastInstance.get();
     if (ct == null) {
       return;
     }
@@ -1132,6 +1286,8 @@ public final class ConnectionTable  {
   }
   
   public void removeAndCloseThreadOwnedSockets() {
+    // no thread-locals when using NIOStream connection pooling
+    if (this.connectionPool != null) return;
     Map m = (Map) this.threadOrderedConnMap.get();
     if (m != null) {
       // Static cleanup may intervene; we MUST synchronize.
@@ -1150,7 +1306,12 @@ public final class ConnectionTable  {
   }
 
   public static void releaseThreadsSockets() {
-    ConnectionTable ct = (ConnectionTable) lastInstance.get();
+    // clear TXContext from global list
+    TXManagerImpl.TXContext context = TXManagerImpl.currentTXContext();
+    if (context != null) {
+      context.threadClose();
+    }
+    ConnectionTable ct = lastInstance.get();
     if (ct == null) {
       return;
     }
@@ -1167,9 +1328,19 @@ public final class ConnectionTable  {
   protected void getThreadOwnedOrderedConnectionState(Stub member,
       HashMap result) {
 
-    CM cm = this.threadConnectionMap;
+    if (this.connectionPool != null) {
+      this.connectionPool.foreachObject(new ConnKey(member), conn -> {
+        if (!conn.isSharedResource() && conn.getOriginatedHere()
+            && conn.getPreserveOrder()) {
+          result.put(conn.getUniqueId(), conn.getMessagesSent());
+        }
+        return true;
+      });
+      return;
+    }
+    final ConcurrentHashMap<Stub, ArrayList> cm = this.threadConnectionMap;
     if (cm != null) {
-      ArrayList al = (ArrayList)cm.get(member);
+      ArrayList al = cm.get(member);
       if (al != null) {
         synchronized(al) {
           al = new ArrayList(al);
@@ -1375,8 +1546,7 @@ public final class ConnectionTable  {
       boolean suspected = false;
       InternalDistributedMember targetMember = null;
       if (ackSATimeout > 0) {
-        targetMember =
-          ((JGroupMembershipManager)mgr).getMemberForStub(this.id, false);
+        targetMember = mgr.getMemberForStub(this.id, false);
       }
 
       for (;;) {
@@ -1414,7 +1584,7 @@ public final class ConnectionTable  {
             getLogger().warning(LocalizedStrings.
                 ConnectionTable_UNABLE_TO_FORM_A_TCPIP_CONNECTION_TO_0_IN_OVER_1_SECONDS,
                 new Object[] { this.id, (ackTimeout)/1000 });
-            ((JGroupMembershipManager)mgr).suspectMember(targetMember,
+            mgr.suspectMember(targetMember,
                 "Unable to form a TCP/IP connection in a reasonable amount of time");
             suspected = true;
           }

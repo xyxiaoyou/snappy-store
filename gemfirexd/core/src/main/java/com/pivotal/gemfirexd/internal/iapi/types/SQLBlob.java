@@ -41,7 +41,6 @@
 package com.pivotal.gemfirexd.internal.iapi.types;
 
 import com.gemstone.gemfire.internal.offheap.ByteSource;
-import com.gemstone.gemfire.pdx.internal.unsafe.UnsafeWrapper;
 import com.pivotal.gemfirexd.internal.engine.store.offheap.OffHeapByteSource;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.internal.iapi.reference.Limits;
@@ -50,6 +49,7 @@ import com.pivotal.gemfirexd.internal.iapi.reference.SQLState;
 import com.pivotal.gemfirexd.internal.iapi.services.i18n.MessageService;
 import com.pivotal.gemfirexd.internal.shared.common.ResolverUtils;
 import com.pivotal.gemfirexd.internal.shared.common.StoredFormatIds;
+import io.snappydata.thrift.common.BufferedBlob;
 
 import java.sql.Blob;
 import java.sql.ResultSet;
@@ -90,7 +90,7 @@ public class SQLBlob extends SQLBinary
 			super(val);
         }
 	
-	public SQLBlob(Blob val)
+	public SQLBlob(Blob val) throws StandardException
         {
 			super(val);
         }
@@ -269,6 +269,10 @@ public class SQLBlob extends SQLBinary
 			ps.setBlob(position, (Blob)null);    
 			return;
 		}
+		if (_blobValue instanceof BufferedBlob) {
+			ps.setBlob(position, _blobValue);
+			return;
+		}
 
 		// This may cause problems for streaming blobs, by materializing the whole blob.
 		ps.setBytes(position, getBytes());
@@ -283,6 +287,10 @@ public class SQLBlob extends SQLBinary
 // GemStone changes BEGIN
       if (theValue instanceof byte[]) {
         setValue((byte[])theValue);
+        return;
+      }
+      if (theValue instanceof BufferedBlob) {
+        setValue((BufferedBlob)theValue);
         return;
       }
 // GemStone changes END
@@ -330,7 +338,7 @@ public class SQLBlob extends SQLBinary
    * {@inheritDoc}
    */
   @Override
-  public int readBytes(final UnsafeWrapper unsafe, long memOffset,
+  public int readBytes(long memOffset,
       final int columnWidth, final ByteSource bs) {
     final OffHeapByteSource obs = (OffHeapByteSource)bs;
     assert columnWidth == obs.getLength(): "columnWidth=" + columnWidth

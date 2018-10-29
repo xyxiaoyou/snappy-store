@@ -236,7 +236,7 @@ public class FabricServerHelper {
     }
     String locId = locators.get(0).getId();
 
-    String cmd = getGFXDCommand() + "shut-down-all -locators=" + locId;
+    String cmd = getGFXDCommand() + "rowstore shut-down-all -locators=" + locId;
     String output = ProcessMgr.fgexec(cmd, shutDownAllCmdWaitSec);
     log.info("Issued shut-down-all command:\n" + output);
   }
@@ -256,7 +256,7 @@ public class FabricServerHelper {
       throw new HydraRuntimeException("No locators found");
     }
     String locId = locators.get(0).getId();
-    String cmd = getGFXDCommand() + "shut-down-all -locators=" + locId;
+    String cmd = getGFXDCommand() + "rowstore shut-down-all -locators=" + locId;
     String output = ProcessMgr.fgexec(cmd, shutDownAllCmdWaitSec);
     log.info("Issued shut-down-all command:\n" + output);
   }
@@ -317,10 +317,10 @@ public class FabricServerHelper {
     String gfxdScript = null;
     switch (hd.getOSType()) {
       case unix:
-        gfxdScript = "snappy-shell";
+        gfxdScript = "snappy-sql";
         break;
       case windows:
-        gfxdScript = "snappy-shell.bat";
+        gfxdScript = "snappy-sql.bat";
         break;
     }
     String gfxd = productBin + sep + gfxdScript;

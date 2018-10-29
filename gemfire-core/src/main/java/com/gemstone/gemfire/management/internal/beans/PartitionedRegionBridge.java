@@ -16,10 +16,14 @@
  */
 package com.gemstone.gemfire.management.internal.beans;
 
+import java.util.Iterator;
 import java.util.Set;
 
 import com.gemstone.gemfire.cache.PartitionAttributes;
 import com.gemstone.gemfire.cache.Region;
+import com.gemstone.gemfire.internal.cache.RegionEntry;
+import com.gemstone.gemfire.internal.cache.execute.InternalRegionFunctionContext;
+import com.gemstone.gemfire.internal.cache.lru.Sizeable;
 import com.gemstone.gemfire.internal.cache.BucketRegion;
 import com.gemstone.gemfire.internal.cache.PartitionedRegion;
 import com.gemstone.gemfire.internal.cache.PartitionedRegionStats;
@@ -305,8 +309,7 @@ public class PartitionedRegionBridge<K, V>  extends RegionMBeanBridge<K, V> {
       Set<BucketRegion> localPrimaryBucketRegions = parRegion.getDataStore().getAllLocalPrimaryBucketRegions();
       if (localPrimaryBucketRegions != null && localPrimaryBucketRegions.size() > 0) {
         for (BucketRegion br : localPrimaryBucketRegions) {
-          numLocalEntries += br.getRegionMap().sizeInVM() - br.getTombstoneCount();
-
+          numLocalEntries += br.getRegionSize();
         }
       }
       return numLocalEntries;
@@ -329,7 +332,30 @@ public class PartitionedRegionBridge<K, V>  extends RegionMBeanBridge<K, V> {
   }
 
   @Override
-  public long getRowsInCachedBatches() {
-    return this.prStats.getPRNumRowsInCachedBatches();
+  public long getRowsInColumnBatches() {
+    return this.prStats.getPRNumRowsInColumnBatches();
+  }
+
+  private int minimumReservoirEntrySize = Sizeable.PER_OBJECT_OVERHEAD * 6;
+  
+  @Override
+  public long getRowsInReservoir() {
+    // TODO: this needs to be made efficient and PRStats must be updated during
+    // creation rather than iterate in every call
+    if (parRegion.isDataStore()) {
+      int numLocalEntries = 0;
+      Iterator itr = parRegion.localEntriesIterator((InternalRegionFunctionContext)null, true, false, true, null);
+      while (itr.hasNext()) {
+        RegionEntry re = (RegionEntry)itr.next();
+        Sizeable value = (Sizeable)re._getValue();
+        long valSize = value.getSizeInBytes();
+        if (valSize > minimumReservoirEntrySize) {
+          numLocalEntries += (valSize - minimumReservoirEntrySize) / Sizeable.PER_OBJECT_OVERHEAD;
+        }
+      }
+      return numLocalEntries;
+    } else {
+      return  ManagementConstants.ZERO;
+    }
   }
 }

@@ -28,16 +28,9 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.regex.Pattern;
 
-import com.gemstone.gemfire.internal.cache.PartitionedRegion;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-
-import junit.framework.TestSuite;
-import junit.textui.TestRunner;
-
 import com.gemstone.gemfire.distributed.internal.DistributionConfig;
 import com.gemstone.gemfire.internal.AvailablePort;
+import com.gemstone.gemfire.internal.cache.PartitionedRegion;
 import com.pivotal.gemfirexd.Attribute;
 import com.pivotal.gemfirexd.TestUtil;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
@@ -52,13 +45,17 @@ import com.pivotal.gemfirexd.internal.iapi.sql.conn.StatementContext;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedConnection;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedPreparedStatement;
 import com.pivotal.gemfirexd.internal.impl.jdbc.authentication.AuthenticationServiceBase;
-import com.pivotal.gemfirexd.internal.jdbc.ClientBaseDataSource;
-import com.pivotal.gemfirexd.internal.jdbc.ClientXADataSource;
 import com.pivotal.gemfirexd.jdbc.JdbcTestBase;
 import com.pivotal.gemfirexd.tools.GfxdDistributionLocator;
 import com.pivotal.gemfirexd.tools.internal.GfxdServerLauncher;
 import com.pivotal.gemfirexd.tools.planexporter.CreateXML;
 import com.pivotal.gemfirexd.tools.utils.ExecutionPlanUtils;
+import io.snappydata.jdbc.ClientXADataSource;
+import junit.framework.TestSuite;
+import junit.textui.TestRunner;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 /**
  * @author Soubhikc
@@ -91,7 +88,6 @@ public class SelectsToGetTest extends JdbcTestBase {
     System.getProperty("optimize-ncj", "true");
     Properties p = new Properties();
     p.setProperty("mcast-port", available_port);
-    p.setProperty("SKIP_SPS_PRECOMPILE", "true");
     setupConnection(p);
     
     Connection conn = getConnection();
@@ -276,7 +272,7 @@ public class SelectsToGetTest extends JdbcTestBase {
 
       // int netport = startNetserverAndReturnPort();
 
-      ClientXADataSource xaDataSource = new com.pivotal.gemfirexd.internal.jdbc.ClientXADataSource();
+      ClientXADataSource xaDataSource = new ClientXADataSource();
       // (ClientXADataSource)TestUtil.getXADataSource(TestUtil.NetClientXADsClassName);
       xaDataSource.setServerName("localhost");
       xaDataSource.setPortNumber(33210);
@@ -284,7 +280,7 @@ public class SelectsToGetTest extends JdbcTestBase {
       xaDataSource.setDatabaseName("GemFireXD");
       xaDataSource.setConnectionAttributes("logConnections=true;traceDirectory=/soubhik/builds/gfxd.1/logs/;");
       // get the stuff required to execute the global transaction
-      xaDataSource.setSecurityMechanism(ClientBaseDataSource.CLEAR_TEXT_PASSWORD_SECURITY);
+      xaDataSource.setSecurityMechanism(ClientXADataSource.CLEAR_TEXT_PASSWORD_SECURITY);
       //XAConnection xaConn = xaDataSource.getXAConnection("app", "app");
       //Connection xconn = xaConn.getConnection();
 
@@ -1569,10 +1565,8 @@ public class SelectsToGetTest extends JdbcTestBase {
         .getBoolean("gemfire.CacheServerLauncher.dontExitAfterLaunch");
     
     assert LAUNCH_PEER_SERVER == before;
-    
 
-    final String hostname = java.net.InetAddress.getLocalHost().getCanonicalHostName() + ".pune.gemstone.com";
-    
+    final String hostname = "localhost";
     if (LAUNCH_PEER_SERVER) {
       boolean locatorConfigured = false;
       int debugPort = 1044;

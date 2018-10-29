@@ -68,8 +68,8 @@ import com.gemstone.gnu.trove.THashMap;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserver;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserverHolder;
-import com.pivotal.gemfirexd.internal.engine.access.GemFireTransaction;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
+import com.pivotal.gemfirexd.internal.engine.sql.execute.SnappyActivation;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.internal.iapi.jdbc.BrokeredConnectionControl;
 import com.pivotal.gemfirexd.internal.iapi.jdbc.EngineParameterMetaData;
@@ -88,9 +88,12 @@ import com.pivotal.gemfirexd.internal.iapi.types.DataValueDescriptor;
 import com.pivotal.gemfirexd.internal.iapi.types.RawToBinaryFormatStream;
 import com.pivotal.gemfirexd.internal.iapi.types.ReaderToUTF8Stream;
 import com.pivotal.gemfirexd.internal.iapi.types.VariableSizeDataValue;
+import com.pivotal.gemfirexd.internal.impl.sql.GenericActivationHolder;
 import com.pivotal.gemfirexd.internal.impl.sql.GenericPreparedStatement;
 import com.pivotal.gemfirexd.internal.impl.sql.GenericStatement;
 import com.pivotal.gemfirexd.internal.shared.common.SingleHopInformation;
+import io.snappydata.thrift.common.BufferedBlob;
+
 /**
  *
  * EmbedPreparedStatement is a local JDBC statement.
@@ -155,6 +158,10 @@ public abstract class EmbedPreparedStatement
                         if (lcc.getQueryHDFS()) {
                           execFlags = (short) GemFireXDUtils.set(execFlags,
                               GenericStatement.QUERY_HDFS, true);
+                        }
+
+                        if (routeQueryEnabled(null)) {
+                          execFlags = GemFireXDUtils.set(execFlags, GenericStatement.ROUTE_QUERY, true);
                         }
 			try {
 			    preparedStatement = lcc.prepareInternalStatement
@@ -362,6 +369,7 @@ public abstract class EmbedPreparedStatement
 	  return results;
 	}
 
+        @Override
         public int getStatementType() {
           return ((GenericPreparedStatement)this.preparedStatement).getStatementType();
         }
@@ -1325,11 +1333,27 @@ public abstract class EmbedPreparedStatement
 					// Gemstone changes END
 					gcDuringGetMetaData = execp.getActivationClass().getName();
 				}
+				Activation a = null;
+				if (this.getActivation() != null) {
+					if (this.getActivation() instanceof GenericActivationHolder) {
+						a = ((GenericActivationHolder)this.getActivation()).getActivation();
+					} else if (this.getActivation() instanceof Activation) {
+						a = this.getActivation();
+					}
+				}
+
 				if (rMetaData == null)
 				{
+					Activation act = null;
+					if (this.getActivation() != null) {
+						if (this.getActivation() instanceof GenericActivationHolder) {
+							act = ((GenericActivationHolder)this.getActivation()).getActivation();
+						} else if (this.getActivation() instanceof Activation) {
+							act = this.getActivation();
+						}
+					}
 					ResultDescription resd = preparedStatement.getResultDescription();
-					if (resd != null)
-					{
+					if (resd != null) {
 						// Internally, the result description has information
 						// which is used for insert, update and delete statements
 						// Externally, we decided that statements which don't
@@ -1342,7 +1366,7 @@ public abstract class EmbedPreparedStatement
 								statementType.equals("DELETE"))
 							rMetaData = null;
 						else
-				    		rMetaData = newEmbedResultSetMetaData(resd);
+							rMetaData = newEmbedResultSetMetaData(resd);
 					}
 				}
 			} catch (Throwable t) {
@@ -1662,6 +1686,17 @@ public abstract class EmbedPreparedStatement
 			setNull(i, Types.BLOB);
 		else
         {
+// GemStone changes BEGIN
+            if (x instanceof BufferedBlob) {
+              try {
+                getParms().getParameterForSet(i - 1).setValue(x);
+                return;
+              } catch (StandardException t) {
+                throw EmbedResultSet.noStateChangeException(t,
+                    "parameter index " + i);
+              }
+            }
+// GemStone changes END
             // Note, x.length() needs to be called before retrieving the
             // stream using x.getBinaryStream() because EmbedBlob.length()
             // will read from the stream and drain some part of the stream 

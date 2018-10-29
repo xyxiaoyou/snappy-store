@@ -21,22 +21,14 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
-import java.net.UnknownHostException;
-import java.util.AbstractSet;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.gemstone.gemfire.CancelException;
@@ -53,27 +45,18 @@ import com.gemstone.gemfire.distributed.internal.DM;
 import com.gemstone.gemfire.distributed.internal.DistributionConfig;
 import com.gemstone.gemfire.distributed.internal.MembershipListener;
 import com.gemstone.gemfire.distributed.internal.ReplyProcessor21;
-import com.gemstone.gemfire.distributed.internal.ServerLocation;
 import com.gemstone.gemfire.distributed.internal.locks.DLockService;
 import com.gemstone.gemfire.distributed.internal.locks.DistributedMemberLock;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
-import com.gemstone.gemfire.distributed.internal.membership.MemberAttributes;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
 import com.gemstone.gemfire.internal.Assert;
-import com.gemstone.gemfire.internal.CopyOnWriteHashSet;
-import com.gemstone.gemfire.internal.cache.BucketRegion;
 import com.gemstone.gemfire.internal.cache.partitioned.Bucket;
 import com.gemstone.gemfire.internal.cache.partitioned.BucketListener;
 import com.gemstone.gemfire.internal.cache.partitioned.BucketProfileUpdateMessage;
 import com.gemstone.gemfire.internal.cache.partitioned.DeposePrimaryBucketMessage;
 import com.gemstone.gemfire.internal.cache.partitioned.DeposePrimaryBucketMessage.DeposePrimaryBucketResponse;
 import com.gemstone.gemfire.internal.cache.partitioned.RegionAdvisor;
-import com.gemstone.gemfire.internal.concurrent.AR;
-import com.gemstone.gemfire.internal.concurrent.CFactory;
-import com.gemstone.gemfire.internal.concurrent.Q;
-import com.gemstone.gemfire.internal.concurrent.S;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
-import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.gemstone.gemfire.internal.util.StopWatch;
 
 /**
@@ -88,10 +71,11 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
 
   public static final boolean ENFORCE_SAFE_CLOSE = false;
     //TODO: Boolean.getBoolean("gemfire.BucketAdvisor.debug.enforceSafeClose");
-  
+
   /** Reference to the InternalDistributedMember that is primary. */
-  private final AR primaryMember = CFactory.createAR();
-  
+  private final AtomicReference<InternalDistributedMember> primaryMember =
+      new AtomicReference<>();
+
   /** 
    * Advice requests for {@link #adviseProfileUpdate()} delegate to the 
    * partitioned region's <code>RegionAdvisor</code> to include members with 
@@ -104,6 +88,9 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
    * synchronized(this). 
    */
   private DistributedMemberLock primaryLock;
+
+  /** Local lock used by PRHARedundancyProvider */
+  protected final ReentrantLock redundancyLock;
 
   //private static final byte MASK_HOSTING       = 1; // 0001 
   //private static final byte MASK_VOLUNTEERING  = 2; // 0010
@@ -123,7 +110,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
    * The current state of this BucketAdvisor which tracks which member is
    * primary and whether or not this member is hosting a real Bucket.
    */
-  private byte primaryState = NO_PRIMARY_NOT_HOSTING;
+  private volatile byte primaryState = NO_PRIMARY_NOT_HOSTING;
   
   /**
    * This delegate handles all volunteering for primary status. Lazily created.
@@ -203,6 +190,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
     super(bucket);
     this.regionAdvisor = regionAdvisor;
     this.pRegion = this.regionAdvisor.getPartitionedRegion();
+    this.redundancyLock = new ReentrantLock();
     resetParentAdvisor(bucket.getId());
   }
   
@@ -284,6 +272,13 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
   }
 
   /**
+   * Returns the lock to use when moving the primary.
+   */
+  Lock getActivePrimaryMoveLock() {
+    return this.activePrimaryMoveLock;
+  }
+
+  /**
    * Try to lock the primary bucket to make sure no operation is on-going at
    * current bucket.  
    * 
@@ -297,7 +292,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
       }
     }
   }
-  
+
   /**
    * Makes this <code>BucketAdvisor</code> give up being a primary and become
    * a secondary. Does nothing if not currently the primary.
@@ -525,7 +520,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
    * 
    * @return the queue of primary volunteering tasks
    */
-  Q getVolunteeringQueue() {
+  Queue<Runnable> getVolunteeringQueue() {
     return this.regionAdvisor.getVolunteeringQueue();
   }
   
@@ -535,7 +530,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
    * 
    * @return the semaphore which controls the number of volunteering threads
    */
-  S getVolunteeringSemaphore() {
+  Semaphore getVolunteeringSemaphore() {
     return this.regionAdvisor.getVolunteeringSemaphore();
   }
   
@@ -1014,7 +1009,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
     try {
       synchronized(this) {
         boolean wasPrimary = isPrimary() && this.getDistributionManager().getId().equals(member);
-        final InternalDistributedMember currentPrimary = (InternalDistributedMember) this.primaryMember.get();
+        final InternalDistributedMember currentPrimary = this.primaryMember.get();
         if (currentPrimary != null && currentPrimary.equals(member)) {
           if (getLogWriter().fineEnabled()) {
             getLogWriter().fine("[BucketAdvisor.notPrimary] " + member + " for " + this);
@@ -1122,9 +1117,12 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
    * @return true if this advisor has been closed
    */
   protected boolean isClosed() {
+    return this.primaryState == CLOSED;
+    /*
     synchronized(this) {
       return this.primaryState == CLOSED;
     }
+    */
   }
 
   /** 
@@ -1133,9 +1131,12 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
    * @return true if this member is currently marked as primary
    */
   public boolean isPrimary() {
+    return this.primaryState == IS_PRIMARY_HOSTING;
+    /*
     synchronized(this) {
       return this.primaryState == IS_PRIMARY_HOSTING;
     }
+    */
   }
   
   /** 
@@ -1144,9 +1145,12 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
    * @return true if this member is currently volunteering for primary
    */
   protected boolean isVolunteering() {
+    return this.primaryState == VOLUNTEERING_HOSTING;
+    /*
     synchronized(this) {
       return this.primaryState == VOLUNTEERING_HOSTING;
     }
+    */
   }
 
   /** 
@@ -1168,6 +1172,13 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
    * @return true if this member is currently hosting real bucket
    */
   public boolean isHosting() {
+    final byte state = this.primaryState;
+    return state == NO_PRIMARY_HOSTING ||
+        state == OTHER_PRIMARY_HOSTING ||
+        state == VOLUNTEERING_HOSTING ||
+        state == BECOMING_HOSTING ||
+        state == IS_PRIMARY_HOSTING;
+    /*
     synchronized(this) {
       return this.primaryState == NO_PRIMARY_HOSTING ||
              this.primaryState == OTHER_PRIMARY_HOSTING ||
@@ -1175,6 +1186,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
              this.primaryState == BECOMING_HOSTING ||
              this.primaryState == IS_PRIMARY_HOSTING;
     }
+    */
   }
   
   /**
@@ -1328,7 +1340,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
    * @return the member or null if no primary exists
    */
   public final InternalDistributedMember basicGetPrimaryMember() {
-    return (InternalDistributedMember) this.primaryMember.get();
+    return this.primaryMember.get();
   }
   
   /** 
@@ -3036,7 +3048,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
       // we should have an executor which limits its max threads to
       // VOLUNTEERING_THREAD_COUNT. 
       if (Thread.interrupted()) throw new InterruptedException();
-      Q volunteeringQueue = getVolunteeringQueue();
+      Queue<Runnable> volunteeringQueue = getVolunteeringQueue();
       synchronized (volunteeringQueue) {
         // add the volunteering task 
         volunteeringQueue.add(volunteeringTask);
@@ -3068,7 +3080,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
           getPartitionedRegionStats().incVolunteeringThreads(1);
           boolean releaseSemaphore = true;
           try {
-            Q volunteeringQueue = getVolunteeringQueue();
+            final Queue<Runnable> volunteeringQueue = getVolunteeringQueue();
             Runnable queuedWork = null;
             while (true) {
 //              SystemFailure.checkFailure(); 
@@ -3077,7 +3089,7 @@ public final class BucketAdvisor extends CacheDistributionAdvisor  {
                 // synchronized volunteeringQueue for coordination between threads adding 
                 // work to the queue and checking for a consuming thread and the existing
                 // consuming thread to determine if it can exit since the queue is empty.
-                queuedWork = (Runnable) volunteeringQueue.poll();
+                queuedWork = volunteeringQueue.poll();
                 if (queuedWork == null) {
                   // the queue is empty... no more work... so return
                   // @todo why release the semaphore here are sync'ed?

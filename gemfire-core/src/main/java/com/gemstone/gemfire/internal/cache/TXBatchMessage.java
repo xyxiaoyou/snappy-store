@@ -129,12 +129,18 @@ public final class TXBatchMessage extends TXMessage {
   }
 
   final void apply(final TXStateProxy tx) {
+    // check for closing cache before returning but this should be done
+    // only after entire message has been read (SNAP-1488)
+    GemFireCacheImpl.getExisting().getCancelCriterion()
+        .checkCancelInProgress(null);
     if (tx != null) {
       final TXState txState = tx.getTXStateForWrite();
       // reusable EntryEvent
       final EntryEventImpl eventTemplate = EntryEventImpl.create(null,
           Operation.UPDATE, null, null, null, true, null);
       eventTemplate.setTXState(txState);
+      // apply as PUT DML so duplicate entry inserts etc. will go through fine
+      eventTemplate.setPutDML(true);
       Object entry;
       TXRegionState txrs;
       LocalRegion region, baseRegion;
@@ -420,7 +426,7 @@ public final class TXBatchMessage extends TXMessage {
 
     final int numProbableOps = InternalDataSerializer.readArrayLength(in);
 
-    final GemFireCacheImpl cache = GemFireCacheImpl.getExisting();
+    final GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
     final RegionInfoShip regionInfo = new RegionInfoShip();
     final LocalRegion pendingOpsRegion;
     this.pendingOps = new ArrayList<Object>(numProbableOps);
@@ -444,7 +450,7 @@ public final class TXBatchMessage extends TXMessage {
       if (op == TXEntryState.OP_FLAG_EOF) {
         break;
       }
-      if (pendingOpsRegion == null) {
+      if (this.pendingOpsRegions != null) {
         InternalDataSerializer.invokeFromData(regionInfo, in);
         rgn = regionInfo.lookupRegion(cache);
       }
@@ -459,7 +465,7 @@ public final class TXBatchMessage extends TXMessage {
             ((KeyWithRegionContext)key).setRegionContext(rgn);
           }
           this.pendingOps.add(key);
-          if (pendingOpsRegion == null) {
+          if (this.pendingOpsRegions != null) {
             this.pendingOpsRegions.add(rgn);
           }
         }
@@ -492,7 +498,7 @@ public final class TXBatchMessage extends TXMessage {
           }
           entry.setCallbackArgument(callbackArg);
           this.pendingOps.add(entry);
-          if (pendingOpsRegion == null) {
+          if (this.pendingOpsRegions != null) {
             this.pendingOpsRegions.add(rgn);
           }
         }

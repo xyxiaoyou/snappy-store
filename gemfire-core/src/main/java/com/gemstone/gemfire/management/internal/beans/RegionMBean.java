@@ -24,6 +24,7 @@ import com.gemstone.gemfire.management.MembershipAttributesData;
 import com.gemstone.gemfire.management.PartitionAttributesData;
 import com.gemstone.gemfire.management.RegionAttributesData;
 import com.gemstone.gemfire.management.RegionMXBean;
+import com.gemstone.gemfire.management.internal.ManagementConstants;
 
 /**
  * Concrete implementation of RegionMXBean which exposes various configuration
@@ -40,9 +41,11 @@ public class RegionMBean<K, V> extends NotificationBroadcasterSupport implements
 
   /** Bridge is responsible for extracting data from GemFire Layer **/
   private RegionMBeanBridge<K, V> bridge;
+  private boolean isReservoirRegion = false;
 
-  public RegionMBean(RegionMBeanBridge<K, V> bridge) {
+  public RegionMBean(RegionMBeanBridge<K, V> bridge, boolean isReservoir) {
     this.bridge = bridge;
+    this.isReservoirRegion = isReservoir;
   }
 
   @Override
@@ -326,7 +329,16 @@ public class RegionMBean<K, V> extends NotificationBroadcasterSupport implements
   }
 
   @Override
-  public long getRowsInCachedBatches() {
-    return bridge.getRowsInCachedBatches();
+  public long getRowsInColumnBatches() {
+    return bridge.getRowsInColumnBatches();
+  }
+
+  @Override
+  public long getRowsInReservoir() {
+    if (this.isReservoirRegion) {
+      return bridge.getRowsInReservoir();
+    } else {
+      return ManagementConstants.ZERO;
+    }
   }
 }

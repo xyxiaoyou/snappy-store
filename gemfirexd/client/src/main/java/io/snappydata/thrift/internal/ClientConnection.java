@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -35,6 +35,7 @@
 
 package io.snappydata.thrift.internal;
 
+import java.io.PrintWriter;
 import java.net.SocketException;
 import java.sql.*;
 import java.util.Collections;
@@ -47,11 +48,9 @@ import java.util.Properties;
 import java.util.concurrent.Executor;
 import java.util.concurrent.locks.ReentrantLock;
 
-import com.gemstone.gnu.trove.THashMap;
-import com.pivotal.gemfirexd.Attribute;
+import com.pivotal.gemfirexd.internal.shared.common.error.ExceptionSeverity;
 import com.pivotal.gemfirexd.internal.shared.common.reference.SQLState;
 import io.snappydata.thrift.*;
-import io.snappydata.thrift.common.Converters;
 import io.snappydata.thrift.common.SocketTimeout;
 import io.snappydata.thrift.common.ThriftExceptionUtil;
 import io.snappydata.thrift.common.ThriftUtils;
@@ -64,8 +63,9 @@ import org.apache.thrift.transport.TTransport;
 @SuppressWarnings("serial")
 public final class ClientConnection extends ReentrantLock implements Connection {
 
-  final ClientService clientService;
-  volatile boolean isOpen;
+  private final ClientService clientService;
+  private final ClientPooledConnection clientServiceOwner;
+  private volatile boolean isClosed;
 
   // records last transaction host
   // all operations fail in transactional mode, so no need to check for the host
@@ -76,6 +76,7 @@ public final class ClientConnection extends ReentrantLock implements Connection 
   private volatile int rsHoldability = DEFAULT_RS_HOLDABILITY;
   final EnumSet<TransactionAttribute> pendingTXFlags = EnumSet
       .noneOf(TransactionAttribute.class);
+  StatementAttrs commonAttrs;
 
   private volatile SnappyExceptionData warnings;
   private int xaState;
@@ -83,88 +84,75 @@ public final class ClientConnection extends ReentrantLock implements Connection 
   private ClientFinalizer finalizer;
 
   // defaults for connection properties
-  static final int DEFAULT_RS_TYPE = Converters
-      .getJdbcResultSetType(snappydataConstants.DEFAULT_RESULTSET_TYPE);
-  static final int DEFAULT_RS_CONCURRENCY = ResultSet.CONCUR_READ_ONLY;
   static final int DEFAULT_RS_HOLDABILITY = ResultSet.CLOSE_CURSORS_AT_COMMIT;
 
   private int generatedSavepointId;
 
-  static {
-    com.pivotal.gemfirexd.internal.client.am.Connection.init();
+  ClientConnection(ClientService service,
+      ClientPooledConnection serviceOwner) throws SQLException {
+    this.clientService = service;
+    this.clientServiceOwner = serviceOwner;
+    initTXHost(this.clientService);
+    this.finalizer = serviceOwner != null ? null : new ClientFinalizer(this,
+        this.clientService, snappydataConstants.BULK_CLOSE_CONNECTION);
+    // don't need to call updateReferentData on finalizer for connection
+    // since ClientFinalizer will extract the same from current host
+    // information in ClientService for the special case of connection
   }
 
-  ClientConnection(String host, int port, String userName, String password,
-      Map<String, String> props) throws SQLException {
-    try {
-      this.isOpen = false;
-      // TODO: current hardcoded security mechanism to PLAIN
-      // implement Diffie-Hellman and additional like SASL (see Hive driver)
-      OpenConnectionArgs connArgs = new OpenConnectionArgs()
-          .setSecurity(SecurityMechanism.PLAIN).setUserName(userName)
-          .setPassword(password).setProperties(props);
-      this.clientService = new ClientService(host, port, connArgs);
-      initTXHost(this.clientService);
-      this.finalizer = new ClientFinalizer(this, this.clientService,
-          snappydataConstants.BULK_CLOSE_CONNECTION);
-      // don't need to call updateReferentData on finalizer for connection
-      // since ClientFinalizer will extract the same from current host
-      // information in ClientService for the special case of connection
-      this.isOpen = true;
-    } catch (SnappyException se) {
-      throw ThriftExceptionUtil.newSQLException(se);
-    }
+  public static ClientConnection create(String host, int port,
+      Properties connProperties, PrintWriter logWriter) throws SQLException {
+    return new ClientConnection(ClientService.create(
+        host, port, false, connProperties, logWriter), null);
   }
 
-  public static ClientConnection create(String host, int port, Properties p)
-      throws SQLException {
-    final THashMap connProps = new THashMap();
-    @SuppressWarnings("unchecked")
-    Map<String, String> props = connProps;
-    String userName = null;
-    String password = null;
-    for (String propName : p.stringPropertyNames()) {
-      if (Attribute.USERNAME_ATTR.equals(propName)
-          || Attribute.USERNAME_ALT_ATTR.equals(propName)) {
-        userName = p.getProperty(propName);
-      }
-      else if (Attribute.PASSWORD_ATTR.equals(propName)) {
-        password = p.getProperty(propName);
-      }
-      else {
-        connProps.put(propName, p.getProperty(propName));
-      }
-    }
-    if (connProps.size() == 0) {
-      props = null;
-    }
-    return new ClientConnection(host, port, userName, password, props);
+  public final ClientService getClientService() {
+    return this.clientService;
+  }
+
+  final ClientPooledConnection getOwnerPooledConnection() {
+    return this.clientServiceOwner;
   }
 
   final void checkClosedConnection() throws SQLException {
-    if (this.isOpen) {
-      return;
-    }
-    else {
+    if (this.isClosed || this.clientService.isClosed()) {
       throw ThriftExceptionUtil.newSQLException(SQLState.NO_CURRENT_CONNECTION,
           null);
     }
   }
 
+  final SQLException informListeners(SQLException sqle) {
+    // report only fatal errors
+    if (this.clientServiceOwner != null &&
+        sqle.getErrorCode() >= ExceptionSeverity.SESSION_SEVERITY) {
+      this.clientServiceOwner.onConnectionError(sqle);
+    }
+    return sqle;
+  }
+
   final Map<TransactionAttribute, Boolean> getPendingTXFlags() {
     if (this.pendingTXFlags.isEmpty()) {
       return null;
-    }
-    else {
+    } else {
       final EnumMap<TransactionAttribute, Boolean> txFlags = ThriftUtils
           .newTransactionFlags();
-      final ClientService service = this.clientService;
       for (TransactionAttribute pendingFlag : this.pendingTXFlags) {
         // default value sent as false in call to isTXFlagSet does not matter
         // since the flag is guaranteed to be set (to true or false) in any case
-        txFlags.put(pendingFlag, service.isTXFlagSet(pendingFlag, false));
+        txFlags.put(pendingFlag, this.clientService.isTXFlagSet(
+            pendingFlag, false));
       }
       return txFlags;
+    }
+  }
+
+  /** a set of attributes shared by all statements of this connection */
+  public void setCommonStatementAttributes(StatementAttrs attrs) {
+    super.lock();
+    try {
+      this.commonAttrs = attrs;
+    } finally {
+      super.unlock();
     }
   }
 
@@ -258,11 +246,10 @@ public final class ClientConnection extends ReentrantLock implements Connection 
     }
   }
 
-  private final void initTXHost(final ClientService service) {
+  private void initTXHost(final ClientService service) {
     if (service != null) {
       this.txHost = service.getCurrentHostConnection();
-    }
-    else {
+    } else {
       this.txHost = null;
     }
   }
@@ -276,10 +263,14 @@ public final class ClientConnection extends ReentrantLock implements Connection 
     super.lock();
     try {
       checkClosedConnection();
-      service.commitTransaction(txHost, true, null);
+      if (getTransactionIsolation() == TRANSACTION_NONE) {
+        service.commitTransaction(service.getCurrentHostConnection(), true, null);
+      } else {
+        service.commitTransaction(txHost, true, null);
+      }
       initTXHost(service);
     } catch (SnappyException se) {
-      throw ThriftExceptionUtil.newSQLException(se);
+      throw informListeners(ThriftExceptionUtil.newSQLException(se));
     } finally {
       super.unlock();
     }
@@ -294,10 +285,14 @@ public final class ClientConnection extends ReentrantLock implements Connection 
     super.lock();
     try {
       checkClosedConnection();
-      service.rollbackTransaction(txHost, true, null);
+      if (getTransactionIsolation() == TRANSACTION_NONE) {
+        service.rollbackTransaction(service.getCurrentHostConnection(), true, null);
+      } else {
+        service.rollbackTransaction(txHost, true, null);
+      }
       initTXHost(service);
     } catch (SnappyException se) {
-      throw ThriftExceptionUtil.newSQLException(se);
+      throw informListeners(ThriftExceptionUtil.newSQLException(se));
     } finally {
       super.unlock();
     }
@@ -308,6 +303,17 @@ public final class ClientConnection extends ReentrantLock implements Connection 
    */
   @Override
   public void close() throws SQLException {
+    // fire callbacks for pooled connection and return
+    if (this.clientServiceOwner != null) {
+      if (isClosed()) {
+        this.clientServiceOwner.onConnectionError(ThriftExceptionUtil
+            .newSQLException(SQLState.PHYSICAL_CONNECTION_ALREADY_CLOSED));
+      } else {
+        this.clientServiceOwner.onConnectionClose();
+      }
+      this.isClosed = true;
+      return;
+    }
     super.lock();
     try {
       final ClientFinalizer finalizer = this.finalizer;
@@ -315,8 +321,12 @@ public final class ClientConnection extends ReentrantLock implements Connection 
         finalizer.clearAll();
         this.finalizer = null;
       }
+      // closing an already closed Connection is a no-op as per JDBC spec
+      if (isClosed()) {
+        return;
+      }
       this.clientService.closeConnection(0);
-      this.isOpen = false;
+      isClosed = true;
     } catch (SnappyException se) {
       throw ThriftExceptionUtil.newSQLException(se);
     } finally {
@@ -329,7 +339,7 @@ public final class ClientConnection extends ReentrantLock implements Connection 
    */
   @Override
   public final boolean isClosed() throws SQLException {
-    return !this.isOpen;
+    return this.isClosed || this.clientService.isClosed();
   }
 
   /**
@@ -411,7 +421,7 @@ public final class ClientConnection extends ReentrantLock implements Connection 
           // clear the pending transaction flags
           this.pendingTXFlags.clear();
         } catch (SnappyException se) {
-          throw ThriftExceptionUtil.newSQLException(se);
+          throw informListeners(ThriftExceptionUtil.newSQLException(se));
         } finally {
           super.unlock();
         }
@@ -490,7 +500,7 @@ public final class ClientConnection extends ReentrantLock implements Connection 
   @Override
   public Map<String, Class<?>> getTypeMap() throws SQLException {
     // nothing in SnappyData
-    return new HashMap<String, Class<?>>();
+    return new HashMap<>();
   }
 
   /**
@@ -501,7 +511,7 @@ public final class ClientConnection extends ReentrantLock implements Connection 
     checkClosedConnection();
     if (map == null) {
       throw ThriftExceptionUtil.newSQLException(SQLState.INVALID_API_PARAMETER,
-          null, map, "map", "setTypeMap");
+          null, null, "map", "setTypeMap");
     }
     if (!map.isEmpty()) {
       throw ThriftExceptionUtil.newSQLException(SQLState.NOT_IMPLEMENTED, null,
@@ -817,8 +827,7 @@ public final class ClientConnection extends ReentrantLock implements Connection 
   public boolean isValid(final int timeout) throws SQLException {
     if (timeout < 0) {
       throw ThriftExceptionUtil.newSQLException(SQLState.INVALID_API_PARAMETER,
-          null, Integer.valueOf(timeout), "timeout",
-          "java.sql.Connection.isValid");
+          null, timeout, "timeout", "java.sql.Connection.isValid");
     }
 
     // Check if the connection is closed
@@ -862,8 +871,7 @@ public final class ClientConnection extends ReentrantLock implements Connection 
   public void setClientInfo(String name, String value)
       throws SQLClientInfoException {
     if (name != null || value != null) {
-      HashMap<String, ClientInfoStatus> failedProperties =
-          new HashMap<String, ClientInfoStatus>(1);
+      HashMap<String, ClientInfoStatus> failedProperties = new HashMap<>(1);
       if (name != null) {
         failedProperties.put(name, ClientInfoStatus.REASON_UNKNOWN_PROPERTY);
       }
@@ -875,7 +883,7 @@ public final class ClientConnection extends ReentrantLock implements Connection 
 
   /**
    * <code>setClientInfo</code> will throw a <code>SQLClientInfoException</code>
-   * uless the <code>properties</code> paramenter is empty, since SnappyData does
+   * unless the <code>properties</code> paramenter is empty, since SnappyData does
    * not support any properties.
    */
   @Override
@@ -883,7 +891,7 @@ public final class ClientConnection extends ReentrantLock implements Connection 
       throws SQLClientInfoException {
     if (properties != null && !properties.isEmpty()) {
       HashMap<String, ClientInfoStatus> failedProperties =
-          new HashMap<String, ClientInfoStatus>(properties.size());
+          new HashMap<>(properties.size());
       String firstKey = null;
       for (String key : properties.stringPropertyNames()) {
         if (firstKey == null) {
@@ -891,9 +899,11 @@ public final class ClientConnection extends ReentrantLock implements Connection 
         }
         failedProperties.put(key, ClientInfoStatus.REASON_UNKNOWN_PROPERTY);
       }
-      throw ThriftExceptionUtil.newSQLClientInfoException(
-          SQLState.PROPERTY_UNSUPPORTED_CHANGE, failedProperties, null,
-          firstKey, properties.getProperty(firstKey));
+      if (firstKey != null) {
+        throw ThriftExceptionUtil.newSQLClientInfoException(
+            SQLState.PROPERTY_UNSUPPORTED_CHANGE, failedProperties, null,
+            firstKey, properties.getProperty(firstKey));
+      }
     }
   }
 
@@ -968,10 +978,10 @@ public final class ClientConnection extends ReentrantLock implements Connection 
     try {
       checkClosedConnection();
       UpdateResult ur = this.clientService.executeUpdate(
-          Collections.singletonList("SET SCHEMA " + schema), null);
+          Collections.singletonList("SET SCHEMA \"" + schema + '"'), null);
       this.warnings = ur.warnings;
     } catch (SnappyException se) {
-      throw ThriftExceptionUtil.newSQLException(se);
+      throw informListeners(ThriftExceptionUtil.newSQLException(se));
     } finally {
       super.unlock();
     }
@@ -979,6 +989,11 @@ public final class ClientConnection extends ReentrantLock implements Connection 
 
   @Override
   public String getSchema() throws SQLException {
+    String defaultSchema = this.clientService.getCurrentDefaultSchema();
+    if (defaultSchema != null) {
+      return defaultSchema;
+    }
+
     super.lock();
     try {
       checkClosedConnection();
@@ -987,12 +1002,11 @@ public final class ClientConnection extends ReentrantLock implements Connection 
       List<Row> rows = rs.getRows();
       if (rows != null && rows.size() > 0) {
         return (String)rows.get(0).getObject(0);
-      }
-      else {
+      } else {
         return null;
       }
     } catch (SnappyException se) {
-      throw ThriftExceptionUtil.newSQLException(se);
+      throw informListeners(ThriftExceptionUtil.newSQLException(se));
     } finally {
       super.unlock();
     }
@@ -1020,7 +1034,6 @@ public final class ClientConnection extends ReentrantLock implements Connection 
         clientService.getInputProtocol().getTransport().close();
       }
     });
-    this.isOpen = false;
   }
 
   @Override
@@ -1055,8 +1068,8 @@ public final class ClientConnection extends ReentrantLock implements Connection 
       try {
         ((SocketTimeout)socket).setSoTimeout(milliseconds);
       } catch (SocketException se) {
-        throw ThriftExceptionUtil.newSQLException(SQLState.SOCKET_EXCEPTION,
-            se, se.getMessage());
+        throw informListeners(ThriftExceptionUtil.newSQLException(
+            SQLState.SOCKET_EXCEPTION, se, se.getMessage()));
       }
     }
   }
@@ -1068,11 +1081,10 @@ public final class ClientConnection extends ReentrantLock implements Connection 
       try {
         return ((SocketTimeout)socket).getSoTimeout();
       } catch (SocketException se) {
-        throw ThriftExceptionUtil.newSQLException(SQLState.SOCKET_EXCEPTION,
-            se, se.getMessage());
+        throw informListeners(ThriftExceptionUtil.newSQLException(
+            SQLState.SOCKET_EXCEPTION, se, se.getMessage()));
       }
-    }
-    else {
+    } else {
       return 0;
     }
   }

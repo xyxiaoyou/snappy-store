@@ -40,25 +40,10 @@ import com.gemstone.gemfire.cache.TimeoutException;
 import com.gemstone.gemfire.cache.query.internal.IndexUpdater;
 import com.gemstone.gemfire.distributed.internal.DM;
 import com.gemstone.gemfire.internal.Assert;
-import com.gemstone.gemfire.internal.ByteArrayDataInput;
 import com.gemstone.gemfire.internal.InternalStatisticsDisabledException;
-import com.gemstone.gemfire.internal.cache.AbstractOperationMessage;
+import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.cache.DistributedRegion.DiskPosition;
-import com.gemstone.gemfire.internal.cache.EntryEventImpl;
 import com.gemstone.gemfire.internal.cache.InitialImageOperation.Entry;
-import com.gemstone.gemfire.internal.cache.KeyInfo;
-import com.gemstone.gemfire.internal.cache.KeyWithRegionContext;
-import com.gemstone.gemfire.internal.cache.LocalRegion;
-import com.gemstone.gemfire.internal.cache.ObjectEqualsHashingStrategy;
-import com.gemstone.gemfire.internal.cache.RegionClearedException;
-import com.gemstone.gemfire.internal.cache.RegionEntry;
-import com.gemstone.gemfire.internal.cache.RegionEntryContext;
-import com.gemstone.gemfire.internal.cache.THashMapWithKeyPair;
-import com.gemstone.gemfire.internal.cache.TXEntryState;
-import com.gemstone.gemfire.internal.cache.TXEntryStateFactory;
-import com.gemstone.gemfire.internal.cache.TXRegionState;
-import com.gemstone.gemfire.internal.cache.TXState;
-import com.gemstone.gemfire.internal.cache.Token;
 import com.gemstone.gemfire.internal.cache.locks.LockMode;
 import com.gemstone.gemfire.internal.cache.locks.LockingPolicy;
 import com.gemstone.gemfire.internal.cache.versions.VersionSource;
@@ -70,7 +55,6 @@ import com.gemstone.gemfire.internal.offheap.annotations.Retained;
 import com.gemstone.gemfire.internal.offheap.annotations.Unretained;
 import com.gemstone.gemfire.internal.shared.Version;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
-import com.gemstone.gemfire.pdx.internal.unsafe.UnsafeWrapper;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.access.index.GfxdIndexManager;
@@ -135,8 +119,10 @@ public final class GfxdTXEntryState extends TXEntryState implements
 
     // should never happen on a client/locator VM
     final VMKind myKind;
-    assert (myKind = GemFireXDUtils.getMyVMKind()) == VMKind.DATASTORE:
-      "unexpected creation of GfxdTXEntryState on VM of kind " + myKind;
+    if (!GemFireCacheImpl.getInternalProductCallbacks().isSnappyStore()) {
+      assert (myKind = GemFireXDUtils.getMyVMKind()) == VMKind.DATASTORE :
+          "unexpected creation of GfxdTXEntryState on VM of kind " + myKind;
+    }
   }
 
   @Override
@@ -390,18 +376,19 @@ public final class GfxdTXEntryState extends TXEntryState implements
   @Override
   public final ExecRow getRow(GemFireContainer baseContainer)
       throws StandardException {
+    final RegionEntry entry = this.regionEntry;
     if (isDirty()) {
       final Object value = getNearSidePendingValue();
       // txnal entries will always be of the current schema since ALTER TABLE
       // or any other DDL will either fail with txns, or block for txns
-      return baseContainer.newExecRow(value,
+      return baseContainer.newExecRow(entry, value,
           baseContainer.getExtraTableInfo(), true);
     }
-    else if (this.regionEntry != null) {
+    else if (entry != null) {
       final Object value = this.originalVersionId;
       if (!Token.isRemoved(value)) {
-        return baseContainer.newExecRow(value,
-            (ExtraTableInfo)this.regionEntry.getContainerInfo(), true);
+        return baseContainer.newExecRow(entry, value,
+            (ExtraTableInfo)entry.getContainerInfo(), true);
       }
     }
     return null;
@@ -568,15 +555,6 @@ public final class GfxdTXEntryState extends TXEntryState implements
   /**
    * {@inheritDoc}
    */
-  @Unretained
-  @Override
-  public Object getTransformedValue() {
-    return super.getValueInTXOrRegion();
-  }
-
-  /**
-   * {@inheritDoc}
-   */
   @Override
   @Retained
   public Object getValueOffHeapOrDiskWithoutFaultIn(LocalRegion owner) {
@@ -623,6 +601,11 @@ public final class GfxdTXEntryState extends TXEntryState implements
   @Override
   public boolean isInvalidOrRemoved() {
     return Token.isInvalidOrRemoved(super.getValueInTXOrRegion());
+  }
+
+  @Override
+  public boolean isOffHeap() {
+    return false;
   }
 
   @Override
@@ -1248,7 +1231,7 @@ public final class GfxdTXEntryState extends TXEntryState implements
   }
 
   @Override
-  public void setOwner(LocalRegion owner) {
+  public void setOwner(LocalRegion owner, Object previousOwner) {
     throw new UnsupportedOperationException("unexpected invocation");
   }
 
@@ -1270,7 +1253,7 @@ public final class GfxdTXEntryState extends TXEntryState implements
 
   @Override
   public boolean fillInValue(LocalRegion r, Entry entry,
-      ByteArrayDataInput in, DM mgr, Version targetVersion) {
+      DM mgr, Version targetVersion) {
     throw new UnsupportedOperationException("unexpected invocation");
   }
 
@@ -1352,7 +1335,8 @@ public final class GfxdTXEntryState extends TXEntryState implements
   }
 
   @Override
-  public boolean isOverflowedToDisk(LocalRegion r, DiskPosition dp) {
+  public boolean isOverflowedToDisk(LocalRegion r, DiskPosition dp,
+      boolean alwaysFetchPosition) {
     return false;
   }
 
@@ -1368,7 +1352,7 @@ public final class GfxdTXEntryState extends TXEntryState implements
   }
 
   @Override
-  public void removePhase2() {
+  public void removePhase2(LocalRegion r) {
     throw new UnsupportedOperationException("unexpected invocation");
   }
 
@@ -1622,7 +1606,7 @@ public final class GfxdTXEntryState extends TXEntryState implements
    * {@inheritDoc}
    */
   @Override
-  public void setValueToNull() {
+  public void setValueToNull(RegionEntryContext context) {
     throw new UnsupportedOperationException("unexpected invocation for "
         + toString());
   }
@@ -1643,18 +1627,16 @@ public final class GfxdTXEntryState extends TXEntryState implements
   }
 
   @Override
-  public int readBytes(UnsafeWrapper unsafe, long memOffset, int columnWidth,
-      ByteSource bs) {
+  public int readBytes(long memOffset, int columnWidth, ByteSource bs) {
     throw new UnsupportedOperationException("unexpected invocation for "
         + getClass());
   }
 
   @Override
   public Object getValueWithoutFaultInOrOffHeapEntry(LocalRegion owner)   {
-    
-    return this.getValueInVMOrDiskWithoutFaultIn(owner);
+    return super.getRetainedValueInTXOrRegion();
   }
-  
+
   @Override
   public Object getValueOrOffHeapEntry(LocalRegion owner) {
    

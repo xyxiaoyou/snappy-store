@@ -598,7 +598,11 @@ public class RegionMBeanBridge<K, V> {
     return false;
   }
 
-  public long getRowsInCachedBatches() {
+  public long getRowsInColumnBatches() {
+    return 0L;
+  }
+
+  public long getRowsInReservoir() {
     return 0L;
   }
 }

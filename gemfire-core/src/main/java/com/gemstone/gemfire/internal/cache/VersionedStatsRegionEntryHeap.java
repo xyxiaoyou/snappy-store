@@ -15,21 +15,17 @@
  * LICENSE file.
  */
 
+/**
+ * Do not modify this class. It was generated.
+ * Instead modify LeafRegionEntry.cpp and then run
+ * bin/generateRegionEntryClasses.sh from the directory
+ * that contains your build.xml.
+ */
 package com.gemstone.gemfire.internal.cache;
-// DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-
-
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
-
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import com.gemstone.gemfire.internal.cache.Token;
 import com.gemstone.gemfire.internal.concurrent.AtomicUpdaterFactory;
-
-
-
-
-
-
-
 import com.gemstone.gemfire.cache.EntryEvent;
 import com.gemstone.gemfire.internal.InternalStatisticsDisabledException;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
@@ -37,22 +33,6 @@ import com.gemstone.gemfire.internal.cache.versions.VersionSource;
 import com.gemstone.gemfire.internal.cache.versions.VersionStamp;
 import com.gemstone.gemfire.internal.cache.versions.VersionTag;
 import com.gemstone.gemfire.internal.concurrent.CustomEntryConcurrentHashMap.HashEntry;
-// macros whose definition changes this class:
-// disk: DISK
-// lru: LRU
-// stats: STATS
-// versioned: VERSIONED
-// offheap: OFFHEAP
-// rowlocation: ROWLOCATION
-// local: LOCAL
-// bucket: BUCKET
-// package: PKG
-/**
- * Do not modify this class. It was generated.
- * Instead modify LeafRegionEntry.cpp and then run
- * bin/generateRegionEntryClasses.sh from the directory
- * that contains your build.xml.
- */
 @SuppressWarnings("serial")
 public class VersionedStatsRegionEntryHeap extends VMStatsRegionEntry
     implements VersionStamp
@@ -63,11 +43,8 @@ public class VersionedStatsRegionEntryHeap extends VMStatsRegionEntry
     super(context,
           value
         );
-    // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
     this.key = key;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-  // common code
   protected int hash;
   private HashEntry<Object, Object> next;
   @SuppressWarnings("unused")
@@ -77,36 +54,26 @@ public class VersionedStatsRegionEntryHeap extends VMStatsRegionEntry
   protected long getlastModifiedField() {
     return lastModifiedUpdater.get(this);
   }
-  protected boolean compareAndSetLastModifiedField(long expectedValue, long newValue) {
+  protected final boolean compareAndSetLastModifiedField(long expectedValue,
+      long newValue) {
     return lastModifiedUpdater.compareAndSet(this, expectedValue, newValue);
   }
-  /**
-   * @see HashEntry#getEntryHash()
-   */
   @Override
   public final int getEntryHash() {
     return this.hash;
   }
   @Override
-  protected void setEntryHash(int v) {
+  protected final void setEntryHash(int v) {
     this.hash = v;
   }
-  /**
-   * @see HashEntry#getNextEntry()
-   */
   @Override
   public final HashEntry<Object, Object> getNextEntry() {
     return this.next;
   }
-  /**
-   * @see HashEntry#setNextEntry
-   */
   @Override
   public final void setNextEntry(final HashEntry<Object, Object> n) {
     this.next = n;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-  // stats code
   @Override
   public final void updateStatsForGet(boolean hit, long time)
   {
@@ -157,7 +124,6 @@ public class VersionedStatsRegionEntryHeap extends VMStatsRegionEntry
     hitCountUpdater.set(this,0);
     missCountUpdater.set(this,0);
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
   @Override
   public final void txDidDestroy(long currTime) {
     setLastModified(currTime);
@@ -166,37 +132,34 @@ public class VersionedStatsRegionEntryHeap extends VMStatsRegionEntry
     this.missCount = 0;
   }
   @Override
-  public boolean hasStats() {
+  public final boolean hasStats() {
     return true;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-  // versioned code
   private VersionSource memberID;
   private short entryVersionLowBytes;
   private short regionVersionHighBytes;
   private int regionVersionLowBytes;
   private byte entryVersionHighByte;
   private byte distributedSystemId;
-  public int getEntryVersion() {
+  public final int getEntryVersion() {
     return ((entryVersionHighByte << 16) & 0xFF0000) | (entryVersionLowBytes & 0xFFFF);
   }
-  public long getRegionVersion() {
+  public final long getRegionVersion() {
     return (((long)regionVersionHighBytes) << 32) | (regionVersionLowBytes & 0x00000000FFFFFFFFL);
   }
-  public long getVersionTimeStamp() {
+  public final long getVersionTimeStamp() {
     return getLastModified();
   }
-  public void setVersionTimeStamp(long time) {
+  public final void setVersionTimeStamp(long time) {
     setLastModified(time);
   }
-  public VersionSource getMemberID() {
+  public final VersionSource getMemberID() {
     return this.memberID;
   }
-  public int getDistributedSystemId() {
+  public final int getDistributedSystemId() {
     return this.distributedSystemId;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-  public void setVersions(VersionTag tag) {
+  public final void setVersions(VersionTag tag) {
     this.memberID = tag.getMemberID();
     int eVersion = tag.getEntryVersion();
     this.entryVersionLowBytes = (short)(eVersion & 0xffff);
@@ -214,15 +177,14 @@ public class VersionedStatsRegionEntryHeap extends VMStatsRegionEntry
     }
     this.distributedSystemId = (byte)(tag.getDistributedSystemId() & 0xff);
   }
-  public void setMemberID(VersionSource memberID) {
+  public final void setMemberID(VersionSource memberID) {
     this.memberID = memberID;
   }
   @Override
-  public VersionStamp getVersionStamp() {
+  public final VersionStamp getVersionStamp() {
     return this;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-  public VersionTag asVersionTag() {
+  public final VersionTag asVersionTag() {
     VersionTag tag = VersionTag.create(memberID);
     tag.setEntryVersion(getEntryVersion());
     tag.setRegionVersion(this.regionVersionHighBytes, this.regionVersionLowBytes);
@@ -230,46 +192,69 @@ public class VersionedStatsRegionEntryHeap extends VMStatsRegionEntry
     tag.setDistributedSystemId(this.distributedSystemId);
     return tag;
   }
-  public void processVersionTag(LocalRegion r, VersionTag tag,
+  public final void processVersionTag(LocalRegion r, VersionTag tag,
       boolean isTombstoneFromGII, boolean hasDelta,
       VersionSource thisVM, InternalDistributedMember sender, boolean checkForConflicts) {
     basicProcessVersionTag(r, tag, isTombstoneFromGII, hasDelta, thisVM, sender, checkForConflicts);
   }
   @Override
-  public void processVersionTag(EntryEvent cacheEvent) {
-    // this keeps Eclipse happy.  without it the sender chain becomes confused
-    // while browsing this code
+  public final void processVersionTag(EntryEvent cacheEvent) {
     super.processVersionTag(cacheEvent);
   }
-  /** get rvv internal high byte.  Used by region entries for transferring to storage */
-  public short getRegionVersionHighBytes() {
+  public final short getRegionVersionHighBytes() {
     return this.regionVersionHighBytes;
   }
-  /** get rvv internal low bytes.  Used by region entries for transferring to storage */
-  public int getRegionVersionLowBytes() {
+  public final int getRegionVersionLowBytes() {
     return this.regionVersionLowBytes;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-  // key code
   private Object key;
   @Override
   public final Object getRawKey() {
     return this.key;
   }
   @Override
-  protected void _setRawKey(Object key) {
+  protected final void _setRawKey(Object key) {
     this.key = key;
   }
   private volatile Object value;
   @Override
-  protected Object getValueField() {
+  public final boolean isRemoved() {
+    final Object o = this.value;
+    return (o == Token.REMOVED_PHASE1) || (o == Token.REMOVED_PHASE2) || (o == Token.TOMBSTONE);
+  }
+  @Override
+  public final boolean isDestroyedOrRemoved() {
+    final Object o = this.value;
+    return o == Token.DESTROYED || o == Token.REMOVED_PHASE1 || o == Token.REMOVED_PHASE2 || o == Token.TOMBSTONE;
+  }
+  @Override
+  public final boolean isDestroyedOrRemovedButNotTombstone() {
+    final Object o = this.value;
+    return o == Token.DESTROYED || o == Token.REMOVED_PHASE1 || o == Token.REMOVED_PHASE2;
+  }
+  @Override
+  protected final Object getValueField() {
     return this.value;
   }
   @Override
-  protected void setValueField(Object v) {
+  protected final void setValueField(Object v) {
     this.value = v;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
+  @Override
+  public final Token getValueAsToken() {
+    Object v = this.value;
+    if (v == null) {
+      return null;
+    } else if (v instanceof Token) {
+      return (Token)v;
+    } else {
+      return Token.NOT_A_TOKEN;
+    }
+  }
+  @Override
+  public final boolean isValueNull() {
+    return this.value == null;
+  }
   private static RegionEntryFactory factory = new RegionEntryFactory() {
     public final RegionEntry createEntry(RegionEntryContext context, Object key, Object value) {
       return new VersionedStatsRegionEntryHeap(context, key, value);
@@ -288,5 +273,4 @@ public class VersionedStatsRegionEntryHeap extends VMStatsRegionEntry
   public static RegionEntryFactory getEntryFactory() {
     return factory;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
 }

@@ -16,18 +16,14 @@
  */
 package com.gemstone.gemfire.cache.client.internal;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.gemstone.gemfire.InternalGemFireException;
 import com.gemstone.gemfire.cache.CacheClosedException;
@@ -36,25 +32,29 @@ import com.gemstone.gemfire.cache.client.ServerOperationException;
 import com.gemstone.gemfire.cache.client.internal.GetAllOp.GetAllOpImpl;
 import com.gemstone.gemfire.cache.execute.FunctionException;
 import com.gemstone.gemfire.cache.execute.ResultCollector;
+import com.gemstone.gemfire.distributed.internal.InternalDistributedSystem;
 import com.gemstone.gemfire.distributed.internal.ServerLocation;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
+import com.gemstone.gemfire.internal.LogWriterImpl;
+import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
+import com.gemstone.gemfire.internal.cache.GemFireSparkConnectorCacheImpl;
 import com.gemstone.gemfire.internal.cache.LocalRegion;
 import com.gemstone.gemfire.internal.cache.PutAllPartialResultException;
 import com.gemstone.gemfire.internal.cache.execute.InternalFunctionInvocationTargetException;
 import com.gemstone.gemfire.internal.cache.tier.sockets.VersionedObjectList;
-import com.gemstone.gemfire.internal.concurrent.AI;
-import com.gemstone.gemfire.internal.concurrent.CFactory;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 
 public class SingleHopClientExecutor {
 
   static final ExecutorService execService = Executors
       .newCachedThreadPool(new ThreadFactory() {
-        AI threadNum = CFactory.createAI();
+        AtomicInteger threadNum = new AtomicInteger();
 
         public Thread newThread(final Runnable r) {
-          Thread result = new Thread(r, "Function Execution Thread-"
-              + threadNum.incrementAndGet());
+          LogWriterI18n logger = InternalDistributedSystem.getLoggerI18n();
+          Thread result = new Thread(LogWriterImpl.createThreadGroup(
+              "FunctionExecutionThreadGroup", logger), r,
+              "Function Execution Thread-" + threadNum.incrementAndGet());
           result.setDaemon(true);
           return result;
         }
@@ -106,8 +106,7 @@ public class SingleHopClientExecutor {
       ResultCollector rc, Set<String> failedNodes) {
 
     LogWriterI18n logger = region.getLogWriterI18n();
-    ClientMetadataService cms = region.getCache()
-        .getClientMetadataService();
+    ClientMetadataService cms;
     boolean reexecute = false;
 
     if (callableTasks != null && !callableTasks.isEmpty()) {
@@ -124,6 +123,8 @@ public class SingleHopClientExecutor {
       if (futures != null) {
         Iterator futureItr = futures.iterator();
         Iterator taskItr = callableTasks.iterator();
+        List<ExecutionException> allEExceptions = new LinkedList<ExecutionException>();
+        List<ServerLocation> failedServers = new LinkedList<ServerLocation>();
         while (futureItr.hasNext() && !execService.isShutdown()
             && !execService.isTerminated()) {
           Future fut = (Future)futureItr.next();
@@ -138,65 +139,94 @@ public class SingleHopClientExecutor {
           }
           catch (InterruptedException e) {
             throw new InternalGemFireException(e.getMessage());
+          } catch(ExecutionException ee) {
+            failedServers.add(server);
+            allEExceptions.add(ee);
           }
-          catch (ExecutionException ee) {
-            if (ee.getCause() instanceof InternalFunctionInvocationTargetException) {
+
+        }
+        // once we have collected all replies we process exception
+        if (!allEExceptions.isEmpty()) {
+          try {
+            throw allEExceptions.iterator().next();
+          } catch (ExecutionException ee) {
+            boolean isConnectorBucketMovedException = GemFireCacheImpl.getExisting().
+                isGFEConnectorBucketMovedException(ee.getCause());
+            if (ee.getCause() instanceof InternalFunctionInvocationTargetException
+                || isConnectorBucketMovedException
+                ) {
               logger
-                  .fine("ExecuteRegionFunctionSingleHopOp#ExecutionException.InternalFunctionInvocationTargetException : "
+                  .fine("ExecuteRegionFunctionSingleHopOp#ExecutionException." +
+                      "InternalFunctionInvocationTargetException : "
                       + "Caused by :" + ee.getCause());
               try {
                 cms = region.getCache().getClientMetadataService();
-              }
-              catch (CacheClosedException e) {
+              } catch (CacheClosedException e) {
                 return false;
               }
               cms.scheduleGetPRMetaData(region, false);
-              cms.removeBucketServerLocation(server);
+              for (ServerLocation failedServer : failedServers) {
+                cms.removeBucketServerLocation(failedServer);
+              }
               reexecute = true;
-              failedNodes.addAll(((InternalFunctionInvocationTargetException)ee
-                  .getCause()).getFailedNodeSet());
+              if (isConnectorBucketMovedException) {
+                Iterator<ExecutionException> eeIter = allEExceptions.iterator();
+                while (eeIter.hasNext()) {
+                  Set<String> failedMembers =
+                      ((GemFireSparkConnectorCacheImpl)GemFireCacheImpl.getExisting()).
+                          getFailedMember(eeIter.next());
+
+                    failedNodes.addAll(failedMembers);
+
+
+                }
+              } else {
+                failedNodes.addAll(((InternalFunctionInvocationTargetException)ee
+                    .getCause()).getFailedNodeSet());
+              }
               rc.clearResults();
-            }
-            else if (ee.getCause() instanceof FunctionException) {
+            } else if (ee.getCause() instanceof FunctionException) {
               if (logger.fineEnabled()) {
                 logger
                     .fine("ExecuteRegionFunctionSingleHopOp#ExecutionException.FunctionException : Caused by :"
                         + ee.getCause());
               }
               throw (FunctionException)ee.getCause();
-            }
-            else if (ee.getCause() instanceof ServerOperationException) {
+            } else if (ee.getCause() instanceof ServerOperationException) {
               if (logger.fineEnabled()) {
                 logger
                     .fine("ExecuteRegionFunctionSingleHopOp#ExecutionException.ServerOperationException : Caused by :"
                         + ee.getCause());
               }
               throw (ServerOperationException)ee.getCause();
-            }
-            else if (ee.getCause() instanceof ServerConnectivityException) {
+            } else if (ee.getCause() instanceof ServerConnectivityException) {
               if (logger.fineEnabled()) {
                 logger
                     .fine("ExecuteRegionFunctionSingleHopOp#ExecutionException.ServerConnectivityException : Caused by :"
-                        + ee.getCause() + " The failed server is: " + server);
+                        + ee.getCause() + " The failed servers are: " + failedServers.toString());
               }
               try {
                 cms = region.getCache().getClientMetadataService();
-              }
-              catch (CacheClosedException e) {
+              } catch (CacheClosedException e) {
                 return false;
               }
-              cms.removeBucketServerLocation(server);
+              for (ServerLocation failedServer : failedServers) {
+                cms.removeBucketServerLocation(failedServer);
+              }
               cms.scheduleGetPRMetaData(region, false);
               reexecute = true;
               rc.clearResults();
-            }
-            else {
+            } else {
               throw executionThrowable(ee.getCause());
             }
           }
         }
       }
+
+
     }
+
+
     return reexecute;
   }
   
@@ -391,7 +421,7 @@ public class SingleHopClientExecutor {
   }
   
   static void submitTask(Runnable task) {
-    execService.submit(task);
+    execService.execute(task);
   }
 
   // Find out what exception to throw?

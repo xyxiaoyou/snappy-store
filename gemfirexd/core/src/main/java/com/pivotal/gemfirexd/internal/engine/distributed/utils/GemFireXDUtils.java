@@ -14,6 +14,24 @@
  * permissions and limitations under the License. See accompanying
  * LICENSE file.
  */
+/*
+ * Changes for SnappyData distributed computational and data platform.
+ *
+ * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
 
 package com.pivotal.gemfirexd.internal.engine.distributed.utils;
 
@@ -115,6 +133,9 @@ import com.pivotal.gemfirexd.internal.engine.store.offheap.OffHeapByteSource;
 import com.pivotal.gemfirexd.internal.iapi.error.ExceptionSeverity;
 import com.pivotal.gemfirexd.internal.iapi.error.ShutdownException;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
+import com.pivotal.gemfirexd.internal.iapi.reference.ContextId;
+import com.pivotal.gemfirexd.internal.iapi.services.context.ContextManager;
+import com.pivotal.gemfirexd.internal.iapi.services.context.ContextService;
 import com.pivotal.gemfirexd.internal.iapi.services.io.FormatableBitSet;
 import com.pivotal.gemfirexd.internal.iapi.services.loader.ClassInspector;
 import com.pivotal.gemfirexd.internal.iapi.services.property.PropertyUtil;
@@ -143,6 +164,7 @@ import com.pivotal.gemfirexd.internal.shared.common.reference.SQLState;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.AssertFailure;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import org.apache.log4j.Logger;
+import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
 /**
  * Various static utility methods used by GemFireXD.
@@ -239,11 +261,11 @@ public final class GemFireXDUtils {
     }
     try {
       if (defaultStartupRecoveryDelayStr != null) {
-        defaultStartupRecoveryDelay = Long.parseLong(defaultStartupRecoveryDelayStr);
+        setDefaultStartupRecoveryDelay(Long.parseLong(defaultStartupRecoveryDelayStr));
       }
       else {
-        defaultStartupRecoveryDelay = PartitionAttributesFactory
-            .STARTUP_RECOVERY_DELAY_DEFAULT;
+        setDefaultStartupRecoveryDelay(PartitionAttributesFactory
+            .STARTUP_RECOVERY_DELAY_DEFAULT);
       }
     } catch (Exception ex) {
       throw StandardException.newException(SQLState.LANG_FORMAT_EXCEPTION,
@@ -386,6 +408,9 @@ public final class GemFireXDUtils {
       GemFireContainer container, boolean doClone) throws StandardException {
     if (container.isByteArrayStore()) {
       return new CompactCompositeRegionKey(dvd, container.getExtraTableInfo());
+    } else if (container.isObjectStore()) {
+      return container.getRowEncoder().fromRowToKey(
+          new DataValueDescriptor[] { dvd }, container);
     }
     return (doClone ? dvd.getClone() : dvd);
   }
@@ -396,6 +421,8 @@ public final class GemFireXDUtils {
     if (container.isByteArrayStore()) {
       return new CompactCompositeRegionKey(compositeKeys,
           container.getExtraTableInfo());
+    } else if (container.isObjectStore()) {
+      return container.getRowEncoder().fromRowToKey(compositeKeys, container);
     }
     else {
       if (compositeKeys.length == 1) {
@@ -747,7 +774,7 @@ public final class GemFireXDUtils {
    */
   public static long newUUIDForDD() throws IllegalStateException,
       StandardException {
-    return Misc.getMemStore().getDDLStmtQueue().newUUID();
+    return Misc.getMemStoreBooting().getDDLStmtQueue().newUUID();
   }
 
   public static InternalDistributedMember getDistributedMemberFromUUID(
@@ -859,7 +886,7 @@ public final class GemFireXDUtils {
     // reset the TXState in GemFireTransaction
     final GemFireTransaction tran = (GemFireTransaction)lcc
         .getTransactionExecute();
-    tran.resetActiveTXState();
+    tran.resetActiveTXState(true);
     return conn;
   }
 
@@ -871,22 +898,26 @@ public final class GemFireXDUtils {
     }
     LanguageConnectionContext lcc = conn.getLanguageConnectionContext();
     GemFireTransaction tran = (GemFireTransaction)lcc.getTransactionExecute();
-    tran.resetActiveTXState();
+    tran.resetActiveTXState(true);
     return conn;
   }
 
   public static EmbedConnection createNewInternalConnection(
       boolean remoteConnection) throws StandardException {
+    return createNewInternalConnection(remoteConnection,
+        EmbedConnection.CHILD_NOT_CACHEABLE);
+  }
+
+  public static EmbedConnection createNewInternalConnection(
+      boolean remoteConnection, long connId) throws StandardException {
     try {
       final Properties props = new Properties();
-      props.putAll(AuthenticationServiceBase.getPeerAuthenticationService()
-          .getBootCredentials());
-      boolean isSnappy = Misc.getMemStore().isSnappyStore();
-      String protocol = isSnappy ? Attribute.SNAPPY_PROTOCOL : Attribute.PROTOCOL;
-      final EmbedConnection conn = (EmbedConnection)InternalDriver
-          .activeDriver().connect(protocol, props,
-              EmbedConnection.CHILD_NOT_CACHEABLE,
-              EmbedConnection.CHILD_NOT_CACHEABLE, remoteConnection, Connection.TRANSACTION_NONE);
+      GemFireStore memStore = Misc.getMemStoreBooting();
+      props.putAll(memStore.getDatabase().getAuthenticationService().getBootCredentials());
+      String protocol = memStore.isSnappyStore() ? Attribute.SNAPPY_PROTOCOL : Attribute.PROTOCOL;
+      final EmbedConnection conn = InternalDriver
+          .activeDriver().connect(protocol, props, connId, connId,
+              remoteConnection, Connection.TRANSACTION_NONE);
       if (conn != null) {
         conn.setInternalConnection();
         ConnectionStats stats = InternalDriver.activeDriver()
@@ -995,8 +1026,21 @@ public final class GemFireXDUtils {
 
   public static GfxdPartitionResolver getResolver(AbstractRegion region) {
     PartitionAttributes<?, ?> pattrs = region.getPartitionAttributes();
-    if (pattrs != null) {
-      return (GfxdPartitionResolver)pattrs.getPartitionResolver();
+    PartitionResolver<?, ?> resolver;
+    if (pattrs != null && (resolver = pattrs.getPartitionResolver())
+        instanceof GfxdPartitionResolver) {
+      return (GfxdPartitionResolver)resolver;
+    }
+    return null;
+  }
+
+  public static InternalPartitionResolver<?, ?> getInternalResolver(
+      AbstractRegion region) {
+    PartitionAttributes<?, ?> pattrs = region.getPartitionAttributes();
+    PartitionResolver<?, ?> resolver;
+    if (pattrs != null && (resolver = pattrs.getPartitionResolver())
+        instanceof InternalPartitionResolver<?, ?>) {
+      return (InternalPartitionResolver<?, ?>)resolver;
     }
     return null;
   }
@@ -1225,7 +1269,7 @@ public final class GemFireXDUtils {
               forUpdate, localOnly, forUpdate);
         }
         else {
-          final GfxdLockService lockService = Misc.getMemStore()
+          final GfxdLockService lockService = Misc.getMemStoreBooting()
               .getDDLLockService();
           final Object lockOwner = lockService.newCurrentOwner();
           success = GfxdLockSet.lock(lockService, lockable, lockOwner,
@@ -1285,7 +1329,7 @@ public final class GemFireXDUtils {
         lockService = ((GemFireTransaction)tc).getLockSpace().getLockService();
       }
       else {
-        lockService = Misc.getMemStore().getDDLLockService();
+        lockService = Misc.getMemStoreBooting().getDDLLockService();
       }
       throw lockService.getLockTimeoutException(lockable != null ? lockable
           : lockObject, tc != null ? ((GemFireTransaction)tc).getLockSpace()
@@ -1314,7 +1358,7 @@ public final class GemFireXDUtils {
               forUpdate, localOnly);
         }
         else {
-          final GfxdLockService lockService = Misc.getMemStore()
+          final GfxdLockService lockService = Misc.getMemStoreBooting()
               .getDDLLockService();
           final Object lockOwner = lockService.newCurrentOwner();
           GfxdLockSet.unlock(lockService, lockable, lockOwner, forUpdate,
@@ -1426,8 +1470,33 @@ public final class GemFireXDUtils {
     lockPolicy.releaseLock(entry, mode, txId, false, dataRegion);
     //}
     if(dataRegion.getEnableOffHeapMemory() && entryRemoved) {
-      if (entry instanceof OffHeapRegionEntry) {
+      if (entry.isOffHeap()) {
         ((OffHeapRegionEntry)entry).release();
+      }
+    }
+  }
+
+  public interface Visitor<T> {
+    boolean visit(T visited);
+  }
+
+  public static void forAllContexts(Visitor<LanguageConnectionContext> action) {
+    final ContextService factory = ContextService.getFactory();
+    LanguageConnectionContext lcc;
+    if (factory != null) {
+      synchronized (factory) {
+        for (ContextManager cm : factory.getAllContexts()) {
+          if (cm == null) {
+            continue;
+          }
+          lcc = (LanguageConnectionContext)cm.getContext(
+              ContextId.LANG_CONNECTION);
+          if (lcc != null) {
+            if (!action.visit(lcc)) {
+              return;
+            }
+          }
+        }
       }
     }
   }
@@ -1449,18 +1518,13 @@ public final class GemFireXDUtils {
   /** write to DataOutput compressing high and low integers of given long */
   public static void writeCompressedHighLow(final DataOutput out, final long val)
       throws IOException {
-    final long low = (val & 0xffffffff);
-    final long high = (val >>> 32);
-    InternalDataSerializer.writeUnsignedVL(low, out);
-    InternalDataSerializer.writeUnsignedVL(high, out);
+    InternalDataSerializer.writeVLHighLow(val, out);
   }
 
-  /** read from DataInputcompressing high and low integers of given long */
+  /** read from DataInput compressing high and low integers of given long */
   public static long readCompressedHighLow(final DataInput in)
       throws IOException {
-    final long low = InternalDataSerializer.readUnsignedVL(in);
-    final long high = InternalDataSerializer.readUnsignedVL(in);
-    return ((high << 32) | low);
+    return InternalDataSerializer.readVLHighLow(in);
   }
 
   public static void executeSQLScripts(Connection conn, String[] scripts,
@@ -1603,9 +1667,14 @@ public final class GemFireXDUtils {
     }
   }
 
-  private static final Pattern CREATE_USER_PATTERN = Pattern.compile(
-      "\\bCREATE_USER\\s*\\([^,]*,([^\\)]*)\\)", Pattern.CASE_INSENSITIVE
-          | Pattern.DOTALL);
+  private static final Pattern USER_PASSWORD_PATTERN = Pattern.compile(
+      "\\b(CREATE_USER\\s*\\([^,]*,([^\\)]*)\\)|ENCRYPT_PASSWORD\\s*\\([^,]*,([^,]*),.*\\))",
+      Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
+  private static final String delimiters = ")\\]},;";
+  private static final Pattern GENERIC_PASSWORD_PATTERN = Pattern.compile(
+      "\\b(PASSWORD|PWD)\\w*[^" + delimiters + "]*(?=[" + delimiters + "])",
+      Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
   /**
    * Encrypt a given message for storage in file or memory.
@@ -1759,7 +1828,7 @@ public final class GemFireXDUtils {
     // this is generated the first time a JVM forms a distributed system
     final String algo;
     if (transformation == null) {
-      transformation = algo = GfxdConstants.PASSWORD_PRIVATE_KEY_ALGO_DEFAULT;
+      algo = GfxdConstants.PASSWORD_PRIVATE_KEY_ALGO_DEFAULT;
     }
     else {
       algo = getPrivateKeyAlgorithm(transformation);
@@ -1841,20 +1910,32 @@ public final class GemFireXDUtils {
    * the password will return null.
    */
   public static String maskCreateUserPasswordFromSQLString(String sql) {
-    Matcher m = CREATE_USER_PATTERN.matcher(sql);
+    Matcher m = USER_PASSWORD_PATTERN.matcher(sql);
     if (m.find()) {
       // check if password is the "?" token
-      String pwd = m.group(1);
+      int groupNo = 2;
+      String pwd = m.group(groupNo);
+      if (pwd == null || pwd.isEmpty()) {
+        pwd = m.group(++groupNo);
+      }
       if ("?".equals(pwd.trim())) {
         return null;
       }
       else {
-        return sql.substring(0, m.start(1)) + "'***'" + sql.substring(m.end(1));
+        return sql.substring(0, m.start(groupNo)) + "'***'" + sql.substring(m.end(groupNo));
       }
     }
     else {
       return sql;
     }
+  }
+
+  /**
+   * Returns SQL string after masking any password provided in a SQL string.
+   * Currently "password=..." and "pwd=..." patterns are masked.
+   */
+  public static String maskGenericPasswordFromSQLString(String sql) {
+    return GENERIC_PASSWORD_PATTERN.matcher(sql).replaceAll("password ***");
   }
 
   public static void throwAssert(String msg) throws AssertFailure {
@@ -2034,7 +2115,7 @@ public final class GemFireXDUtils {
     StandardException se = StandardException.newException(
         SQLState.LANG_DUPLICATE_KEY_CONSTRAINT, eee, constraintType, indexName);
     // don't report constraint violations to logs by default
-    if (!GemFireXDUtils.TraceExecute) {
+    if (!GemFireXDUtils.TraceExecution) {
       se.setReport(StandardException.REPORT_NEVER);
     }
     return se;
@@ -2057,12 +2138,9 @@ public final class GemFireXDUtils {
           + constraintType + " violation for (" + msg + "), oldValue=("
           + oldValue + ") index=" + indexName, eee);
     }
-    StandardException se = StandardException.newException(
-        SQLState.NOT_IMPLEMENTED, eee, constraintType, indexName);
-    // don't report constraint violations to logs by default
-    if (!GemFireXDUtils.TraceExecute) {
-      se.setReport(StandardException.REPORT_NEVER);
-    }
+    StandardException se = StandardException.newException(SQLState.NOT_IMPLEMENTED,
+        eee, "Modification of partitioning column in PUT INTO");
+    se.setReport(StandardException.REPORT_NEVER);
     return se;
   }
 
@@ -2172,9 +2250,13 @@ public final class GemFireXDUtils {
   public static long getDefaultRecoveryDelay() {
     return defaultRecoveryDelay;
   }
-  
+
   public static long getDefaultStartupRecoveryDelay() {
     return defaultStartupRecoveryDelay;
+  }
+
+  public static void setDefaultStartupRecoveryDelay(long delay) {
+    defaultStartupRecoveryDelay = delay;
   }
 
   public static int getDefaultInitialCapacity() {
@@ -2193,14 +2275,12 @@ public final class GemFireXDUtils {
       return true;
     }
     // fallback to DistributionDescriptor
-    final GfxdPartitionResolver spr;
-    if (r.getPartitionAttributes() != null
-        && (spr = (GfxdPartitionResolver)r.getPartitionAttributes()
-            .getPartitionResolver()) != null) {
-      return spr.getDistributionDescriptor().getPersistence();
+    final GemFireContainer container = (GemFireContainer)r.getUserAttribute();
+    if (container == null) return false;
+    if (container.getDistributionDescriptor() != null) {
+      return container.getDistributionDescriptor().getPersistence();
     }
-    final TableDescriptor td = ((GemFireContainer)r.getUserAttribute())
-        .getTableDescriptor();
+    final TableDescriptor td = container.getTableDescriptor();
     try {
       DistributionDescriptor desc;
       if (td != null && (desc = td.getDistributionDescriptor()) != null) {
@@ -2842,8 +2922,8 @@ public final class GemFireXDUtils {
    * to complete.
    * 
    * @param timeout
-   *          the maximum timeout to wait for node initialization; a negative
-   *          value indicates infinite wait
+   *          the maximum timeout to wait for node initialization in milliseconds;
+   *          a negative value indicates infinite wait
    * @param waitForRegionInitializations
    *          also wait for region initializations to be complete (e.g. in case
    *          of persistent regions it can wait for other nodes to startup),
@@ -3075,12 +3155,12 @@ public final class GemFireXDUtils {
   // statics for various derby debug flags used for GemFireXD trace logging
 
   /**
-   * Set to true of one of the different debug flags like
-   * {@link GfxdConstants#TRACE_QUERYDISTRIB} are set or fine level logging
-   * enabled. This is to do minimal tracing of the execution of different
-   * DDLs/DMLs/queries.
+   * Set to true if {@link GfxdConstants#TRACE_EXECUTION} or one of the debug
+   * flags like {@link GfxdConstants#TRACE_QUERYDISTRIB} are set or fine level
+   * logging enabled. This is to do minimal tracing of the execution of
+   * different DDLs/DMLs/queries.
    */
-  public static boolean TraceExecute;
+  public static boolean TraceExecution;
 
   /**
    * Set to true if {@link GfxdConstants#TRACE_QUERYDISTRIB} debug flag is set.
@@ -3315,17 +3395,17 @@ public final class GemFireXDUtils {
     // initialize GFE layer verbose logging as required
     initGFEFlags();
 
-    setTraceExecute(SanityManager.TRACE_ON(GfxdConstants.TRACE_EXECUTION));
+    setTraceExecution(SanityManager.TRACE_ON(GfxdConstants.TRACE_EXECUTION));
 
     TraceSysProcedures = SanityManager
         .TRACE_ON(GfxdConstants.TRACE_SYS_PROCEDURES) ||
-        (TraceExecute && !SanityManager.TRACE_OFF(
+        (TraceExecution && !SanityManager.TRACE_OFF(
             GfxdConstants.TRACE_SYS_PROCEDURES));
   }
 
-  private static void setTraceExecute(boolean force) {
+  private static void setTraceExecution(boolean force) {
 
-    TraceExecute = force || TraceQuery || SanityManager.isFineEnabled
+    TraceExecution = force || TraceQuery || SanityManager.isFineEnabled
         || TXStateProxy.TRACE_EXECUTE || DistributionManager.VERBOSE
         || TraceDBSynchronizer || TraceDBSynchronizerHA || TraceActivation
         || TraceLock || ExclusiveSharedSynchronizer.TRACE_LOCK_COMPACT
@@ -3399,14 +3479,9 @@ public final class GemFireXDUtils {
 
     @Override
     public int hashCode() {
-      int h = 0;
-      if (this.key != null) {
-        h ^= this.key.hashCode();
-      }
-      if (this.val != null) {
-        h ^= this.val.hashCode();
-      }
-      return h;
+      long h1 = this.key != null ? this.key.hashCode() : 0;
+      long h2 = this.val != null ? this.val.hashCode() : 0;
+      return Murmur3_x86_32.hashLong(h1 | (h2 << 32L), 42);
     }
 
     @Override

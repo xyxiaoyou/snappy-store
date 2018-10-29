@@ -22,7 +22,6 @@ import java.io.File;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.math.BigDecimal;
-import java.net.InetAddress;
 import java.sql.*;
 import java.util.*;
 import javax.sql.rowset.serial.SerialBlob;
@@ -31,10 +30,8 @@ import javax.sql.rowset.serial.SerialClob;
 import com.gemstone.gemfire.cache.CacheClosedException;
 import com.gemstone.gemfire.cache.Region;
 import com.gemstone.gemfire.cache.RegionDestroyedException;
-import com.gemstone.gemfire.cache.control.ResourceManager;
 import com.gemstone.gemfire.distributed.internal.DistributionConfig;
 import com.gemstone.gemfire.internal.AvailablePort;
-import com.gemstone.gemfire.internal.SocketCreator;
 import com.gemstone.gemfire.internal.cache.DiskStoreImpl;
 import com.gemstone.gemfire.internal.cache.ForceReattemptException;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
@@ -72,12 +69,10 @@ import com.pivotal.gemfirexd.internal.iapi.reference.Property;
 import com.pivotal.gemfirexd.internal.iapi.services.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.iapi.sql.conn.LanguageConnectionContext;
 import com.pivotal.gemfirexd.internal.iapi.sql.depend.DependencyManager;
-import com.pivotal.gemfirexd.internal.iapi.types.RowLocation;
-import com.pivotal.gemfirexd.internal.iapi.types.UserType;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedStatement;
 import com.pivotal.gemfirexd.internal.impl.jdbc.authentication.AuthenticationServiceBase;
 import com.pivotal.gemfirexd.internal.impl.sql.GenericPreparedStatement;
-import com.pivotal.gemfirexd.jdbc.BugsTest;
+import com.pivotal.gemfirexd.jdbc.Bugs3Test;
 import com.pivotal.gemfirexd.tools.internal.JarTools;
 import com.pivotal.gemfirexd.tools.internal.MiscTools;
 import io.snappydata.test.dunit.RMIException;
@@ -111,10 +106,8 @@ public class BugsDUnit extends DistributedSQLTestBase {
   }
 
   @Override
-  public void tearDown2() throws Exception {
-    super.tearDown2();
-
-    // to do
+  public String reduceLogging() {
+    return "config";
   }
 
   public static class CacheCloser extends GemFireXDQueryObserverAdapter {
@@ -175,11 +168,17 @@ public class BugsDUnit extends DistributedSQLTestBase {
     st.execute("CREATE TABLE app.t1 (c1 int not null, c2 int not null) persistent asynchronous");
 
     PreparedStatement ps = conn.prepareStatement("insert into app.t1 values (?, ?)");
-    for(int i=0; i<2300000; i++) {
+    for (int i = 0; i < 2300000; i++) {
       ps.setInt(1, i);
       ps.setInt(2, i);
-      int cnt = ps.executeUpdate();
-      assertEquals(1, cnt);
+      ps.addBatch();
+      if ((i + 1) % 1000 == 0) {
+        int[] cnts = ps.executeBatch();
+        assertEquals(1000, cnts.length);
+        for (int cnt : cnts) {
+          assertEquals(1, cnt);
+        }
+      }
     }
     st.execute("ALTER TABLE app.t1 ADD OPP_ID int");
     long start = System.currentTimeMillis();
@@ -376,9 +375,8 @@ public class BugsDUnit extends DistributedSQLTestBase {
       skipLocksProps.setProperty("password", "app");
       Connection connC, netConnC;
 
-      final String hostName = SocketCreator.getLocalHost().getHostName();
       final String skipUrl = TestUtil.getProtocol();
-      final String skipNetUrl = TestUtil.getNetProtocol(hostName, netPort);
+      final String skipNetUrl = TestUtil.getNetProtocol("localhost", netPort);
       // check that it is disallowed for normal user
       try {
         connC = DriverManager.getConnection(skipUrl, skipLocksProps);
@@ -444,6 +442,9 @@ public class BugsDUnit extends DistributedSQLTestBase {
       assertTrue(rs.next());
       assertEquals(10000, rs.getInt(1));
       assertFalse(rs.next());
+
+      // drop the explicitly created app user
+      sysSt.execute("call sys.drop_user('app')");
 
       sysConn.close();
       conn.close();
@@ -591,8 +592,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
         .getRandomAvailablePort(AvailablePort.SOCKET);
     NetworkServerControl netServer = DBSynchronizerTestBase
         .startNetworkServer(dbPort);
-    final String derbyDbUrl = "jdbc:derby://"
-        + InetAddress.getLocalHost().getHostName() + ':' + dbPort + "/newDB3;";
+    final String derbyDbUrl = "jdbc:derby://localhost:" + dbPort + "/newDB3;";
     Connection dbConn = DriverManager.getConnection(derbyDbUrl + "create=true");
     Statement dbSt = dbConn.createStatement();
 
@@ -930,12 +930,11 @@ public class BugsDUnit extends DistributedSQLTestBase {
 //      connProps.setProperty("gemfirexd.debug.true",
 //          "TraceSingleHop,TraceClientHA");
 
-      final InetAddress localHost = SocketCreator.getLocalHost();
       //String url = TestUtil.getNetProtocol(localHost.getHostName(), netPort);
       // Connection connClient = DriverManager.getConnection(url,
       // TestUtil.getNetProperties(connProps));
       Connection connClient = TestUtil.getNetConnection(
-          localHost.getHostAddress(), netPort, null, null);
+          "localhost", netPort, null, null);
       connClient.createStatement().execute("create schema trade");
       Statement s = connClient.createStatement();
       s.execute("set current schema trade");
@@ -943,7 +942,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
           + "cust_name varchar(100), addr varchar(100), tid int, primary key (cid))");
       PreparedStatement psInsert = connClient
           .prepareStatement("insert into trade.customers values(?, ?, ?, ?)");
-      for (int i = 0; i < 1; i++) {
+      for (int i = 0; i < 2; i++) {
         psInsert.setInt(1, i);
         psInsert.setString(2, "name" + i);
         psInsert.setString(3, "addr" + i);
@@ -1024,8 +1023,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
     // Use this VM as the network client
     TestUtil.loadNetDriver();
 
-    final InetAddress localHost = SocketCreator.getLocalHost();
-    String url = TestUtil.getNetProtocol(localHost.getHostName(), netPort1);
+    String url = TestUtil.getNetProtocol("localhost", netPort1);
     Connection conn = DriverManager.getConnection(url);
     Statement st = conn.createStatement();
     ResultSet rs = null;
@@ -1066,8 +1064,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
     TestUtil.loadNetDriver();
     Connection conn = null;
 
-    final InetAddress localHost = SocketCreator.getLocalHost();
-    String url = TestUtil.getNetProtocol(localHost.getHostName(), netPort);
+    String url = TestUtil.getNetProtocol("localhost", netPort);
     conn = DriverManager.getConnection(url,
         TestUtil.getNetProperties(new Properties()));
     Statement s = conn.createStatement();
@@ -1193,8 +1190,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
     TestUtil.loadNetDriver();
     Connection conn = null;
 
-    final InetAddress localHost = SocketCreator.getLocalHost();
-    String url = TestUtil.getNetProtocol(localHost.getHostName(), netPort);
+    String url = TestUtil.getNetProtocol("localhost", netPort);
     conn = DriverManager.getConnection(url, new Properties());
     Statement s = conn.createStatement();
 
@@ -1241,7 +1237,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
     TestUtil.loadNetDriver();
     conn = null;
 
-    url = TestUtil.getNetProtocol(localHost.getHostName(), netPort);
+    url = TestUtil.getNetProtocol("localhost", netPort);
     conn = DriverManager.getConnection(url, (new Properties()));
     s = conn.createStatement();
 
@@ -1359,7 +1355,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
     }
     final Properties locatorProps = new Properties();
     setMasterCommonProperties(locatorProps);
-    String locatorBindAddress = SocketCreator.getLocalHost().getHostName();
+    String locatorBindAddress = "localhost";
     int locatorPort = AvailablePort
         .getRandomAvailablePort(AvailablePort.SOCKET);
     _startNewLocator(this.getClass().getName(), getName(), locatorBindAddress,
@@ -2908,6 +2904,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
 
       for (int i = 1; i < 20; ++i) {
         psSec.setInt(1, i);
+        psSec.setString(2, getSymbol(1, 6) + "_" + i);
         psSec.setString(2, getSymbol(1, 8));
         psSec.setString(3, exchanges[i % 7]);
         psSec.setInt(4, 50);
@@ -3376,7 +3373,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
 
   }
 
-  public void testTSMCImportFailureBug() throws Exception {
+  public void testUseCase2ImportFailureBug() throws Exception {
     startVMs(1, 2);
     try {
       Connection conn = TestUtil.getConnection();
@@ -3436,7 +3433,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
     }
   }
 
-  public void testTSMCExecuteBatchBug() throws Exception {
+  public void testUseCase2ExecuteBatchBug() throws Exception {
     final int locPort = AvailablePort
         .getRandomAvailablePort(AvailablePort.SOCKET);
     final Properties props = new Properties();
@@ -3648,17 +3645,17 @@ public class BugsDUnit extends DistributedSQLTestBase {
     ResultSet rs = st.executeQuery("select symbol, exchange, companytype, uid,"
         + " uuid, companyname, companyinfo, note, histPrice, asset, logo, tid,"
         + " pvt from TRADE.COMPANIES where tid >= 105 and tid < 110");
-    BugsTest.checkLobs(rs, clobChars, blobBytes);
+    Bugs3Test.checkLobs(rs, clobChars, blobBytes);
 
     rs = st2.executeQuery("select symbol, exchange, companytype, uid,"
         + " uuid, companyname, companyinfo, note, histPrice, asset, logo, tid,"
         + " pvt from TRADE.COMPANIES where tid >= 105 and tid < 110");
-    BugsTest.checkLobs(rs, clobChars, blobBytes);
+    Bugs3Test.checkLobs(rs, clobChars, blobBytes);
 
     rs = st3.executeQuery("select symbol, exchange, companytype, uid,"
         + " uuid, companyname, companyinfo, note, histPrice, asset, logo, tid,"
         + " pvt from TRADE.COMPANIES where tid >= 105 and tid < 110");
-    BugsTest.checkLobs(rs, clobChars, blobBytes);
+    Bugs3Test.checkLobs(rs, clobChars, blobBytes);
   }
 
   public void testBug47943() throws Exception {
@@ -4262,8 +4259,8 @@ public class BugsDUnit extends DistributedSQLTestBase {
       throw failure[0];
     }
 
-    checkIdentityData(conn, numInserts * numThreads, numInserts * numThreads
-        * 2, numThreads * 2);
+    checkIdentityData(conn, numInserts * numThreads,
+        numInserts * numThreads * 2, numThreads * 2);
   }
 
   private void checkIdentityData(Connection conn, int numInserts, int start,
@@ -4426,8 +4423,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
     Connection conn;
     final Properties connProps = new Properties();
     connProps.setProperty("load-balance", "false");
-    final InetAddress localHost = SocketCreator.getLocalHost();
-    String url = TestUtil.getNetProtocol(localHost.getHostName(), netPort);
+    String url = TestUtil.getNetProtocol("localhost", netPort);
     conn = DriverManager.getConnection(url, connProps);
 
     Statement stmt = conn.createStatement();
@@ -4456,7 +4452,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
     restartVMNums(-2);
     startNetworkServer(2, null, null);
 
-    url = TestUtil.getNetProtocol(localHost.getHostName(), netPort);
+    url = TestUtil.getNetProtocol("localhost", netPort);
     conn = DriverManager.getConnection(url, connProps);
     ps = conn.prepareStatement("insert into trade.txhistory values (?,?,?)");
 
@@ -4580,13 +4576,12 @@ public class BugsDUnit extends DistributedSQLTestBase {
         null, null, true);
 
     getLogWriter().info("About to import data that takes around one minute.");
-    final String localHostName = SocketCreator.getLocalHost().getHostName();
     final ByteArrayOutputStream output = new ByteArrayOutputStream(20 * 1024);
     try {
       MiscTools.outputStream = new PrintStream(output);
       MiscTools.main(new String[] { "run", "-path=" + basePath + "/data/",
           "-file=" + basePath + "/queries/import.sql",
-          "-client-port=" + netPort1, "-client-bind-address=" + localHostName,
+          "-client-port=" + netPort1, "-client-bind-address=localhost",
           "-user=" + sysUser, "-password=" + sysPwd });
       getLogWriter().info(output.toString());
     } finally {
@@ -4605,7 +4600,7 @@ public class BugsDUnit extends DistributedSQLTestBase {
 
   }
 
-  public void testTMG_GEMXD_1() throws Exception {
+  public void testBugGEMXD_1() throws Exception {
     reduceLogLevelForTest("config");
     // Start a client and some server VMs
     startVMs(1, 3);
@@ -4958,6 +4953,9 @@ public class BugsDUnit extends DistributedSQLTestBase {
       // Now bring down the first server
       new ServerDowner(1, exceptions2).run();
 
+      // wait for recovery to complete on restarted server 2
+      GfxdSystemProcedures.REBALANCE_ALL_BUCKETS();
+
       // At this point a bucket should each be on the first new server and the restarted server
 
       stmt.execute("select count(*) from ODS.POSTAL_ADDRESS");
@@ -4978,7 +4976,8 @@ public class BugsDUnit extends DistributedSQLTestBase {
       invokeInEveryVM(new SerializableRunnable() {
         @Override
         public void run() {
-          if (ServerGroupUtils.isDataStore()) {
+          if (GemFireCacheImpl.getInstance() != null &&
+              ServerGroupUtils.isDataStore()) {
             String regionPath = "/ODS/POSTAL_ADDRESS";
             Region r = Misc.getRegionByPath(regionPath);
             PartitionedRegion pr = (PartitionedRegion)r;

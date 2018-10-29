@@ -75,6 +75,7 @@ import com.gemstone.gemfire.distributed.internal.membership.MemberAttributes;
 import com.gemstone.gemfire.distributed.internal.membership.MemberFactory;
 import com.gemstone.gemfire.distributed.internal.membership.MembershipManager;
 import com.gemstone.gemfire.distributed.internal.membership.NetView;
+import com.gemstone.gemfire.distributed.internal.membership.jgroup.JGroupMember;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
 import com.gemstone.gemfire.internal.Assert;
 import com.gemstone.gemfire.internal.LogWriterImpl;
@@ -90,8 +91,6 @@ import com.gemstone.gemfire.internal.admin.remote.RemoteGfManagerAgent;
 import com.gemstone.gemfire.internal.admin.remote.RemoteTransportConfig;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
 import com.gemstone.gemfire.internal.cache.InitialImageOperation;
-import com.gemstone.gemfire.internal.concurrent.CFactory;
-import com.gemstone.gemfire.internal.concurrent.CM;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.sequencelog.MembershipLogger;
 import com.gemstone.gemfire.internal.shared.Version;
@@ -180,8 +179,12 @@ public final class DistributionManager
     Integer.getInteger("DistributionManager.MAX_WAITING_THREADS", Integer.MAX_VALUE).intValue();
 
   public static final int MAX_THREADS = Integer.getInteger("DistributionManager.MAX_THREADS", Math.max(Runtime.getRuntime().availableProcessors()*4, 100)).intValue();
-  public static final int MAX_PR_THREADS = Integer.getInteger("DistributionManager.MAX_PR_THREADS", Math.max(Runtime.getRuntime().availableProcessors()*4, 16)).intValue();
-  public static final int MAX_FE_THREADS = Integer.getInteger("DistributionManager.MAX_FE_THREADS", Math.max(Runtime.getRuntime().availableProcessors()*4, 16)).intValue();
+  public static final int MAX_PR_THREADS_SET = Integer.getInteger("DistributionManager.MAX_PR_THREADS", -1);
+  public static final int MAX_PR_THREADS = MAX_PR_THREADS_SET > 0 ? MAX_PR_THREADS_SET
+      : Math.max(Runtime.getRuntime().availableProcessors() * 4, 32);
+  public static final int MAX_FE_THREADS = Integer.getInteger(
+      "DistributionManager.MAX_FE_THREADS",
+      Math.max(Runtime.getRuntime().availableProcessors() * 4, 48));
   //    Integer.getInteger("DistributionManager.MAX_THREADS", max(Runtime.getRuntime().availableProcessors()*2, 2)).intValue();
 
   public static final int INCOMING_QUEUE_LIMIT =
@@ -487,9 +490,6 @@ public final class DistributionManager
       so we can see if delivery would block */
   private ThrottlingMemLinkedQueueWithDMStats serialQueue;
 
-  /** a map keyed on InternalDistributedMember, to direct channels to other systems */
-  //protected final Map channelMap = CFactory.createCM();
-
   protected volatile boolean readyForMessages = false;
 
   /**
@@ -788,8 +788,6 @@ public final class DistributionManager
     }
     @Override
     public String cancelInProgress() {
-      checkFailure();
-
       // remove call to validateDM() to fix bug 38356
       
       if (dm.shutdownMsgSent) {
@@ -1535,7 +1533,7 @@ public final class DistributionManager
     StringBuffer sb = new StringBuffer();
     Object leadObj = v.getLeadMember();
     InternalDistributedMember lead = leadObj==null? null
-                            : new InternalDistributedMember(v.getLeadMember());
+                            : new InternalDistributedMember((JGroupMember)v.getLeadMember());
     sb.append("[");
     Iterator it = v.iterator();
     while (it.hasNext()) {
@@ -3357,8 +3355,8 @@ public final class DistributionManager
         int managerType = member.getVmKind();
         if (managerType == ADMIN_ONLY_DM_TYPE)
           continue;
-        if (managerType == LOCATOR_DM_TYPE) // DARREL TODO: is it now ok for the locator to be the elder?
-          continue;
+        /*if (managerType == LOCATOR_DM_TYPE) // DARREL TODO: is it now ok for the locator to be the elder?
+          continue;*/
         
         // Fix for #45566.  Using a surprise member as the elder can cause a
         // deadlock.
@@ -3381,8 +3379,8 @@ public final class DistributionManager
       int managerType = member.getVmKind();
       if (managerType == ADMIN_ONLY_DM_TYPE)
         continue;
-      if (managerType == LOCATOR_DM_TYPE) // DARREL TODO: is it now ok for the locator to be the elder?
-        continue;
+/*      if (managerType == LOCATOR_DM_TYPE) // DARREL TODO: is it now ok for the locator to be the elder?
+        continue;*/
 
       // Fix for #45566.  Using a surprise member as the elder can cause a
       // deadlock.
@@ -4352,7 +4350,7 @@ public final class DistributionManager
    * Return the function message-processing executor 
    */
   @Override
-  public Executor getFunctionExcecutor() {
+  public ExecutorService getFunctionExcecutor() {
     if (this.functionExecutionThread != null) {
       return this.functionExecutionThread;
     } else {
@@ -4448,7 +4446,8 @@ public final class DistributionManager
   }
 
   /* -----------------------------Health Monitor------------------------------ */
-  private final CM hmMap = CFactory.createCM();
+  private final ConcurrentHashMap<InternalDistributedMember, HealthMonitor> hmMap =
+      new ConcurrentHashMap<>();
 
   /**
    * Returns the health monitor for this distribution manager and owner.
@@ -4458,7 +4457,7 @@ public final class DistributionManager
    * @since 3.5
    */
   public HealthMonitor getHealthMonitor(InternalDistributedMember owner) {
-    return (HealthMonitor)this.hmMap.get(owner);
+    return this.hmMap.get(owner);
   }
   /**
    * Returns the health monitor for this distribution manager.
@@ -4590,7 +4589,8 @@ public final class DistributionManager
    */
   static private class SerialQueuedExecutorPool  {
     /** To store the serial threads */
-    CM serialQueuedExecutorMap = CFactory.createCM(MAX_SERIAL_QUEUE_THREAD);
+    ConcurrentHashMap<Integer, SerialQueuedExecutorWithDMStats> serialQueuedExecutorMap =
+        new ConcurrentHashMap<>(MAX_SERIAL_QUEUE_THREAD);
     
     /** To store the queue associated with thread */
     Map serialQueuedMap = new HashMap(MAX_SERIAL_QUEUE_THREAD);
@@ -4720,7 +4720,7 @@ public final class DistributionManager
     public SerialQueuedExecutorWithDMStats getSerialExecutor(InternalDistributedMember sender) {
       SerialQueuedExecutorWithDMStats executor = null;      
       Integer queueId = getQueueId(sender, true);
-      if ((executor = (SerialQueuedExecutorWithDMStats)serialQueuedExecutorMap.get(queueId)) != null){
+      if ((executor = serialQueuedExecutorMap.get(queueId)) != null){
         return executor;
       }
       // If executor doesn't exists for this sender, create one.

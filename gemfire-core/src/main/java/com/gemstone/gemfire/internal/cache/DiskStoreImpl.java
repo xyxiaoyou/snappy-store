@@ -14,6 +14,25 @@
  * permissions and limitations under the License. See accompanying
  * LICENSE file.
  */
+/*
+ * Changes for SnappyData distributed computational and data platform.
+ *
+ * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
 package com.gemstone.gemfire.internal.cache;
 
 import java.io.File;
@@ -25,28 +44,8 @@ import java.net.InetAddress;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -57,6 +56,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import com.gemstone.gemfire.CancelCriterion;
 import com.gemstone.gemfire.CancelException;
+import com.gemstone.gemfire.GemFireIOException;
 import com.gemstone.gemfire.StatisticsFactory;
 import com.gemstone.gemfire.SystemFailure;
 import com.gemstone.gemfire.cache.Cache;
@@ -71,9 +71,7 @@ import com.gemstone.gemfire.distributed.DistributedSystem;
 import com.gemstone.gemfire.distributed.internal.InternalDistributedSystem;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
-import com.gemstone.gemfire.internal.ByteArrayDataInput;
 import com.gemstone.gemfire.internal.FileUtil;
-import com.gemstone.gemfire.internal.InsufficientDiskSpaceException;
 import com.gemstone.gemfire.internal.LogWriterImpl;
 import com.gemstone.gemfire.internal.NanoTimer;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl.StaticSystemCallbacks;
@@ -86,19 +84,7 @@ import com.gemstone.gemfire.internal.cache.control.MemoryThresholds.MemoryState;
 import com.gemstone.gemfire.internal.cache.control.ResourceListener;
 import com.gemstone.gemfire.internal.cache.lru.LRUAlgorithm;
 import com.gemstone.gemfire.internal.cache.lru.LRUStatistics;
-import com.gemstone.gemfire.internal.cache.persistence.BackupInspector;
-import com.gemstone.gemfire.internal.cache.persistence.BackupManager;
-import com.gemstone.gemfire.internal.cache.persistence.BytesAndBits;
-import com.gemstone.gemfire.internal.cache.persistence.DiskExceptionHandler;
-import com.gemstone.gemfire.internal.cache.persistence.DiskRecoveryStore;
-import com.gemstone.gemfire.internal.cache.persistence.DiskRegionView;
-import com.gemstone.gemfire.internal.cache.persistence.DiskStoreFilter;
-import com.gemstone.gemfire.internal.cache.persistence.DiskStoreID;
-import com.gemstone.gemfire.internal.cache.persistence.OplogType;
-import com.gemstone.gemfire.internal.cache.persistence.PRPersistentConfig;
-import com.gemstone.gemfire.internal.cache.persistence.PersistentMemberID;
-import com.gemstone.gemfire.internal.cache.persistence.PersistentMemberPattern;
-import com.gemstone.gemfire.internal.cache.persistence.RestoreScript;
+import com.gemstone.gemfire.internal.cache.persistence.*;
 import com.gemstone.gemfire.internal.cache.snapshot.GFSnapshot;
 import com.gemstone.gemfire.internal.cache.snapshot.GFSnapshot.SnapshotWriter;
 import com.gemstone.gemfire.internal.cache.snapshot.SnapshotPacket.SnapshotRecord;
@@ -111,10 +97,11 @@ import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.offheap.OffHeapHelper;
 import com.gemstone.gemfire.internal.offheap.annotations.Released;
 import com.gemstone.gemfire.internal.offheap.annotations.Retained;
-import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.shared.Version;
 import com.gemstone.gnu.trove.THashMap;
 import com.gemstone.gnu.trove.THashSet;
+
+import static com.gemstone.gemfire.internal.cache.GemFireCacheImpl.sysProps;
 
 /**
  * Represents a (disk-based) persistent store for region data. Used for both
@@ -132,10 +119,10 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
 
   private static final String BACKUP_DIR_PREFIX = "dir";
 
-  private static final SystemProperties sysProps = SystemProperties
-      .getServerInstance();
   public static final boolean TRACE_RECOVERY = sysProps.getBoolean(
       "disk.TRACE_RECOVERY", false);
+  public static final boolean TRACE_READS = sysProps.getBoolean(
+      "disk.TRACE_READS", false);
   public static final boolean TRACE_WRITES = sysProps.getBoolean(
       "disk.TRACE_WRITES", false);
   public static final boolean KRF_DEBUG = sysProps.getBoolean(
@@ -242,16 +229,6 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
       "MAX_OPLOGS_PER_COMPACTION",
       sysProps.getInteger("MAX_OPLOGS_PER_ROLL", 1));
 
-  public static final int MAX_CONCURRENT_COMPACTIONS = sysProps.getInteger(
-      "MAX_CONCURRENT_COMPACTIONS",
-      sysProps.getInteger("MAX_CONCURRENT_ROLLS", 1));
-
-  /**
-   * This system property indicates that maximum number of delayed write
-   * tasks that can be pending before submitting the tasks start blocking. 
-   * These tasks are things like unpreblow oplogs, delete oplogs, etc. 
-   */
-  public static final int MAX_PENDING_TASKS = sysProps.getInteger("disk.MAX_PENDING_TASKS", 6);
   /**
    * This system property indicates that IF should also be preallocated. This property 
    * will be used in conjunction with the PREALLOCATE_OPLOGS property. If PREALLOCATE_OPLOGS
@@ -410,12 +387,19 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
    * 
    */
   private DiskStoreID diskStoreID;
-  
-  private final ThreadPoolExecutor diskStoreTaskPool;
-  
-  private final ThreadPoolExecutor delayedWritePool;
+
   private volatile Future lastDelayedWrite;
-  
+
+  /**
+   * Currently active disk block sorter used by region iterators for
+   * cross iterator sorting in case multiple concurrent iterators are open.
+   * The iterators will grab hold of currently active sorter and submit their
+   * disk blocks to be sorted and at some point one of those iterators will
+   * open the sorter for reading at which point no new blocks can be added
+   * and a new current sorter will be created.
+   */
+  private final DiskBlockSortManager sortManager;
+
   // ///////////////////// Constructors /////////////////////////
 
   private static int calcCompactionThreshold(int ct) {
@@ -559,6 +543,8 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
 
     // setFirstChild(getSortedOplogs());
 
+    this.sortManager = new DiskBlockSortManager();
+
     // complex init
     if (isCompactionPossible() && !isOfflineCompacting()) {
       this.oplogCompactor = new OplogCompactor();
@@ -566,23 +552,6 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     } else {
       this.oplogCompactor = null;
     }
-    
-    int MAXT = DiskStoreImpl.MAX_CONCURRENT_COMPACTIONS;
-    final ThreadGroup compactThreadGroup = LogWriterImpl.createThreadGroup("Oplog Compactor Thread Group", this.logger);
-    final ThreadFactory compactThreadFactory = GemfireCacheHelper.CreateThreadFactory(compactThreadGroup, "Idle OplogCompactor");
-    this.diskStoreTaskPool = new ThreadPoolExecutor(MAXT, MAXT, 10, TimeUnit.SECONDS,
-                                             new LinkedBlockingQueue(),
-                                             compactThreadFactory);
-    this.diskStoreTaskPool.allowCoreThreadTimeOut(true);
-    
-    
-    final ThreadGroup deleteThreadGroup = LogWriterImpl.createThreadGroup("Oplog Delete Thread Group", this.logger);
-
-    final ThreadFactory deleteThreadFactory = GemfireCacheHelper.CreateThreadFactory(deleteThreadGroup, "Oplog Delete Task");
-    this.delayedWritePool = new ThreadPoolExecutor(1, 1, 10, TimeUnit.SECONDS,
-                 new LinkedBlockingQueue(MAX_PENDING_TASKS),
-                 deleteThreadFactory, new ThreadPoolExecutor.CallerRunsPolicy());
-    this.delayedWritePool.allowCoreThreadTimeOut(true);
 
     // register with ResourceManager to adjust async queue size
     InternalResourceManager irm = this.cache.getResourceManager();
@@ -683,6 +652,10 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
    */
   public DiskStoreStats getStats() {
     return this.stats;
+  }
+
+  public final DiskBlockSortManager getSortManager() {
+    return this.sortManager;
   }
 
   public Map<Long, AbstractDiskRegion> getAllDiskRegions() {
@@ -786,17 +759,16 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
    * 
    * @param entry
    *          The entry which is going to be written to disk
-   * @param isSerializedObject
-   *          Do the bytes in <code>value</code> contain a serialized object (or
-   *          an actually <code>byte</code> array)?
+   * @param value
+   *          The <code>ValueWrapper</code> for the byte data
    * @throws RegionClearedException
    *           If a clear operation completed before the put operation completed
    *           successfully, resulting in the put operation to abort.
    * @throws IllegalArgumentException
    *           If <code>id</code> is less than zero
    */
-  final void put(LocalRegion region, DiskEntry entry, byte[] value,
-      boolean isSerializedObject, boolean async) throws RegionClearedException {
+  final void put(LocalRegion region, DiskEntry entry, DiskEntry.Helper.ValueWrapper value,
+      boolean async) throws RegionClearedException {
     DiskRegion dr = region.getDiskRegion();
     DiskId id = entry.getDiskId();
     if (dr.isBackup() && id.getKeyId() < 0) {
@@ -842,9 +814,9 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
           // modify and not create
           OplogSet oplogSet = getOplogSet(dr);
           if (doingCreate) {
-            oplogSet.create(region, entry, value, isSerializedObject, async);
+            oplogSet.create(region, entry, value, async);
           } else {
-            oplogSet.modify(region, entry, value, isSerializedObject, async);
+            oplogSet.modify(region, entry, value, async);
           }
         } else {
           throw new RegionClearedException(
@@ -926,10 +898,9 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
           return convertBytesAndBitsIntoObject(bb);
         } catch (IllegalArgumentException e) {
           count++;
-          this.logger.info(LocalizedStrings.DEBUG,
-              "DiskRegion: Tried " + count
+          this.logger.info(LocalizedStrings.DEBUG, "DiskRegion: Tried " + count
                   + ", getBytesAndBitsWithoutLock returns wrong byte array: "
-                  + Arrays.toString(bb.getBytes()));
+                  + bb);
           ex = e;
         }
       } // while
@@ -968,28 +939,36 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
   }
 
   /**
-   * Given a BytesAndBits object convert it to the relevant Object (deserialize
-   * if necessary) and return the object
-   * 
-   * @param bb
-   * @return the converted object
+   * Given a BytesAndBits object either convert it to the relevant Object
+   * (deserialize if necessary) or return the serialized blob.
    */
-  static Object convertBytesAndBitsIntoObject(BytesAndBits bb) {
-    byte[] bytes = bb.getBytes();
+  private static Object convertBytesAndBits(BytesAndBits bb, boolean asObject) {
     Object value;
     if (EntryBits.isInvalid(bb.getBits())) {
       value = Token.INVALID;
     } else if (EntryBits.isSerialized(bb.getBits())) {
-      value = DiskEntry.Helper
-          .readSerializedValue(bytes, bb.getVersion(), null, true);
+      value = DiskEntry.Helper.readSerializedValue(bb, asObject);
     } else if (EntryBits.isLocalInvalid(bb.getBits())) {
       value = Token.LOCAL_INVALID;
     } else if (EntryBits.isTombstone(bb.getBits())) {
       value = Token.TOMBSTONE;
     } else {
-      value = DiskEntry.Helper.readRawValue(bytes, bb.getVersion(), null);
+      value = DiskEntry.Helper.readRawValue(bb);
     }
+    // buffer will no longer be used so clean it up eagerly
+    bb.release();
     return value;
+  }
+
+  /**
+   * Given a BytesAndBits object convert it to the relevant Object (deserialize
+   * if necessary) and return the object
+   *
+   * @param bb
+   * @return the converted object
+   */
+  static Object convertBytesAndBitsIntoObject(BytesAndBits bb) {
+    return convertBytesAndBits(bb, true);
   }
 
   /**
@@ -999,25 +978,12 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
    * @return the converted object
    */
   static Object convertBytesAndBitsToSerializedForm(BytesAndBits bb) {
-    final byte[] bytes = bb.getBytes();
-    Object value;
-    if (EntryBits.isInvalid(bb.getBits())) {
-      value = Token.INVALID;
-    } else if (EntryBits.isSerialized(bb.getBits())) {
-      value = DiskEntry.Helper
-          .readSerializedValue(bytes, bb.getVersion(), null, false);
-    } else if (EntryBits.isLocalInvalid(bb.getBits())) {
-      value = Token.LOCAL_INVALID;
-    } else if (EntryBits.isTombstone(bb.getBits())) {
-      value = Token.TOMBSTONE;
-    } else {
-      value = DiskEntry.Helper.readRawValue(bytes, bb.getVersion(), null);
-    }
-    return value;
+    return convertBytesAndBits(bb, false);
   }
 
   // CLEAR_BB was added in reaction to bug 41306
-  private final BytesAndBits CLEAR_BB = new BytesAndBits(null, (byte) 0);
+  static final BytesAndBits CLEAR_BB = new BytesAndBits(
+      DiskEntry.Helper.NULL_BUFFER, (byte) 0);
 
   /**
    * Gets the Object from the OpLog . It can be invoked from OpLog , if by the
@@ -1615,6 +1581,9 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     }
     while (!this.flusherThreadTerminated) {
       try {
+        // check if cache is going down and in that case also terminate the
+        // flusher thread.
+        getCache().getCancelCriterion().checkCancelInProgress(null);
         this.flusherThread.join(100);
       } catch (InterruptedException ie) {
         Thread.currentThread().interrupt();
@@ -1853,6 +1822,7 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
         logger.fine("Async writer thread started");
       }
       boolean doingFlush = false;
+      boolean terminateFlusherThread = true;
       try {
         while (waitUntilFlushIsReady()) {
           int drainCount = fillDrainList();
@@ -1944,7 +1914,12 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
         // logger.info(LocalizedStrings.DEBUG, "DEBUG", ignore);
         // the above checkCancelInProgress will throw a CancelException
         // when we are being shutdown
-      } catch(Throwable t) {
+      } catch (Throwable t) {
+        getCache().getCancelCriterion().checkCancelInProgress(t);
+        if (!(t instanceof IOException)) {
+          terminateFlusherThread = false;
+          throw new GemFireIOException("Exception encountered in flusher thread: " + t.getMessage(), t);
+        }
         logger.severe(LocalizedStrings.DiskStoreImpl_FATAL_ERROR_ON_FLUSH, t);
         fatalDae = new DiskAccessException(LocalizedStrings.DiskStoreImpl_FATAL_ERROR_ON_FLUSH.toLocalizedString(), t, DiskStoreImpl.this);
       } finally {
@@ -1954,11 +1929,13 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
           logger.fine("Async writer thread stopped. Pending opcount="
               + asyncQueue.size());
         }
-        flusherThreadTerminated = true;
-        stopFlusher = true; // set this before calling handleDiskAccessException
-        // or it will hang
-        if (fatalDae != null) {
-          handleDiskAccessException(fatalDae, true);
+        if (terminateFlusherThread) {
+          flusherThreadTerminated = true;
+          stopFlusher = true; // set this before calling handleDiskAccessException
+          // or it will hang
+          if (fatalDae != null) {
+            handleDiskAccessException(fatalDae, true);
+          }
         }
       }
     }
@@ -2234,7 +2211,11 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     // schedule index recovery atmost once
     if (markIndexRecoveryScheduled()) {
       IndexRecoveryTask task = new IndexRecoveryTask(allOplogs, recreateIndexes);
-      executeDiskStoreTask(task);
+      // other disk store threads wait for this task, so use a different
+      // thread pool for execution if possible (not in loner VM)
+      ThreadPoolExecutor executor = getCache()
+          .getWaitingThreadPoolOrDiskWritePool();
+      executeDiskStoreTask(task, executor, true);
     }
   }
 
@@ -2543,7 +2524,6 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
       if (rte != null) {
         throw rte;
       }
-      stopDiskStoreTaskPool();
     } finally {
       this.closed = true;
     }
@@ -4146,7 +4126,6 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
       views.add(ph);
     }
 
-    final ByteArrayDataInput in = new ByteArrayDataInput();
     for (Map.Entry<String, List<PlaceHolderDiskRegion>> entry : regions
         .entrySet()) {
       String fname = entry.getKey().substring(1).replace('/', '-');
@@ -4176,7 +4155,7 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
             if (value == null && re instanceof DiskEntry) {
               DiskEntry de = (DiskEntry) re;
               DiskEntry.Helper.recoverValue(de, de.getDiskId().getOplogId(),
-                  ((DiskRecoveryStore) drv), in);
+                  ((DiskRecoveryStore) drv));
               // TODO:KIRK:OK Rusty's code was value = de.getValueWithContext(drv);
               value = de._getValueRetain(drv, true); // OFFHEAP: passed to SnapshotRecord who copies into byte[]; so for now copy to heap CD
             }
@@ -4209,6 +4188,14 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     }
     System.out.println("Total number of region entries in this disk store is: "
         + getLiveEntryCount());
+    String r = getDiskInitFile().getInconsistencyReport();
+    if (r != null) {
+      System.out.print(r);
+    }
+    String cbinfo = getDiskInitFile().getColumnBufferInfo();
+    if (cbinfo != null) {
+      System.out.print(cbinfo);
+    }
   }
 
   private int liveEntryCount;
@@ -4788,6 +4775,8 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
           }
           for (SortedIndexRecoveryJob indexRecoveryJob : allJobs) {
             indexRecoveryJob.waitForJobs(0);
+            //Approximating the index size after complete index recovery. Assumption is that sufficient memory is there.
+            indexRecoveryJob.getIndexContainer().accountMemoryForIndex(0,true);
           }
           if (!newIndexes.isEmpty()) {
             for (SortedIndexContainer index : newIndexes) {
@@ -4852,8 +4841,11 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
           DiskStoreObserver.startAsyncValueRecovery(DiskStoreImpl.this);
           // defer regions marked in first pass
           for (Oplog oplog : oplogSet) {
-            oplog.recoverValuesIfNeeded(currentAsyncValueRecoveryMap,
-                deferredRegions, currentAsyncValueRecoveryMap);
+            // If returns false further recovery is not possible due to UMM limit.
+            if (!oplog.recoverValuesIfNeeded(currentAsyncValueRecoveryMap,
+                deferredRegions, currentAsyncValueRecoveryMap)){
+              break;
+            }
           }
         } catch (CancelException ignore) {
           // do nothing
@@ -4895,8 +4887,11 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
               }
             }
             for (Oplog oplog : oplogSet) {
-              oplog.recoverValuesIfNeeded(deferredRegions, null,
-                  currentAsyncValueRecoveryMap);
+              // If returns false further recovery is not possible due to UMM limit.
+              if (!oplog.recoverValuesIfNeeded(deferredRegions, null,
+                  currentAsyncValueRecoveryMap)){
+                break;
+              }
             }
           } catch (CancelException ignore) {
             // do nothing
@@ -4944,28 +4939,30 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
   private static void markBackgroundTaskThread() {
     backgroundTaskThread.set(Boolean.TRUE);
   }
-  
+
   /**
    * Execute a task which must be performed asnychronously, but has no requirement
    * for timely execution. This task pool is used for compactions, creating KRFS, etc.
    * So some of the queued tasks may take a while.
    */
   public boolean executeDiskStoreTask(final Runnable runnable) {
-    return executeDiskStoreTask(runnable, this.diskStoreTaskPool) != null;
+    return executeDiskStoreTask(runnable,
+        getCache().getDiskStoreTaskPool(), true) != null;
   }
-  
-  /** 
+
+  /**
    * Execute a task asynchronously, or in the calling thread if the bound
    * is reached. This pool is used for write operations which can be delayed,
    * but we have a limit on how many write operations we delay so that
    * we don't run out of disk space. Used for deletes, unpreblow, RAF close, etc.
    */
   public boolean executeDelayedExpensiveWrite(Runnable task) {
-    Future<?> f = executeDiskStoreTask(task, this.delayedWritePool);
+    Future<?> f = (Future<?>)executeDiskStoreTask(task,
+        getCache().getDiskDelayedWritePool(), false);
     lastDelayedWrite = f;
     return f != null;
   }
-  
+
   /**
    * Wait for any current operations in the delayed write pool. Completion
    * of this method ensures that the writes have completed or the pool was shutdown
@@ -4983,10 +4980,11 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     }
   }
 
-  private Future<?> executeDiskStoreTask(final Runnable runnable, ThreadPoolExecutor executor) {
- // schedule another thread to do it
+  private Object executeDiskStoreTask(final Runnable runnable,
+      ThreadPoolExecutor executor, boolean async) {
+    // schedule another thread to do it
     incBackgroundTasks();
-    Future<?> result = executeDiskStoreTask(new DiskStoreTask() {
+    Object result = executeDiskStoreTask(new DiskStoreTask() {
       public void run() {
         try {
           markBackgroundTaskThread(); // for bug 42775
@@ -5000,18 +4998,24 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
       public void taskCancelled() {
         decBackgroundTasks();
       }
-    }, executor);
+    }, executor, async);
 
-    if(result == null) {
+    if (result == null) {
       decBackgroundTasks();
     }
 
     return result;
   }
 
-  private Future<?> executeDiskStoreTask(DiskStoreTask r, ThreadPoolExecutor executor) {
+  private Object executeDiskStoreTask(DiskStoreTask r,
+      ThreadPoolExecutor executor, boolean async) {
     try {
-      return executor.submit(r);
+      if (async) {
+        executor.execute(r);
+        return Boolean.TRUE;
+      } else {
+        return executor.submit(r);
+      }
     } catch (RejectedExecutionException ex) {
       if (this.logger.fineEnabled()) {
         this.logger.fine("Ignored compact schedule during shutdown", ex);
@@ -5020,32 +5024,6 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     return null;
   }
 
-  private void stopDiskStoreTaskPool() {
-    if (this.logger.infoEnabled()) {
-      this.logger.convertToLogWriter().info("Stopping DiskStoreTaskPool");
-    }
-    shutdownPool(diskStoreTaskPool);
-    
-    //Allow the delayed writes to complete
-    delayedWritePool.shutdown();
-    try {
-      delayedWritePool.awaitTermination(1, TimeUnit.SECONDS);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    }
-  }
-  
-  private void shutdownPool(ThreadPoolExecutor pool) {
- // All the regions have already been closed
-    // so this pool shouldn't be doing anything.
-    List<Runnable> l = pool.shutdownNow();
-    for (Runnable runnable : l) {
-      if (l instanceof DiskStoreTask) {
-        ((DiskStoreTask) l).taskCancelled();
-      }
-    }
-  }
-  
   public void writeRVVGC(DiskRegion dr, LocalRegion region) {
     if (region != null && !region.getConcurrencyChecksEnabled()) {
       return;
@@ -5129,7 +5107,7 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     // If the GC version is less than what we have on disk, go ahead
     // and record it.
     if (memoryGCVersion <= diskVersion) {
-      diskRVV.recordGCVersion(member, memoryGCVersion);
+      diskRVV.recordGCVersion(member, memoryGCVersion, null);
     }
 
   }
@@ -5211,7 +5189,7 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
         endMillis = Long.MAX_VALUE;
       }
     }
-    final long loopMillis = Math.min(1000L, waitMillis);
+    final long loopMillis = Math.min(200L, waitMillis);
     synchronized (this.indexRecoveryState) {
       while (this.indexRecoveryState[0] < expected && !isClosing()) {
         Throwable t = null;

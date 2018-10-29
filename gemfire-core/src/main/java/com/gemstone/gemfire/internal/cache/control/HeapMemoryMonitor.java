@@ -53,6 +53,7 @@ import com.gemstone.gemfire.internal.cache.control.InternalResourceManager.Resou
 import com.gemstone.gemfire.internal.cache.control.MemoryThresholds.MemoryState;
 import com.gemstone.gemfire.internal.cache.control.ResourceAdvisor.ResourceManagerProfile;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
+import com.gemstone.gemfire.internal.shared.LauncherBase;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.util.LogService;
 
@@ -82,7 +83,8 @@ public final class HeapMemoryMonitor implements NotificationListener,
       .getProperty("gemfire.ResourceManager.HEAP_SURVIVOR_POOL");
 
   // Property for setting the JVM polling interval (below)
-  public static final String POLLER_INTERVAL_PROP = "gemfire.heapPollerInterval";
+  public static final String POLLER_INTERVAL_PROP =
+      LauncherBase.POLLER_INTERVAL_PROP;
   
    // Internal for polling the JVM for changes in heap memory usage.
   private static final int POLLER_INTERVAL =
@@ -989,7 +991,11 @@ public void stopMonitoring() {
     }
     return this.resourceAdvisor.isHeapCritical(member);
   }
-  
+
+  public final boolean isCriticalUp() {
+    return this.mostRecentEvent.getState().isCritical();
+  }
+
   class LocalHeapStatListener implements LocalStatListener {
     /* (non-Javadoc)
      * @see com.gemstone.gemfire.internal.LocalStatListener#statValueChanged(double)
@@ -1112,5 +1118,29 @@ public void stopMonitoring() {
    */
   public static void setTestBytesUsedForThresholdSet(final long newTestBytesUsedForThresholdSet) {
     testBytesUsedForThresholdSet = newTestBytesUsedForThresholdSet;
+  }
+
+  /**
+   * This method will check if our accounted memory is less than the JVM accounted memory, we will
+   * invoke an explicit GC. This code is experimental and we need to see how this behave in actual workload.
+   * @param accountedMemory
+   * @return whether we should allow memory request to SnappyUnifiedManager.
+   */
+  public boolean failMemoryRequest(long accountedMemory) {
+    long bytesUsed = getBytesUsed();
+    if (bytesUsed > this.getThresholds().getCriticalThresholdBytes()) {
+      if (accountedMemory < bytesUsed) {
+        Thread.yield();  // Give some other threads chance. May vacate some space
+      }
+      // check the health again
+      if (getBytesUsed() > this.getThresholds().getCriticalThresholdBytes()) {
+        updateStateAndSendEvent();
+        return true;
+      } else {
+        return false;
+      }
+    } else {
+      return false;
+    }
   }
 }

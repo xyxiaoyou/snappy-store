@@ -107,8 +107,8 @@ public interface FabricService {
    * be called multiple times to bind to multiple network interfaces.
    * 
    * By default this starts DRDA server ({@link #startDRDAServer} unless
-   * {@link ClientSharedUtils#USE_THRIFT_AS_DEFAULT} system property is set in
-   * which case it start a Thrift server {@link #startThriftServer}
+   * {@link ClientSharedUtils#USE_THRIFT_AS_DEFAULT_PROP} system property is
+   * set in which case it start a Thrift server {@link #startThriftServer}
    * 
    * @param bindAddress
    *          The host name or IP address to bind the network server. If this is
@@ -199,6 +199,16 @@ public interface FabricService {
    * @return {@linkplain State}
    */
   State status();
+
+  /**
+   * Used to display the status of this service in SYS.MEMBERS.
+   * Normally same as {@link #status()} but can be overridden
+   * by child classes if they have other components to initialize
+   * before showing the service as running.
+   */
+  default State serviceStatus() {
+    return status();
+  }
 
   /**
    * Test to see whether the FabricService is in the process of reconnecting

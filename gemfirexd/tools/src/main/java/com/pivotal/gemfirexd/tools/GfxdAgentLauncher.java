@@ -55,6 +55,11 @@ public class GfxdAgentLauncher extends GfxdServerLauncher {
     super(baseName);
   }
 
+  @Override
+  public boolean hostData() {
+    return false;
+  }
+
   /**
    * Prints usage information of this program.
    */
@@ -82,8 +87,13 @@ public class GfxdAgentLauncher extends GfxdServerLauncher {
   }
 
   @Override
-  protected boolean setDefaultHeapSize() {
-    return false;
+  protected long getDefaultHeapSizeMB(boolean hostData) {
+    return 1536L;
+  }
+
+  @Override
+  protected long getDefaultSmallHeapSizeMB(boolean hostData) {
+    return 768L;
   }
 
   @Override
@@ -101,11 +111,7 @@ public class GfxdAgentLauncher extends GfxdServerLauncher {
       readPassword(envArgs);
     }
     else if (WAIT_FOR_SYNC.equals(key)) {
-      if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
-        throw new IllegalArgumentException(LocalizedResource.getMessage(
-            "UTIL_GFXD_ExpectedBoolean", WAIT_FOR_SYNC, value));
-      }
-      this.waitForData = "true".equalsIgnoreCase(value);
+      processWaitForSync(value);
     }
     else {
       processUnknownStartOption(key, value, m, vmArgs, props);
@@ -120,7 +126,7 @@ public class GfxdAgentLauncher extends GfxdServerLauncher {
       return incomingVMArgs;
     }
 
-    if (this.maxHeapSize == null) {
+    if (this.maxHeapSize == null && this.initialHeapSize == null) {
       return incomingVMArgs;
     }
 
@@ -139,12 +145,12 @@ public class GfxdAgentLauncher extends GfxdServerLauncher {
   }
 
   @Override
-  protected String getLWCAddressArgName() {
+  protected String getNetworkAddressArgName() {
     return null;
   }
 
   @Override
-  protected String getLWCPortArgName() {
+  protected String getNetworkPortArgName() {
     return null;
   }
 
@@ -267,12 +273,6 @@ public class GfxdAgentLauncher extends GfxdServerLauncher {
     processServerEnv(props);
 
     return options;
-  }
-
-  @Override
-  protected void startRebalanceFactory(final Cache cache,
-      final Map<String, Object> options) {
-    // nothing by default
   }
 
   @Override

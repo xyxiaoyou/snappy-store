@@ -57,11 +57,9 @@ import com.pivotal.gemfirexd.internal.iapi.sql.conn.StatementContext;
 import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.DataDictionary;
 import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.StatementPermission;
 import com.pivotal.gemfirexd.internal.iapi.sql.execute.ExecPreparedStatement;
-import com.pivotal.gemfirexd.internal.iapi.store.access.TransactionController;
 import com.pivotal.gemfirexd.internal.iapi.util.IdUtil;
 import com.pivotal.gemfirexd.internal.iapi.util.StringUtil;
 
-import java.util.Properties;
 import java.util.List;
 import java.util.Iterator;
 
@@ -118,7 +116,7 @@ implements Authorizer
 	public void authorize( int operation) throws StandardException
 	{
 // GemStone changes BEGIN
-	  authorize(null, null, operation);
+	  authorize(null, null, null, operation);
 	  /* (original code)
 		authorize( (Activation) null, operation);
 	  */
@@ -133,12 +131,12 @@ implements Authorizer
 	public final void authorize(final Activation activation,
 	    final int operation) throws StandardException {
 	  authorize(activation, activation != null ? activation
-	      .getPreparedStatement() : null, operation);
+	      .getPreparedStatement() : null, null, operation);
 	}
 
 	public final void authorize(final Activation activation,
-	    ExecPreparedStatement ps, final int operation)
-	    throws StandardException
+	    ExecPreparedStatement ps, List<StatementPermission> perms,
+	    final int operation) throws StandardException
 	/* (original code)
 	public void authorize( Activation activation, int operation) throws StandardException
 	*/
@@ -152,11 +150,15 @@ implements Authorizer
                   }
                   return;
                 }
-                refresh();
+                checkAccess();
                 int sqlAllowed = RoutineAliasInfo.NO_SQL;
-                StatementContext ctx = this.lcc.getStatementContext();
-                if (ctx != null) {
-                  sqlAllowed = ctx.getSQLAllowed();
+                StatementContext ctx = null;
+                if (perms != null && perms.size() > 0) {
+                  // direct call from GfxdSystemProcedures.authorizeColumnTableScan
+                  sqlAllowed = RoutineAliasInfo.READS_SQL_DATA;
+                }
+                else if ((ctx = this.lcc.getStatementContext()) != null) {
+		              sqlAllowed = ctx.getSQLAllowed();
                 }
                 /* (original code)
 		int sqlAllowed = lcc.getStatementContext().getSQLAllowed();
@@ -227,8 +229,8 @@ implements Authorizer
 				SanityManager.THROWASSERT("Bad operation code "+operation);
 		}
 // GemStone changes BEGIN
-	if (activation != null && (ps != null
-	    || (ps = activation.getPreparedStatement()) != null)) {
+	if (perms != null || (activation != null && (ps != null
+	    || (ps = activation.getPreparedStatement()) != null))) {
 	/* (original code)
         if( activation != null)
         {
@@ -238,8 +240,8 @@ implements Authorizer
             boolean nestedTX = false;
             try {
               // check if ps is uptodate
-              activation.checkStatementValidity();
-              List requiredPermissionsList = ps.getRequiredPermissionsList();
+              if (activation != null) activation.checkStatementValidity();
+              List requiredPermissionsList = perms != null ? perms : ps.getRequiredPermissionsList();
               /*[originally]
                 List requiredPermissionsList = activation.getPreparedStatement().getRequiredPermissionsList();
                 DataDictionary dd = lcc.getDataDictionary();
@@ -452,12 +454,14 @@ implements Authorizer
 	public void refresh() throws StandardException
 	{
 		getUserAccessLevel();
-			
-                readOnlyConnection = connectionMustRemainReadOnly();
+		checkAccess();
+	}
+
+	private void checkAccess() throws StandardException {
+		readOnlyConnection = connectionMustRemainReadOnly();
 
 		// Is a connection allowed.
 		if (userAccessLevel == NO_ACCESS)
 			throw StandardException.newException(SQLState.AUTH_DATABASE_CONNECTION_REFUSED);
 	}
-	
 }

@@ -30,6 +30,7 @@ import com.gemstone.gemfire.cache.CacheClosedException;
 import com.gemstone.gemfire.distributed.internal.AbstractDistributionConfig;
 import com.gemstone.gemfire.distributed.internal.DistributionConfig;
 import com.gemstone.gemfire.distributed.internal.InternalDistributedSystem;
+import com.gemstone.gemfire.internal.cache.GemFireSparkConnectorCacheImpl;
 import com.gemstone.gnu.trove.THashMap;
 import com.pivotal.gemfirexd.Attribute;
 import com.pivotal.gemfirexd.Property;
@@ -48,8 +49,20 @@ import com.pivotal.gemfirexd.internal.shared.common.reference.SQLState;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 
 public final class FabricServiceUtils {
-  
-  public static FileMonitor initCachedMonitorLite(Properties inProps,
+
+  public static FileMonitor initCachedMonitorLite(final Properties inProps,
+      final HashMap<Object, Object> sysProps) {
+    if (sysProps != null) {
+      // noinspection SynchronizationOnLocalVariableOrMethodParameter
+      synchronized (sysProps) {
+        return initCachedMonitorLiteImpl(inProps, sysProps);
+      }
+    } else {
+      return initCachedMonitorLiteImpl(inProps, sysProps);
+    }
+  }
+
+  private static FileMonitor initCachedMonitorLiteImpl(Properties inProps,
       HashMap<Object, Object> sysProps) {
     // Cannot use privilege block of monitorlite as that itself initializes
     // application properties file.
@@ -71,7 +84,20 @@ public final class FabricServiceUtils {
     return (FileMonitor)Monitor.getCachedMonitorLite(false);
   }
 
-  public static Properties preprocessProperties(Properties inProps,
+  public static Properties preprocessProperties(final Properties inProps,
+      final FileMonitor monitorlite, final HashMap<Object, Object> sysProps,
+      final boolean noThrow) throws SQLException {
+    if (sysProps != null) {
+      // noinspection SynchronizationOnLocalVariableOrMethodParameter
+      synchronized (sysProps) {
+        return preprocessPropertiesImpl(inProps, monitorlite, sysProps, noThrow);
+      }
+    } else {
+      return preprocessPropertiesImpl(inProps, monitorlite, null, noThrow);
+    }
+  }
+
+  private static Properties preprocessPropertiesImpl(Properties inProps,
       FileMonitor monitorlite, HashMap<Object, Object> sysProps,
       final boolean noThrow) throws SQLException {
 
@@ -272,7 +298,19 @@ public final class FabricServiceUtils {
     }
   }
 
-  protected final static void clearSystemProperties(FileMonitor monitorlite,
+  protected static void clearSystemProperties(final FileMonitor monitorlite,
+      final HashMap<Object, Object> sysProps) {
+    if (sysProps != null) {
+      // noinspection SynchronizationOnLocalVariableOrMethodParameter
+      synchronized (sysProps) {
+        clearSystemPropertiesImpl(monitorlite, sysProps);
+      }
+    } else {
+      clearSystemPropertiesImpl(monitorlite, sysProps);
+    }
+  }
+
+  private static void clearSystemPropertiesImpl(FileMonitor monitorlite,
       HashMap<Object, Object> sysProps) {
 
     if (monitorlite != null) {
@@ -347,9 +385,13 @@ public final class FabricServiceUtils {
           && !propName.startsWith(Attribute.SQLF_PREFIX)
           && !propName.startsWith(DistributionConfig.USERDEFINED_PREFIX_NAME) 
           && !propName.startsWith("derbyTesting.")
-          && !propName.startsWith("snappydata.")
+          && !propName.startsWith(GfxdConstants.SNAPPY_PREFIX)
           && !propName.startsWith("metastore-")
           && !propName.startsWith("spark.")
+          && !propName.startsWith("jobserver.")
+          && !propName.startsWith("zeppelin.")
+          && !propName.startsWith("hive.")
+          && !propName.startsWith(GemFireSparkConnectorCacheImpl.connectorPrefix)
           && !GfxdConstants.validExtraGFXDProperties.contains(propName)
           && !"BootPassword".equalsIgnoreCase(propName)
           && !"encryptionAlgorithm".equalsIgnoreCase(propName)

@@ -25,6 +25,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 
+import com.pivotal.gemfirexd.Attribute;
 import com.pivotal.gemfirexd.jdbc.ClientAttribute;
 
 import sql.GFEDBManager.Isolation;
@@ -42,7 +43,9 @@ import hydra.gemfirexd.NetworkServerHelper.Endpoint;
  */
 public class GFEDBClientManager {
   protected static String driver = "com.pivotal.gemfirexd.jdbc.ClientDriver";
-  protected static String protocol = "jdbc:gemfirexd://";
+  protected static String protocol = Attribute.DNC_PROTOCOL;
+  protected static String snappyThriftProtocol = Attribute.SNAPPY_THRIFT_PROTOCOL;
+  protected static String snappyProtocol = Attribute.SNAPPY_DNC_PROTOCOL;
   //private static String dbName = "";
   private static String userPrefix = "thr_";
   protected static boolean useGemFireXDHA = TestConfig.tab().booleanAt(SQLPrms.
@@ -83,8 +86,9 @@ public class GFEDBClientManager {
   
   @SuppressWarnings("unchecked")
   public static synchronized void initAvailHostPort() {
-  if (map == null) map = (HashMap <String, ArrayList<Integer>>)SQLBB.getBB().getSharedMap().get("serverPorts");  
-  hostNames = (String[])(map.keySet().toArray(new String[0])); 
+    if (map == null)
+      map = (HashMap<String, ArrayList<Integer>>)SQLBB.getBB().getSharedMap().get("serverPorts");
+    hostNames = (String[])(map.keySet().toArray(new String[0]));
   }
   
   /**
@@ -289,11 +293,21 @@ public class GFEDBClientManager {
   public static String getDriver() {
     return driver;
   }
-  
+
   public static String getProtocol() {
+    if(SQLPrms.isSnappyMode())
+      return snappyProtocol;
     return protocol;
   }
-  
+
+  public static String getSnappyThriftProtocol(){
+      return snappyThriftProtocol;
+  }
+
+  public static String getDRDAProtocol() {
+    return Attribute.DRDA_PROTOCOL;
+  }
+
   public static void closeConnection(Connection conn) {
     try {
       conn.close();

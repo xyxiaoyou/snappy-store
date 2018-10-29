@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -18,6 +18,7 @@
 package com.pivotal.gemfirexd.internal.engine.sql.execute;
 
 import java.io.IOException;
+import java.sql.SQLWarning;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -47,7 +48,7 @@ import com.pivotal.gemfirexd.internal.impl.sql.execute.ResultSetStatisticsVisito
 /**
  * Holds the resultSet obtained from lead node execution.
  */
-public final class SnappySelectResultSet
+public class SnappySelectResultSet
     extends AbstractGemFireResultSet implements NoPutResultSet {
 
   private ExecRow currentRow;
@@ -187,12 +188,12 @@ public final class SnappySelectResultSet
   }
 
   public ExecRow getNextRow() throws StandardException {
-    // TO IMPLEMENT
     try {
       nextExecRow();
       this.setCurrentRow(this.currentRow);
       return this.currentRow;
-    } catch(Exception ex) {
+    } catch (Exception ex) {
+      Misc.checkIfCacheClosing(ex);
       throw Misc.processFunctionException("SnappySelectResultSet:getNextRow ", ex, null, null);
     }
   }
@@ -208,8 +209,9 @@ public final class SnappySelectResultSet
         try {
           this.currentResultHolder = (SnappyResultHolder)srhIterator.next();
         } catch (Exception ex) {
+          Misc.checkIfCacheClosing(ex);
           throw Misc.processFunctionException("SnappySelectResultSet:next",
-              ex, null, null);
+                  ex, null, null);
         }
         // set the metadata which is sent in only the first resultHolder
         if (this.currentResultHolder != null) {
@@ -236,13 +238,22 @@ public final class SnappySelectResultSet
     GenericResultDescription resultDescription = new GenericResultDescription(
         new ResultColumnDescriptor[colTypes.length], null);
 
-    // TODO: KN remove hard coding
-    for(int i=0; i<colNames.length; i++) {
+    for (int i = 0; i < colNames.length; i++) {
+      String tableName = tableNames[i];
+      String schema = "";
+      String table = "";
+      if (!tableName.isEmpty()) {
+        int dotIndex = tableName.indexOf('.');
+        schema = tableName.substring(0, dotIndex);
+        table = tableName.substring(dotIndex + 1);
+      }
       ResultColumnDescriptor rcd = new GenericColumnDescriptor(
-          colNames[i], "APP", tableNames[i],
-          i+1, dtds[i], false, false);
-      resultDescription.setColumnDescriptor(
-          i, rcd);
+          colNames[i], schema, table, i + 1, dtds[i], false, false);
+      resultDescription.setColumnDescriptor(i, rcd);
+    }
+    final SQLWarning warnings = firstResultHolder.getWarnings();
+    if (warnings != null) {
+      addWarning(warnings);
     }
     return resultDescription;
   }
@@ -279,7 +290,7 @@ public final class SnappySelectResultSet
       this.currentResultHolder = this.firstResultHolder =
           (SnappyResultHolder)srhIterator.next();
     } catch (RuntimeException ex) {
-      ex = LeadNodeExecutorMsg.handleLeadNodeException(ex);
+      ex = LeadNodeExecutorMsg.handleLeadNodeRuntimeException(ex);
       throw Misc.processFunctionException("SnappySelectResultSet:setup",
           ex, null, null);
     }

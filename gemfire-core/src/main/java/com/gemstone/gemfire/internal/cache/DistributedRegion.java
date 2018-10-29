@@ -45,27 +45,7 @@ import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.InternalGemFireError;
 import com.gemstone.gemfire.InvalidDeltaException;
 import com.gemstone.gemfire.SystemFailure;
-import com.gemstone.gemfire.cache.CacheClosedException;
-import com.gemstone.gemfire.cache.CacheListener;
-import com.gemstone.gemfire.cache.CacheLoader;
-import com.gemstone.gemfire.cache.CacheLoaderException;
-import com.gemstone.gemfire.cache.CacheWriter;
-import com.gemstone.gemfire.cache.CacheWriterException;
-import com.gemstone.gemfire.cache.ConflictException;
-import com.gemstone.gemfire.cache.DataPolicy;
-import com.gemstone.gemfire.cache.DiskAccessException;
-import com.gemstone.gemfire.cache.EntryNotFoundException;
-import com.gemstone.gemfire.cache.LossAction;
-import com.gemstone.gemfire.cache.MembershipAttributes;
-import com.gemstone.gemfire.cache.Operation;
-import com.gemstone.gemfire.cache.RegionAccessException;
-import com.gemstone.gemfire.cache.RegionAttributes;
-import com.gemstone.gemfire.cache.RegionDestroyedException;
-import com.gemstone.gemfire.cache.RegionDistributionException;
-import com.gemstone.gemfire.cache.RegionMembershipListener;
-import com.gemstone.gemfire.cache.ResumptionAction;
-import com.gemstone.gemfire.cache.RoleException;
-import com.gemstone.gemfire.cache.TimeoutException;
+import com.gemstone.gemfire.cache.*;
 import com.gemstone.gemfire.cache.asyncqueue.internal.AsyncEventQueueImpl;
 import com.gemstone.gemfire.cache.execute.Function;
 import com.gemstone.gemfire.cache.execute.FunctionException;
@@ -93,7 +73,6 @@ import com.gemstone.gemfire.distributed.internal.locks.DLockService;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
 import com.gemstone.gemfire.internal.Assert;
-import com.gemstone.gemfire.internal.ByteArrayDataInput;
 import com.gemstone.gemfire.internal.NullDataOutputStream;
 import com.gemstone.gemfire.internal.cache.CacheDistributionAdvisor.CacheProfile;
 import com.gemstone.gemfire.internal.cache.InitialImageOperation.GIIStatus;
@@ -101,6 +80,7 @@ import com.gemstone.gemfire.internal.cache.InitialImageOperation.InitialImageVer
 import com.gemstone.gemfire.internal.cache.RemoteFetchVersionMessage.FetchVersionResponse;
 import com.gemstone.gemfire.internal.cache.control.InternalResourceManager.ResourceType;
 import com.gemstone.gemfire.internal.cache.control.MemoryEvent;
+import com.gemstone.gemfire.internal.cache.delta.Delta;
 import com.gemstone.gemfire.internal.cache.execute.DistributedRegionFunctionExecutor;
 import com.gemstone.gemfire.internal.cache.execute.DistributedRegionFunctionResultSender;
 import com.gemstone.gemfire.internal.cache.execute.DistributedRegionFunctionResultWaiter;
@@ -210,6 +190,8 @@ public class DistributedRegion extends LocalRegion implements
    * a clear at the same time.
    */
   private final Object clearLock = new Object();
+
+  protected volatile boolean indexLockedForGII;
 
   private static AtomicBoolean loggedNetworkPartitionWarning = new AtomicBoolean(false);
   
@@ -504,7 +486,7 @@ public class DistributedRegion extends LocalRegion implements
      * force shared data view so that we just do the virtual op, accruing things
      * in the put all operation for later
      */
-    if (tx != null) {
+    if (tx != null && !tx.isSnapshot()) {
       event.getPutAllOperation().addEntry(event);
     }
     else {
@@ -1207,7 +1189,6 @@ public class DistributedRegion extends LocalRegion implements
     }
 
     final IndexUpdater indexUpdater = getIndexUpdater();
-    boolean indexLocked = false;
     // this try block is to release the GFXD GII lock in finally
     // which should be done after bucket status will be set
     // properly in LocalRegion#initialize()
@@ -1218,7 +1199,7 @@ public class DistributedRegion extends LocalRegion implements
         // index list for GemFireXD (#41330 and others)
         if (indexUpdater != null) {
           indexUpdater.lockForGII();
-          indexLocked = true;
+          indexLockedForGII = true;
         }
         
         PersistentMemberID persistentId = null;
@@ -1259,8 +1240,9 @@ public class DistributedRegion extends LocalRegion implements
       }
      }
     } finally {
-      if (indexLocked) {
+      if (indexUpdater != null && indexLockedForGII) {
         indexUpdater.unlockForGII();
+        indexLockedForGII = false;
       }
     }
   }
@@ -1340,7 +1322,7 @@ public class DistributedRegion extends LocalRegion implements
       boolean recoverFromDisk, PersistentMemberID persistentId) throws TimeoutException
   {
     LogWriterI18n logger = getSystem().getLogWriter().convertToLogWriterI18n();
-    if (logger.infoEnabled()) {
+    if (logger.infoEnabled() && !LocalRegion.isMetaTable(getFullPath())) {
       logger.info(LocalizedStrings.DistributedRegion_INITIALIZING_REGION_0, this.getName());
     }
   
@@ -1504,7 +1486,9 @@ public class DistributedRegion extends LocalRegion implements
       else {
         if(!isDestroyed()) {
           if(recoverFromDisk) {
-            logger.info(LocalizedStrings.DistributedRegion_INITIALIZED_FROM_DISK, new Object[] {this.getFullPath(), persistentId, getPersistentID()});
+            if (!LocalRegion.isMetaTable(getFullPath())) {
+              logger.info(LocalizedStrings.DistributedRegion_INITIALIZED_FROM_DISK, new Object[]{this.getFullPath(), persistentId, getPersistentID()});
+            }
             if(persistentId != null) {
               RegionLogger.logRecovery(this.getFullPath(), persistentId,
                   getDistributionManager().getDistributionManagerId());
@@ -1517,7 +1501,9 @@ public class DistributedRegion extends LocalRegion implements
               RegionLogger.logPersistence(this.getFullPath(),
                   getDistributionManager().getDistributionManagerId(),
                   getPersistentID());
-              logger.info(LocalizedStrings.DistributedRegion_NEW_PERSISTENT_REGION_CREATED, new Object[] {this.getFullPath(), getPersistentID()});
+              if (!LocalRegion.isMetaTable(getFullPath())) {
+                logger.info(LocalizedStrings.DistributedRegion_NEW_PERSISTENT_REGION_CREATED, new Object[]{this.getFullPath(), getPersistentID()});
+              }
             }
           }
           
@@ -1582,8 +1568,17 @@ public class DistributedRegion extends LocalRegion implements
   /** remove any partial entries received in a failed GII */
   protected void cleanUpAfterFailedGII(boolean recoverFromDisk) {    
     boolean isProfileExchanged = isProfileExchanged();
-    boolean giiIndexLockAcquired = this.doPreEntryDestructionCleanup(true, null, false);
+    // release read lock on index if required because cleanup will need
+    // write lock on index
+    final IndexUpdater indexUpdater = getIndexUpdater();
+    final boolean indexLocked = indexUpdater != null && indexLockedForGII;
+    boolean giiIndexLockAcquired = false;
     try {
+      if (indexLocked) {
+        indexUpdater.unlockForGII();
+        indexLockedForGII = false;
+      }
+      giiIndexLockAcquired = this.doPreEntryDestructionCleanup(true, null, false);
       // reset the profile exchanged flag after this since we will continue with
       // GII from next source
       setProfileExchanged(isProfileExchanged);
@@ -1617,7 +1612,15 @@ public class DistributedRegion extends LocalRegion implements
         }
       }
     } finally {
-      doPostEntryDestructionCleanup(true, null, false, giiIndexLockAcquired);
+      try {
+        doPostEntryDestructionCleanup(true, null, false, giiIndexLockAcquired);
+      } finally {
+        // reacquire the index read lock
+        if (indexLocked) {
+          indexUpdater.lockForGII();
+          indexLockedForGII = true;
+        }
+      }
     }
   }
 
@@ -1777,14 +1780,22 @@ public class DistributedRegion extends LocalRegion implements
 
         // in the first loop apply the committed/rolled back transactions
         if (!pendingTXStates.isEmpty()) {
+
+          final TXRegionState[] orderedTXRegionState = pendingTXStates
+              .toArray(new TXRegionState[pendingTXStates.size()]);
+
+          Arrays.sort(orderedTXRegionState,
+              Comparator.comparing(t -> t.getTXState().getTransactionId()));
+
           final ArrayList<TXRegionState> inProgressTXStates =
               new ArrayList<TXRegionState>();
           final ArrayList<TXRegionState> finishedTXStates =
               new ArrayList<TXRegionState>();
           final TXManagerImpl txMgr = getCache().getCacheTransactionManager();
-          for (TXRegionState txrs : pendingTXStates) {
+          for (TXRegionState txrs : orderedTXRegionState) {
             TXState txState = txrs.getTXState();
             int txOrder = 0;
+            getLogWriterI18n().info(LocalizedStrings.DEBUG, "Locking txState = " + txState);
             txState.lockTXState();
             if (txState.isInProgress() && (txOrder = is.getFinishedTXOrder(
                 txState.getTransactionId())) == 0) {
@@ -1871,7 +1882,7 @@ public class DistributedRegion extends LocalRegion implements
               }
             }
           } finally {
-            for (TXRegionState txrs : pendingTXStates) {
+            for (TXRegionState txrs : orderedTXRegionState) {
               txrs.getTXState().unlockTXState();
             }
           }
@@ -2501,6 +2512,7 @@ public class DistributedRegion extends LocalRegion implements
     profile.isPersistent = getDataPolicy().withPersistence();
     profile.setSubscriptionAttributes(getSubscriptionAttributes());
     profile.isGatewayEnabled = getEnableGateway();
+    GemFireCacheImpl.StaticSystemCallbacks sysCb = getCache().getInternalProductCallbacks();
     profile.serialNumber = getSerialNumber();
     profile.regionInitialized = this.isInitialized();
     // need to set the memberUnInitialized flag only for user created regions
@@ -3335,12 +3347,10 @@ public class DistributedRegion extends LocalRegion implements
     chunkEntries = new InitialImageVersionedEntryList(
         this.concurrencyChecksEnabled, MAX_ENTRIES_PER_CHUNK);
     final boolean keyRequiresRegionContext = keyRequiresRegionContext();
-    ByteArrayDataInput in = null;
     DiskRegion dr = getDiskRegion();
     final Version targetVersion = sender.getVersionObject();
     if( dr!=null ){
       dr.setClearCountReference();
-      in = new ByteArrayDataInput();
     }
     VersionSource myId = getVersionMember();
     Set<VersionSource> foundIds = new HashSet<VersionSource>();
@@ -3423,7 +3433,7 @@ public class DistributedRegion extends LocalRegion implements
                     entry = new InitialImageOperation.Entry();
                     entry.key = key;
                     entry.setVersionTag(stamp.asVersionTag());
-                    fillRes = mapEntry.fillInValue(this, entry, in, dm, targetVersion);
+                    fillRes = mapEntry.fillInValue(this, entry, dm, targetVersion);
                     if (getLogWriterI18n().finerEnabled() || InitialImageOperation.TRACE_GII_FINER) {
                       getLogWriterI18n().convertToLogWriter().info("chunkEntries:entry="+entry+",stamp="+stamp);
                     }
@@ -3434,7 +3444,7 @@ public class DistributedRegion extends LocalRegion implements
                   if (getLogWriterI18n().finerEnabled() || InitialImageOperation.TRACE_GII_FINER) {
                     getLogWriterI18n().convertToLogWriter().info("chunkEntries:entry="+entry+",stamp=null");
                   }
-                  fillRes = mapEntry.fillInValue(this, entry, in, dm, targetVersion);
+                  fillRes = mapEntry.fillInValue(this, entry, dm, targetVersion);
                 }
               }
               catch(DiskAccessException dae) {
@@ -3511,7 +3521,7 @@ public class DistributedRegion extends LocalRegion implements
    * Once the regionEntries iterator has nothing more to iterate
    * it starts iterating over, in disk order, the entries on disk.
    */
-  public static final class DiskSavyIterator implements Iterator<RegionEntry> {
+  public static final class DiskSavyIterator implements DiskRegionIterator {
     //private boolean usingIt = true;
     private Iterator<?> it;
     private LocalRegion region;
@@ -3558,10 +3568,11 @@ public class DistributedRegion extends LocalRegion implements
       final int arraySize = Math.max(maxPendingEntries > 1000000 ? 200000
           : ((int)maxPendingEntries / 5), 8192);
       return (this.diskMap = new ArraySortedCollection(
-          new DiskEntryPage.DEPComparator(), null, null, arraySize, 0));
+          DiskEntryPage.DEPComparator.instance, null, null, arraySize, 0));
     }
 
-    final void setRegion(LocalRegion lr) {
+    @Override
+    public void setRegion(LocalRegion lr) {
       this.region = lr;
       this.it = lr.entries.regionEntries().iterator();
     }
@@ -3589,6 +3600,7 @@ public class DistributedRegion extends LocalRegion implements
       }
     }
 
+    @Override
     public boolean initDiskIterator() {
       if (this.it != null) {
         this.it = null;
@@ -3655,7 +3667,7 @@ public class DistributedRegion extends LocalRegion implements
             }
           }
           RegionEntry re = (RegionEntry)this.it.next();
-          if (re.isOverflowedToDisk(this.region, dp)) {
+          if (re.isOverflowedToDisk(this.region, dp, false)) {
             // add dp to sorted list
             // avoid create DiskPage everytime for lookup
             // TODO: SW: Can reduce the intermediate memory and boost
@@ -3665,7 +3677,7 @@ public class DistributedRegion extends LocalRegion implements
             // order at the end. Once done use this iterator for all local
             // entries iterators
             final ArraySortedCollection map = getDiskMap();
-            map.add(new DiskEntryPage(dp, re));
+            map.add(new DiskEntryPage(dp, re, this.region));
             // flush the diskMap if it has reached the max
             if (this.maxPendingEntries > 0
                 && ++this.diskMapSize >= this.maxPendingEntries) {
@@ -3739,6 +3751,14 @@ public class DistributedRegion extends LocalRegion implements
       this.offset = offset;
     }
 
+    public final long getOplogId() {
+      return this.oplogId;
+    }
+
+    public final long getOffset() {
+      return this.offset;
+    }
+
     @Override
     public int hashCode() {
       return Long.valueOf(this.oplogId ^ this.offset).hashCode();
@@ -3755,7 +3775,7 @@ public class DistributedRegion extends LocalRegion implements
       }
     }
 
-    public final int compareTo(DiskPosition o) {
+    public int compareTo(DiskPosition o) {
       final int result = Long.signum(this.oplogId - o.oplogId);
       if (result == 0) {
         return Long.signum(this.offset - o.offset);
@@ -3772,33 +3792,39 @@ public class DistributedRegion extends LocalRegion implements
     }
   }
 
-  public static final class DiskEntryPage extends DiskPosition {
-    public final RegionEntry entry;
-    public int drvId; 
+  public static class DiskEntryPage extends DiskPosition {
+    protected final RegionEntry entry;
+    protected final LocalRegion region;
+    final int readerId;
 
-    public static final long DISK_PAGE_SIZE = SystemProperties
-        .getServerInstance().getLong("DISK_PAGE_SIZE", 8 * 1024L);
+    public DiskEntryPage(DiskPosition dp, RegionEntry re, LocalRegion region) {
+      this(dp, re, region, 0);
+    }
 
-    public DiskEntryPage(DiskPosition dp, RegionEntry re) {
-      this.setPosition(dp.oplogId, dp.offset / DISK_PAGE_SIZE);
+    public DiskEntryPage(RegionEntry re, LocalRegion region, int readerId) {
       this.entry = re;
+      this.region = region;
+      this.readerId = readerId;
     }
-    
-    public DiskEntryPage (DiskPosition dp, RegionEntry re, int drvId) {
-      this.setPosition(dp.oplogId, dp.offset / DISK_PAGE_SIZE);
-      this.entry = re;
-      this.drvId = drvId;
+
+    DiskEntryPage(DiskPosition dp, RegionEntry re,
+        LocalRegion region, int readerId) {
+      this(re, region, readerId);
+      this.setPosition(dp.oplogId, dp.offset / DiskBlockSortManager.DISK_PAGE_SIZE);
     }
-    
-    public RegionEntry getRegionEntry() {
+
+    protected Object readEntryValue() {
+      return this.entry.getValue(this.region);
+    }
+
+    public RegionEntry getEntry() {
       return this.entry;
-    }
-    
-    public int getDrvId() {
-      return this.drvId;
     }
 
     public static final class DEPComparator implements Comparator<Object> {
+
+      public static final DEPComparator instance = new DEPComparator();
+
       /**
        * {@inheritDoc}
        */
@@ -4869,5 +4895,55 @@ public class DistributedRegion extends LocalRegion implements
    */
   public boolean hasNetLoader() {
     return this.hasNetLoader(getCacheDistributionAdvisor());
+  }
+
+  @Override
+  void updateSizeOnRemove(Object key, int oldSize) {
+    freePoolMemory(oldSize, true);
+  }
+
+  @Override
+  void updateSizeOnClearRegion(int sizeBeforeClear){
+    // For memory accounting related clean ups
+   super.updateSizeOnClearRegion(sizeBeforeClear);
+  }
+
+  @Override
+  public int calculateRegionEntryValueSize(RegionEntry re) {
+    if (!this.isInternalRegion() && callback.isSnappyStore()) {
+      return calcMemSize(re._getValue());
+    } else {
+      return 0;
+    }
+  }
+
+  @Override
+  public int calculateValueSize(Object val) {
+    if (!this.isInternalRegion() && callback.isSnappyStore()) {
+      return calcMemSize(val);
+    } else {
+      return 0;
+    }
+  }
+
+  static int calcMemSize(Object value) {
+    if (value == null || value instanceof Token) {
+      return 0;
+    }
+    if (!(value instanceof byte[])
+        && !CachedDeserializableFactory.preferObject()
+        && !(value instanceof CachedDeserializable)
+        && !(value instanceof com.gemstone.gemfire.Delta)
+        && !(value instanceof Delta)) {
+      // ezoerner:20090401 it's possible this value is a Delta
+      throw new InternalGemFireError("DEBUG: calcMemSize: weird value (class "
+          + value.getClass() + "): " + value);
+    }
+
+    try {
+      return CachedDeserializableFactory.calcMemSize(value);
+    } catch (IllegalArgumentException e) {
+      return 0;
+    }
   }
 }

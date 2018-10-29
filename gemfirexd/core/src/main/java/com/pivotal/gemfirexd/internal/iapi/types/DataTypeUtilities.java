@@ -60,6 +60,8 @@ import com.pivotal.gemfirexd.internal.iapi.reference.JDBC40Translation;
 import com.pivotal.gemfirexd.internal.iapi.reference.SQLState;
 import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.ColumnDescriptor;
 import com.pivotal.gemfirexd.internal.shared.common.StoredFormatIds;
+import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * A set of static utility methods for data types.
@@ -234,8 +236,8 @@ public abstract class DataTypeUtilities {
       break;
     default:
       // MaximumWidth is -1 when it is unknown.
-      int w = storageLength;
-      size = (w > 0 ? w : JDBC30Translation.DEFAULT_COLUMN_DISPLAY_SIZE);
+      size = (storageLength > 0 ? storageLength
+          : JDBC30Translation.DEFAULT_COLUMN_DISPLAY_SIZE);
       break;
     }
     return size;
@@ -268,9 +270,54 @@ public abstract class DataTypeUtilities {
 // GemStone changes BEGIN
 
   /**
+   * Extract the given column from raw bytes as a UTF8String.
+   */
+  public static UTF8String getAsUTF8String(final byte[] inBytes,
+      final int offset, final int columnWidth, final ColumnDescriptor cd)
+      throws StandardException {
+
+    final DataTypeDescriptor dtd = cd.columnType;
+    final int formatID = dtd.getTypeId().getTypeFormatId();
+    switch (formatID) {
+      case StoredFormatIds.CHAR_TYPE_ID:
+      case StoredFormatIds.LONGVARCHAR_TYPE_ID:
+      case StoredFormatIds.VARCHAR_TYPE_ID:
+      case StoredFormatIds.CLOB_TYPE_ID:
+        // TODO: SW: change format in SQLChar to be full UTF8
+        // and below is broken for > 3-character UTF8 strings
+        return UTF8String.fromAddress(inBytes,
+            Platform.BYTE_ARRAY_OFFSET + offset, columnWidth);
+      default:
+        throw StandardException.newException(SQLState.LANG_FORMAT_EXCEPTION,
+            "UTF8String", cd.getColumnName());
+    }
+  }
+
+  /**
+   * Extract the given column from raw bytes as a UTF8String.
+   */
+  public static UTF8String getAsUTF8String(final long memOffset,
+      final int columnWidth, final ColumnDescriptor cd)
+      throws StandardException {
+
+    final DataTypeDescriptor dtd = cd.columnType;
+    final int formatID = dtd.getTypeId().getTypeFormatId();
+    switch (formatID) {
+      case StoredFormatIds.CHAR_TYPE_ID:
+      case StoredFormatIds.LONGVARCHAR_TYPE_ID:
+      case StoredFormatIds.VARCHAR_TYPE_ID:
+      case StoredFormatIds.CLOB_TYPE_ID:
+        return UTF8String.fromAddress(null, memOffset, columnWidth);
+      default:
+        throw StandardException.newException(SQLState.LANG_FORMAT_EXCEPTION,
+            "UTF8String", cd.getColumnName());
+    }
+  }
+
+  /**
    * Extract the given column from raw bytes as a string.
    */
-  public static final String getAsString(final byte[] inBytes,
+  public static String getAsString(final byte[] inBytes,
       final int offset, final int columnWidth, final DataTypeDescriptor dtd)
       throws StandardException {
 
@@ -283,17 +330,17 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.CLOB_TYPE_ID:
         return SQLVarchar.getAsString(inBytes, offset, columnWidth);
       case StoredFormatIds.INT_TYPE_ID:
-        return Integer.toString(SQLInteger.getAsInteger(inBytes, offset));
+        return Integer.toString(RowFormatter.readInt(inBytes, offset));
       case StoredFormatIds.DECIMAL_TYPE_ID:
         return SQLDecimal.getAsString(inBytes, offset, columnWidth);
       case StoredFormatIds.LONGINT_TYPE_ID:
-        return Long.toString(SQLLongint.getAsLong(inBytes, offset));
+        return Long.toString(RowFormatter.readLong(inBytes, offset));
       case StoredFormatIds.DOUBLE_TYPE_ID:
         return Double.toString(SQLDouble.getAsDouble(inBytes, offset));
       case StoredFormatIds.REAL_TYPE_ID:
         return Float.toString(SQLReal.getAsFloat(inBytes, offset));
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return Integer.toString(SQLSmallint.getAsShort(inBytes, offset));
+        return Integer.toString(RowFormatter.readShort(inBytes, offset));
       case StoredFormatIds.DATE_TYPE_ID:
         return SQLDate.getAsString(inBytes, offset);
       case StoredFormatIds.TIME_TYPE_ID:
@@ -316,7 +363,7 @@ public abstract class DataTypeUtilities {
   /**
    * Extract the given column from raw bytes as a string.
    */
-  public static final String getAsString(final UnsafeWrapper unsafe,
+  public static String getAsString(final UnsafeWrapper unsafe,
       final long memOffset, final int columnWidth,
       @Unretained final OffHeapByteSource bs, final DataTypeDescriptor dtd)
       throws StandardException {
@@ -324,23 +371,23 @@ public abstract class DataTypeUtilities {
     final int formatID = dtd.getTypeId().getTypeFormatId();
     switch (formatID) {
       case StoredFormatIds.CHAR_TYPE_ID:
-        return SQLChar.getAsString(unsafe, memOffset, columnWidth, bs, dtd);
+        return SQLChar.getAsString(memOffset, columnWidth, bs, dtd);
       case StoredFormatIds.LONGVARCHAR_TYPE_ID:
       case StoredFormatIds.VARCHAR_TYPE_ID:
       case StoredFormatIds.CLOB_TYPE_ID:
-        return SQLVarchar.getAsString(unsafe, memOffset, columnWidth, bs);
+        return SQLVarchar.getAsString(memOffset, columnWidth, bs);
       case StoredFormatIds.INT_TYPE_ID:
-        return Integer.toString(SQLInteger.getAsInteger(unsafe, memOffset));
+        return Integer.toString(RowFormatter.readInt(memOffset));
       case StoredFormatIds.DECIMAL_TYPE_ID:
         return SQLDecimal.getAsString(unsafe, memOffset, columnWidth);
       case StoredFormatIds.LONGINT_TYPE_ID:
-        return Long.toString(SQLLongint.getAsLong(unsafe, memOffset));
+        return Long.toString(RowFormatter.readLong(memOffset));
       case StoredFormatIds.DOUBLE_TYPE_ID:
-        return Double.toString(SQLDouble.getAsDouble(unsafe, memOffset));
+        return Double.toString(SQLDouble.getAsDouble(memOffset));
       case StoredFormatIds.REAL_TYPE_ID:
-        return Float.toString(SQLReal.getAsFloat(unsafe, memOffset));
+        return Float.toString(SQLReal.getAsFloat(memOffset));
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return Integer.toString(SQLSmallint.getAsShort(unsafe, memOffset));
+        return Integer.toString(RowFormatter.readShort(memOffset));
       case StoredFormatIds.DATE_TYPE_ID:
         return SQLDate.getAsString(unsafe, memOffset);
       case StoredFormatIds.TIME_TYPE_ID:
@@ -352,10 +399,10 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.TINYINT_TYPE_ID:
         return Byte.toString(SQLTinyint.getAsByte(unsafe, memOffset));
       case StoredFormatIds.XML_TYPE_ID:
-        return XML.getAsString(unsafe, memOffset, columnWidth, bs);
+        return XML.getAsString(memOffset, columnWidth, bs);
       default:
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         return dvd.getString();
     }
   }
@@ -363,7 +410,7 @@ public abstract class DataTypeUtilities {
   /**
    * Extract the given column from raw bytes as a java object.
    */
-  public static final Object getAsObject(final byte[] inBytes,
+  public static Object getAsObject(final byte[] inBytes,
       final int offset, final int columnWidth, final DataTypeDescriptor dtd)
       throws StandardException {
 
@@ -376,17 +423,17 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.CLOB_TYPE_ID:
         return SQLVarchar.getAsString(inBytes, offset, columnWidth);
       case StoredFormatIds.INT_TYPE_ID:
-        return Integer.valueOf(SQLInteger.getAsInteger(inBytes, offset));
+        return RowFormatter.readInt(inBytes, offset);
       case StoredFormatIds.DECIMAL_TYPE_ID:
         return SQLDecimal.getAsBigDecimal(inBytes, offset, columnWidth);
       case StoredFormatIds.LONGINT_TYPE_ID:
-        return Long.valueOf(SQLLongint.getAsLong(inBytes, offset));
+        return RowFormatter.readLong(inBytes, offset);
       case StoredFormatIds.DOUBLE_TYPE_ID:
-        return Double.valueOf(SQLDouble.getAsDouble(inBytes, offset));
+        return SQLDouble.getAsDouble(inBytes, offset);
       case StoredFormatIds.REAL_TYPE_ID:
-        return Float.valueOf(SQLReal.getAsFloat(inBytes, offset));
+        return SQLReal.getAsFloat(inBytes, offset);
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return Integer.valueOf(SQLSmallint.getAsShort(inBytes, offset));
+        return (int)RowFormatter.readShort(inBytes, offset);
       case StoredFormatIds.DATE_TYPE_ID:
         return SQLDate.getAsDate(inBytes, offset,
             ClientSharedData.getDefaultCalendar());
@@ -397,9 +444,9 @@ public abstract class DataTypeUtilities {
         return SQLTimestamp.getAsTimeStamp(inBytes, offset,
             ClientSharedData.getDefaultCalendar());
       case StoredFormatIds.BOOLEAN_TYPE_ID:
-        return Boolean.valueOf(SQLBoolean.getAsBoolean(inBytes, offset));
+        return SQLBoolean.getAsBoolean(inBytes, offset);
       case StoredFormatIds.TINYINT_TYPE_ID:
-        return Byte.valueOf(SQLTinyint.getAsByte(inBytes, offset));
+        return SQLTinyint.getAsByte(inBytes, offset);
 
       case StoredFormatIds.BIT_TYPE_ID:
       case StoredFormatIds.VARBIT_TYPE_ID:
@@ -420,7 +467,7 @@ public abstract class DataTypeUtilities {
   /**
    * Extract the given column from raw bytes as a java object.
    */
-  public static final Object getAsObject(final UnsafeWrapper unsafe,
+  public static Object getAsObject(final UnsafeWrapper unsafe,
       final long memOffset, final int columnWidth,
       @Unretained final OffHeapByteSource bs, final DataTypeDescriptor dtd)
       throws StandardException {
@@ -428,23 +475,23 @@ public abstract class DataTypeUtilities {
     final int formatID = dtd.getTypeId().getTypeFormatId();
     switch (formatID) {
       case StoredFormatIds.CHAR_TYPE_ID:
-        return SQLChar.getAsString(unsafe, memOffset, columnWidth, bs, dtd);
+        return SQLChar.getAsString(memOffset, columnWidth, bs, dtd);
       case StoredFormatIds.LONGVARCHAR_TYPE_ID:
       case StoredFormatIds.VARCHAR_TYPE_ID:
       case StoredFormatIds.CLOB_TYPE_ID:
-        return SQLVarchar.getAsString(unsafe, memOffset, columnWidth, bs);
+        return SQLVarchar.getAsString(memOffset, columnWidth, bs);
       case StoredFormatIds.INT_TYPE_ID:
-        return Integer.valueOf(SQLInteger.getAsInteger(unsafe, memOffset));
+        return RowFormatter.readInt(memOffset);
       case StoredFormatIds.DECIMAL_TYPE_ID:
-        return SQLDecimal.getAsBigDecimal(unsafe, memOffset, columnWidth);
+        return SQLDecimal.getAsBigDecimal(memOffset, columnWidth);
       case StoredFormatIds.LONGINT_TYPE_ID:
-        return Long.valueOf(SQLLongint.getAsLong(unsafe, memOffset));
+        return RowFormatter.readLong(memOffset);
       case StoredFormatIds.DOUBLE_TYPE_ID:
-        return Double.valueOf(SQLDouble.getAsDouble(unsafe, memOffset));
+        return SQLDouble.getAsDouble(memOffset);
       case StoredFormatIds.REAL_TYPE_ID:
-        return Float.valueOf(SQLReal.getAsFloat(unsafe, memOffset));
+        return SQLReal.getAsFloat(memOffset);
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return Integer.valueOf(SQLSmallint.getAsShort(unsafe, memOffset));
+        return (int)RowFormatter.readShort(memOffset);
       case StoredFormatIds.DATE_TYPE_ID:
         return SQLDate.getAsDate(unsafe, memOffset,
             ClientSharedData.getDefaultCalendar());
@@ -455,9 +502,9 @@ public abstract class DataTypeUtilities {
         return SQLTimestamp.getAsTimeStamp(unsafe, memOffset,
             ClientSharedData.getDefaultCalendar());
       case StoredFormatIds.BOOLEAN_TYPE_ID:
-        return Boolean.valueOf(SQLBoolean.getAsBoolean(unsafe, memOffset));
+        return SQLBoolean.getAsBoolean(unsafe, memOffset);
       case StoredFormatIds.TINYINT_TYPE_ID:
-        return Byte.valueOf(SQLTinyint.getAsByte(unsafe, memOffset));
+        return SQLTinyint.getAsByte(unsafe, memOffset);
 
       case StoredFormatIds.BIT_TYPE_ID:
       case StoredFormatIds.VARBIT_TYPE_ID:
@@ -466,20 +513,20 @@ public abstract class DataTypeUtilities {
         return SQLBinary.getAsBytes(unsafe, memOffset, columnWidth);
 
       case StoredFormatIds.XML_TYPE_ID:
-        return XML.getAsString(unsafe, memOffset, columnWidth, bs);
+        return XML.getAsString(memOffset, columnWidth, bs);
 
       default:
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         return dvd.getObject();
     }
   }
 
-  static final byte[] INT_MIN_BYTES = new byte[] { (byte)'-', (byte)'2',
+  static byte[] INT_MIN_BYTES = new byte[] { (byte)'-', (byte)'2',
       (byte)'1', (byte)'4', (byte)'7', (byte)'4', (byte)'8', (byte)'3',
       (byte)'6', (byte)'4', (byte)'8' };
 
-  static final byte[] LONG_MIN_BYTES = new byte[] { (byte)'-', (byte)'9',
+  static byte[] LONG_MIN_BYTES = new byte[] { (byte)'-', (byte)'9',
       (byte)'2', (byte)'2', (byte)'3', (byte)'3', (byte)'7', (byte)'2',
       (byte)'0', (byte)'3', (byte)'6', (byte)'8', (byte)'5', (byte)'4',
       (byte)'7', (byte)'7', (byte)'5', (byte)'8', (byte)'0', (byte)'8' };
@@ -714,7 +761,7 @@ public abstract class DataTypeUtilities {
   }
 
   /** Extract the given column from raw bytes as UTF8 encoded string for PXF. */
-  public static final void writeAsUTF8BytesForPXF(final byte[] inBytes,
+  public static void writeAsUTF8BytesForPXF(final byte[] inBytes,
       final int offset, final int columnWidth, final DataTypeDescriptor dtd,
       final ByteArrayDataOutput buffer) throws StandardException {
 
@@ -731,10 +778,10 @@ public abstract class DataTypeUtilities {
             buffer);
         return;
       case StoredFormatIds.INT_TYPE_ID:
-        toString(SQLInteger.getAsInteger(inBytes, offset), buffer);
+        toString(RowFormatter.readInt(inBytes, offset), buffer);
         return;
       case StoredFormatIds.LONGINT_TYPE_ID:
-        toString(SQLLongint.getAsLong(inBytes, offset), buffer);
+        toString(RowFormatter.readLong(inBytes, offset), buffer);
         return;
 
       case StoredFormatIds.DECIMAL_TYPE_ID:
@@ -748,7 +795,7 @@ public abstract class DataTypeUtilities {
         buffer.writeBytes(Float.toString(SQLReal.getAsFloat(inBytes, offset)));
         return;
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        toString(SQLSmallint.getAsShort(inBytes, offset), buffer);
+        toString(RowFormatter.readShort(inBytes, offset), buffer);
         return;
       case StoredFormatIds.DATE_TYPE_ID:
         SQLDate.writeAsString(inBytes, offset, buffer);
@@ -786,12 +833,12 @@ public abstract class DataTypeUtilities {
           // types that have already been taken care of above
           buffer.writeBytes(result);
         }
-        return;
+        break;
     }
   }
 
   /** Extract the given column from raw bytes as UTF8 encoded string for PXF. */
-  public static final void writeAsUTF8BytesForPXF(final UnsafeWrapper unsafe,
+  public static void writeAsUTF8BytesForPXF(final UnsafeWrapper unsafe,
       final long memOffset, final int columnWidth,
       @Unretained final OffHeapByteSource bs, final DataTypeDescriptor dtd,
       final ByteArrayDataOutput buffer) throws StandardException {
@@ -810,29 +857,29 @@ public abstract class DataTypeUtilities {
             bs, buffer);
         return;
       case StoredFormatIds.INT_TYPE_ID:
-        toString(SQLInteger.getAsInteger(unsafe, memOffset), buffer);
+        toString(RowFormatter.readInt(memOffset), buffer);
         return;
       case StoredFormatIds.LONGINT_TYPE_ID:
-        toString(SQLLongint.getAsLong(unsafe, memOffset), buffer);
+        toString(RowFormatter.readLong(memOffset), buffer);
         return;
 
       case StoredFormatIds.DECIMAL_TYPE_ID:
         SQLDecimal.writeAsString(unsafe, memOffset, columnWidth, buffer);
         return;
       case StoredFormatIds.DOUBLE_TYPE_ID:
-        buffer.writeBytes(Double.toString(SQLDouble.getAsDouble(unsafe, memOffset)));
+        buffer.writeBytes(Double.toString(SQLDouble.getAsDouble(memOffset)));
         return;
       case StoredFormatIds.REAL_TYPE_ID:
-        buffer.writeBytes(Float.toString(SQLReal.getAsFloat(unsafe, memOffset)));
+        buffer.writeBytes(Float.toString(SQLReal.getAsFloat(memOffset)));
         return;
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        toString(SQLSmallint.getAsShort(unsafe, memOffset), buffer);
+        toString(RowFormatter.readShort(memOffset), buffer);
         return;
       case StoredFormatIds.DATE_TYPE_ID:
-        SQLDate.writeAsString(unsafe, memOffset, buffer);
+        SQLDate.writeAsString(memOffset, buffer);
         return;
       case StoredFormatIds.TIME_TYPE_ID:
-        SQLTime.writeAsString(unsafe, memOffset, buffer);
+        SQLTime.writeAsString(memOffset, buffer);
         return;
       case StoredFormatIds.TIMESTAMP_TYPE_ID:
         SQLTimestamp.writeAsString(unsafe, memOffset, buffer);
@@ -856,14 +903,14 @@ public abstract class DataTypeUtilities {
 
       default:
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         final String result = dvd.getString();
         if (result != null) {
           // we don't expect non-ASCII characters except in *CHAR/CLOB/XML
           // types that have already been taken care of above
           buffer.writeBytes(result);
         }
-        return;
+        break;
     }
   }
 
@@ -871,7 +918,7 @@ public abstract class DataTypeUtilities {
    * Extract the given column value from raw bytes and set directly into the
    * given DVD.
    */
-  public static final void setInDVD(final DataValueDescriptor dvd,
+  public static void setInDVD(final DataValueDescriptor dvd,
       final byte[] inBytes, final int offset, final int columnWidth,
       final DataTypeDescriptor dtd) throws StandardException {
 
@@ -886,14 +933,14 @@ public abstract class DataTypeUtilities {
         dvd.setValue(SQLVarchar.getAsString(inBytes, offset, columnWidth));
         break;
       case StoredFormatIds.INT_TYPE_ID:
-        dvd.setValue(SQLInteger.getAsInteger(inBytes, offset));
+        dvd.setValue(RowFormatter.readInt(inBytes, offset));
         break;
       case StoredFormatIds.DECIMAL_TYPE_ID:
         dvd.setBigDecimal(SQLDecimal.getAsBigDecimal(inBytes, offset,
             columnWidth));
         break;
       case StoredFormatIds.LONGINT_TYPE_ID:
-        dvd.setValue(SQLLongint.getAsLong(inBytes, offset));
+        dvd.setValue(RowFormatter.readLong(inBytes, offset));
         break;
       case StoredFormatIds.DOUBLE_TYPE_ID:
         dvd.setValue(SQLDouble.getAsDouble(inBytes, offset));
@@ -902,7 +949,7 @@ public abstract class DataTypeUtilities {
         dvd.setValue(SQLReal.getAsFloat(inBytes, offset));
         break;
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        dvd.setValue(SQLSmallint.getAsShort(inBytes, offset));
+        dvd.setValue(RowFormatter.readShort(inBytes, offset));
         break;
       case StoredFormatIds.DATE_TYPE_ID:
         dvd.setValue(SQLDate.getAsDate(inBytes, offset,
@@ -950,7 +997,7 @@ public abstract class DataTypeUtilities {
    * Extract the given column value from raw bytes and set directly into the
    * given DVD.
    */
-  public static final void setInDVD(final DataValueDescriptor dvd,
+  public static void setInDVD(final DataValueDescriptor dvd,
       final UnsafeWrapper unsafe, final long memOffset, final int columnWidth,
       final OffHeapByteSource bs, final DataTypeDescriptor dtd)
       throws StandardException {
@@ -958,32 +1005,30 @@ public abstract class DataTypeUtilities {
     final int formatID = dtd.getTypeId().getTypeFormatId();
     switch (formatID) {
       case StoredFormatIds.CHAR_TYPE_ID:
-        dvd.setValue(SQLChar.getAsString(unsafe, memOffset, columnWidth, bs,
-            dtd));
+        dvd.setValue(SQLChar.getAsString(memOffset, columnWidth, bs, dtd));
         break;
       case StoredFormatIds.LONGVARCHAR_TYPE_ID:
       case StoredFormatIds.VARCHAR_TYPE_ID:
       case StoredFormatIds.CLOB_TYPE_ID:
-        dvd.setValue(SQLVarchar.getAsString(unsafe, memOffset, columnWidth, bs));
+        dvd.setValue(SQLVarchar.getAsString(memOffset, columnWidth, bs));
         break;
       case StoredFormatIds.INT_TYPE_ID:
-        dvd.setValue(SQLInteger.getAsInteger(unsafe, memOffset));
+        dvd.setValue(RowFormatter.readInt(memOffset));
         break;
       case StoredFormatIds.DECIMAL_TYPE_ID:
-        dvd.setBigDecimal(SQLDecimal.getAsBigDecimal(unsafe, memOffset,
-            columnWidth));
+        dvd.setBigDecimal(SQLDecimal.getAsBigDecimal(memOffset, columnWidth));
         break;
       case StoredFormatIds.LONGINT_TYPE_ID:
-        dvd.setValue(SQLLongint.getAsLong(unsafe, memOffset));
+        dvd.setValue(RowFormatter.readLong(memOffset));
         break;
       case StoredFormatIds.DOUBLE_TYPE_ID:
-        dvd.setValue(SQLDouble.getAsDouble(unsafe, memOffset));
+        dvd.setValue(SQLDouble.getAsDouble(memOffset));
         break;
       case StoredFormatIds.REAL_TYPE_ID:
-        dvd.setValue(SQLReal.getAsFloat(unsafe, memOffset));
+        dvd.setValue(SQLReal.getAsFloat(memOffset));
         break;
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        dvd.setValue(SQLSmallint.getAsShort(unsafe, memOffset));
+        dvd.setValue(RowFormatter.readShort(memOffset));
         break;
       case StoredFormatIds.DATE_TYPE_ID:
         dvd.setValue(SQLDate.getAsDate(unsafe, memOffset,
@@ -1011,11 +1056,11 @@ public abstract class DataTypeUtilities {
         dvd.setValue(SQLBinary.getAsBytes(unsafe, memOffset, columnWidth));
         break;
       case StoredFormatIds.XML_TYPE_ID:
-        dvd.setValue(XML.getAsString(unsafe, memOffset, columnWidth, bs));
+        dvd.setValue(XML.getAsString(memOffset, columnWidth, bs));
         break;
       default:
         final DataValueDescriptor dvd2 = dtd.getNull();
-        dvd2.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd2.readBytes(memOffset, columnWidth, bs);
         final Object result = dvd2.getObject();
         if (result != null) {
           dvd.setValue(result);
@@ -1027,7 +1072,7 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final boolean getAsBoolean(final byte[] inBytes,
+  public static boolean getAsBoolean(final byte[] inBytes,
       final int offset, final int columnWidth, final DataTypeDescriptor dtd)
       throws StandardException {
 
@@ -1040,7 +1085,7 @@ public abstract class DataTypeUtilities {
         return value != 0.0;
       }
       case StoredFormatIds.INT_TYPE_ID: {
-        final int value = SQLInteger.getAsInteger(inBytes, offset);
+        final int value = RowFormatter.readInt(inBytes, offset);
         return value != 0;
       }
       case StoredFormatIds.DECIMAL_TYPE_ID: {
@@ -1049,7 +1094,7 @@ public abstract class DataTypeUtilities {
         return SQLDecimal.getBoolean(bd);
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        final long lv = SQLLongint.getAsLong(inBytes, offset);
+        final long lv = RowFormatter.readLong(inBytes, offset);
         return lv != 0;
       }
       case StoredFormatIds.REAL_TYPE_ID: {
@@ -1057,7 +1102,7 @@ public abstract class DataTypeUtilities {
         return flt != 0.0f;
       }
       case StoredFormatIds.SMALLINT_TYPE_ID: {
-        final short shrt = SQLSmallint.getAsShort(inBytes, offset);
+        final short shrt = RowFormatter.readShort(inBytes, offset);
         return shrt != 0;
       }
       case StoredFormatIds.CHAR_TYPE_ID: {
@@ -1080,7 +1125,7 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final boolean getAsBoolean(final UnsafeWrapper unsafe,
+  public static boolean getAsBoolean(final UnsafeWrapper unsafe,
       final long memOffset, final int columnWidth,
       @Unretained final OffHeapByteSource bs, final DataTypeDescriptor dtd)
       throws StandardException {
@@ -1090,51 +1135,50 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.BOOLEAN_TYPE_ID:
         return SQLBoolean.getAsBoolean(unsafe, memOffset);
       case StoredFormatIds.DOUBLE_TYPE_ID: {
-        final double value = SQLDouble.getAsDouble(unsafe, memOffset);
+        final double value = SQLDouble.getAsDouble(memOffset);
         return value != 0.0;
       }
       case StoredFormatIds.INT_TYPE_ID: {
-        final int value = SQLInteger.getAsInteger(unsafe, memOffset);
+        final int value = RowFormatter.readInt(memOffset);
         return value != 0;
       }
       case StoredFormatIds.DECIMAL_TYPE_ID: {
-        final BigDecimal bd = SQLDecimal.getAsBigDecimal(unsafe, memOffset,
-            columnWidth);
+        final BigDecimal bd = SQLDecimal.getAsBigDecimal(memOffset, columnWidth);
         return SQLDecimal.getBoolean(bd);
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        final long lv = SQLLongint.getAsLong(unsafe, memOffset);
+        final long lv = RowFormatter.readLong(memOffset);
         return lv != 0;
       }
       case StoredFormatIds.REAL_TYPE_ID: {
-        final float flt = SQLReal.getAsFloat(unsafe, memOffset);
+        final float flt = SQLReal.getAsFloat(memOffset);
         return flt != 0.0f;
       }
       case StoredFormatIds.SMALLINT_TYPE_ID: {
-        final short shrt = SQLSmallint.getAsShort(unsafe, memOffset);
+        final short shrt = RowFormatter.readShort(memOffset);
         return shrt != 0;
       }
       case StoredFormatIds.CHAR_TYPE_ID: {
-        final String str = SQLChar.getAsString(unsafe, memOffset, columnWidth,
+        final String str = SQLChar.getAsString(memOffset, columnWidth,
             bs, dtd).trim();
         return !(str.equals("0") || str.equals("false"));
       }
       case StoredFormatIds.LONGVARCHAR_TYPE_ID:
       case StoredFormatIds.VARCHAR_TYPE_ID:
       case StoredFormatIds.CLOB_TYPE_ID: {
-        final String str = SQLVarchar.getAsString(unsafe, memOffset,
+        final String str = SQLVarchar.getAsString(memOffset,
             columnWidth, bs, dtd).trim();
         return !(str.equals("0") || str.equals("false"));
       }
       default: {
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         return dvd.getBoolean();
       }
     }
   }
 
-  public static final byte getAsByte(final byte[] inBytes, final int offset,
+  public static byte getAsByte(final byte[] inBytes, final int offset,
       final int columnWidth, final ColumnDescriptor cd)
       throws StandardException {
 
@@ -1151,7 +1195,7 @@ public abstract class DataTypeUtilities {
         return (byte)value;
       }
       case StoredFormatIds.INT_TYPE_ID: {
-        final int value = SQLInteger.getAsInteger(inBytes, offset);
+        final int value = RowFormatter.readInt(inBytes, offset);
         if (value > Byte.MAX_VALUE || value < Byte.MIN_VALUE) {
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "TINYINT",
@@ -1172,7 +1216,7 @@ public abstract class DataTypeUtilities {
         }
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        final long lv = SQLLongint.getAsLong(inBytes, offset);
+        final long lv = RowFormatter.readLong(inBytes, offset);
         if (lv > Byte.MAX_VALUE || lv < Byte.MIN_VALUE)
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "TINYINT",
@@ -1191,7 +1235,7 @@ public abstract class DataTypeUtilities {
         return (byte)flt;
       }
       case StoredFormatIds.SMALLINT_TYPE_ID: {
-        final short shrt = SQLSmallint.getAsShort(inBytes, offset);
+        final short shrt = RowFormatter.readShort(inBytes, offset);
         if (shrt > Byte.MAX_VALUE || shrt < Byte.MIN_VALUE)
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "TINYINT",
@@ -1230,8 +1274,7 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final byte getAsByte(final UnsafeWrapper unsafe,
-      final long memOffset, final int columnWidth,
+  public static byte getAsByte(final long memOffset, final int columnWidth,
       @Unretained final OffHeapByteSource bs, final ColumnDescriptor cd)
       throws StandardException {
 
@@ -1239,7 +1282,7 @@ public abstract class DataTypeUtilities {
     final int formatID = dtd.getTypeId().getTypeFormatId();
     switch (formatID) {
       case StoredFormatIds.DOUBLE_TYPE_ID: {
-        final double value = SQLDouble.getAsDouble(unsafe, memOffset);
+        final double value = SQLDouble.getAsDouble(memOffset);
         if ((value > (Byte.MAX_VALUE + 1.0d))
             || (value < (Byte.MIN_VALUE - 1.0d)))
           throw StandardException.newException(
@@ -1248,7 +1291,7 @@ public abstract class DataTypeUtilities {
         return (byte)value;
       }
       case StoredFormatIds.INT_TYPE_ID: {
-        final int value = SQLInteger.getAsInteger(unsafe, memOffset);
+        final int value = RowFormatter.readInt(memOffset);
         if (value > Byte.MAX_VALUE || value < Byte.MIN_VALUE) {
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "TINYINT",
@@ -1257,8 +1300,7 @@ public abstract class DataTypeUtilities {
         return (byte)value;
       }
       case StoredFormatIds.DECIMAL_TYPE_ID: {
-        final BigDecimal bd = SQLDecimal.getAsBigDecimal(unsafe, memOffset,
-            columnWidth);
+        final BigDecimal bd = SQLDecimal.getAsBigDecimal(memOffset, columnWidth);
         final long lv = SQLDecimal.getLong(bd);
         if ((lv >= Byte.MIN_VALUE) && (lv <= Byte.MAX_VALUE))
           return (byte)lv;
@@ -1269,7 +1311,7 @@ public abstract class DataTypeUtilities {
         }
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        final long lv = SQLLongint.getAsLong(unsafe, memOffset);
+        final long lv = RowFormatter.readLong(memOffset);
         if (lv > Byte.MAX_VALUE || lv < Byte.MIN_VALUE)
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "TINYINT",
@@ -1279,7 +1321,7 @@ public abstract class DataTypeUtilities {
 
       }
       case StoredFormatIds.REAL_TYPE_ID: {
-        final float flt = SQLReal.getAsFloat(unsafe, memOffset);
+        final float flt = SQLReal.getAsFloat(memOffset);
         if ((flt > ((Byte.MAX_VALUE + 1.0d)))
             || (flt < (Byte.MIN_VALUE - 1.0d)))
           throw StandardException.newException(
@@ -1288,7 +1330,7 @@ public abstract class DataTypeUtilities {
         return (byte)flt;
       }
       case StoredFormatIds.SMALLINT_TYPE_ID: {
-        final short shrt = SQLSmallint.getAsShort(unsafe, memOffset);
+        final short shrt = RowFormatter.readShort(memOffset);
         if (shrt > Byte.MAX_VALUE || shrt < Byte.MIN_VALUE)
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "TINYINT",
@@ -1296,7 +1338,7 @@ public abstract class DataTypeUtilities {
         return (byte)shrt;
       }
       case StoredFormatIds.CHAR_TYPE_ID: {
-        final String str = SQLChar.getAsString(unsafe, memOffset, columnWidth,
+        final String str = SQLChar.getAsString(memOffset, columnWidth,
             bs, dtd).trim();
         try {
           return Byte.parseByte(str);
@@ -1309,7 +1351,7 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.LONGVARCHAR_TYPE_ID:
       case StoredFormatIds.VARCHAR_TYPE_ID:
       case StoredFormatIds.CLOB_TYPE_ID: {
-        final String str = SQLVarchar.getAsString(unsafe, memOffset,
+        final String str = SQLVarchar.getAsString(memOffset,
             columnWidth, bs, dtd).trim();
         try {
           return Byte.parseByte(str);
@@ -1321,7 +1363,7 @@ public abstract class DataTypeUtilities {
       }
       default: {
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         return dvd.getByte();
       }
     }
@@ -1329,7 +1371,7 @@ public abstract class DataTypeUtilities {
 
   // TODO: SW: for both LANG_OUTSIDE_RANGE, LANG_FORMAT errors, should also
   // have the culprit value in exception message
-  public static final short getAsShort(final byte[] inBytes, final int offset,
+  public static short getAsShort(final byte[] inBytes, final int offset,
       final int columnWidth, final ColumnDescriptor cd)
       throws StandardException {
 
@@ -1347,7 +1389,7 @@ public abstract class DataTypeUtilities {
       }
 
       case StoredFormatIds.INT_TYPE_ID: {
-        final int value = SQLInteger.getAsInteger(inBytes, offset);
+        final int value = RowFormatter.readInt(inBytes, offset);
         if (value > Short.MAX_VALUE || value < Short.MIN_VALUE)
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "SMALLINT",
@@ -1368,7 +1410,7 @@ public abstract class DataTypeUtilities {
         }
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        final long lv = SQLLongint.getAsLong(inBytes, offset);
+        final long lv = RowFormatter.readLong(inBytes, offset);
         if (lv > Short.MAX_VALUE || lv < Short.MIN_VALUE)
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "SMALLINT",
@@ -1385,7 +1427,7 @@ public abstract class DataTypeUtilities {
         return (short)flt;
       }
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return SQLSmallint.getAsShort(inBytes, offset);
+        return RowFormatter.readShort(inBytes, offset);
       case StoredFormatIds.CHAR_TYPE_ID: {
         final String str = SQLChar.getAsString(inBytes, offset, columnWidth,
             dtd).trim();
@@ -1418,8 +1460,7 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final short getAsShort(final UnsafeWrapper unsafe,
-      final long memOffset, final int columnWidth,
+  public static short getAsShort(final long memOffset, final int columnWidth,
       @Unretained final OffHeapByteSource bs, final ColumnDescriptor cd)
       throws StandardException {
 
@@ -1427,7 +1468,7 @@ public abstract class DataTypeUtilities {
     final int formatID = dtd.getTypeId().getTypeFormatId();
     switch (formatID) {
       case StoredFormatIds.DOUBLE_TYPE_ID: {
-        final double value = SQLDouble.getAsDouble(unsafe, memOffset);
+        final double value = SQLDouble.getAsDouble(memOffset);
         if ((value > (Short.MAX_VALUE + 1.0d))
             || (value < (Short.MIN_VALUE - 1.0d)))
           throw StandardException.newException(
@@ -1437,7 +1478,7 @@ public abstract class DataTypeUtilities {
       }
 
       case StoredFormatIds.INT_TYPE_ID: {
-        final int value = SQLInteger.getAsInteger(unsafe, memOffset);
+        final int value = RowFormatter.readInt(memOffset);
         if (value > Short.MAX_VALUE || value < Short.MIN_VALUE)
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "SMALLINT",
@@ -1446,7 +1487,7 @@ public abstract class DataTypeUtilities {
 
       }
       case StoredFormatIds.DECIMAL_TYPE_ID: {
-        final BigDecimal bd = SQLDecimal.getAsBigDecimal(unsafe, memOffset,
+        final BigDecimal bd = SQLDecimal.getAsBigDecimal(memOffset,
             columnWidth);
         final long lv = SQLDecimal.getLong(bd);
         if ((lv >= Short.MIN_VALUE) && (lv <= Short.MAX_VALUE))
@@ -1458,7 +1499,7 @@ public abstract class DataTypeUtilities {
         }
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        final long lv = SQLLongint.getAsLong(unsafe, memOffset);
+        final long lv = RowFormatter.readLong(memOffset);
         if (lv > Short.MAX_VALUE || lv < Short.MIN_VALUE)
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "SMALLINT",
@@ -1466,7 +1507,7 @@ public abstract class DataTypeUtilities {
         return (short)lv;
       }
       case StoredFormatIds.REAL_TYPE_ID: {
-        final float flt = SQLReal.getAsFloat(unsafe, memOffset);
+        final float flt = SQLReal.getAsFloat(memOffset);
         if ((flt > ((Short.MAX_VALUE + 1.0d)))
             || (flt < (Short.MIN_VALUE - 1.0d)))
           throw StandardException.newException(
@@ -1475,9 +1516,9 @@ public abstract class DataTypeUtilities {
         return (short)flt;
       }
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return SQLSmallint.getAsShort(unsafe, memOffset);
+        return RowFormatter.readShort(memOffset);
       case StoredFormatIds.CHAR_TYPE_ID: {
-        final String str = SQLChar.getAsString(unsafe, memOffset, columnWidth,
+        final String str = SQLChar.getAsString(memOffset, columnWidth,
             bs, dtd).trim();
         try {
           return Short.parseShort(str);
@@ -1490,7 +1531,7 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.LONGVARCHAR_TYPE_ID:
       case StoredFormatIds.VARCHAR_TYPE_ID:
       case StoredFormatIds.CLOB_TYPE_ID: {
-        final String str = SQLVarchar.getAsString(unsafe, memOffset,
+        final String str = SQLVarchar.getAsString(memOffset,
             columnWidth, bs, dtd).trim();
         try {
           return Short.parseShort(str);
@@ -1502,13 +1543,13 @@ public abstract class DataTypeUtilities {
       }
       default: {
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         return dvd.getShort();
       }
     }
   }
 
-  public static final int getAsInt(final byte[] inBytes, final int offset,
+  public static int getAsInt(final byte[] inBytes, final int offset,
       final int columnWidth, final ColumnDescriptor cd)
       throws StandardException {
 
@@ -1526,7 +1567,7 @@ public abstract class DataTypeUtilities {
       }
 
       case StoredFormatIds.INT_TYPE_ID: {
-        return SQLInteger.getAsInteger(inBytes, offset);
+        return RowFormatter.readInt(inBytes, offset);
       }
       case StoredFormatIds.DECIMAL_TYPE_ID: {
         final BigDecimal bd = SQLDecimal.getAsBigDecimal(inBytes, offset,
@@ -1541,7 +1582,7 @@ public abstract class DataTypeUtilities {
         }
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        final long lv = SQLLongint.getAsLong(inBytes, offset);
+        final long lv = RowFormatter.readLong(inBytes, offset);
         if (lv > Integer.MAX_VALUE || lv < Integer.MIN_VALUE)
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "INTEGER",
@@ -1558,7 +1599,7 @@ public abstract class DataTypeUtilities {
         return (int)flt;
       }
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return SQLSmallint.getAsShort(inBytes, offset);
+        return RowFormatter.readShort(inBytes, offset);
       case StoredFormatIds.CHAR_TYPE_ID: {
         final String str = SQLChar.getAsString(inBytes, offset, columnWidth,
             dtd).trim();
@@ -1591,15 +1632,15 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final int getAsInt(final UnsafeWrapper unsafe,
-      final long memOffset, final int columnWidth, final OffHeapByteSource bs,
-      final ColumnDescriptor cd) throws StandardException {
+  public static int getAsInt(final long memOffset, final int columnWidth,
+      final OffHeapByteSource bs, final ColumnDescriptor cd)
+      throws StandardException {
 
     final DataTypeDescriptor dtd = cd.getType();
     final int formatID = dtd.getTypeId().getTypeFormatId();
     switch (formatID) {
       case StoredFormatIds.DOUBLE_TYPE_ID: {
-        final double value = SQLDouble.getAsDouble(unsafe, memOffset);
+        final double value = SQLDouble.getAsDouble(memOffset);
         if ((value > (Integer.MAX_VALUE + 1.0d))
             || (value < (Integer.MIN_VALUE - 1.0d)))
           throw StandardException.newException(
@@ -1609,10 +1650,10 @@ public abstract class DataTypeUtilities {
       }
 
       case StoredFormatIds.INT_TYPE_ID: {
-        return SQLInteger.getAsInteger(unsafe, memOffset);
+        return RowFormatter.readInt(memOffset);
       }
       case StoredFormatIds.DECIMAL_TYPE_ID: {
-        final BigDecimal bd = SQLDecimal.getAsBigDecimal(unsafe, memOffset,
+        final BigDecimal bd = SQLDecimal.getAsBigDecimal(memOffset,
             columnWidth);
         final long lv = SQLDecimal.getLong(bd);
         if ((lv >= Integer.MIN_VALUE) && (lv <= Integer.MAX_VALUE))
@@ -1624,7 +1665,7 @@ public abstract class DataTypeUtilities {
         }
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        final long lv = SQLLongint.getAsLong(unsafe, memOffset);
+        final long lv = RowFormatter.readLong(memOffset);
         if (lv > Integer.MAX_VALUE || lv < Integer.MIN_VALUE)
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, "INTEGER",
@@ -1632,7 +1673,7 @@ public abstract class DataTypeUtilities {
         return (int)lv;
       }
       case StoredFormatIds.REAL_TYPE_ID: {
-        final float flt = SQLReal.getAsFloat(unsafe, memOffset);
+        final float flt = SQLReal.getAsFloat(memOffset);
         if ((flt > ((Integer.MAX_VALUE + 1.0d)))
             || (flt < (Integer.MIN_VALUE - 1.0d)))
           throw StandardException.newException(
@@ -1641,9 +1682,9 @@ public abstract class DataTypeUtilities {
         return (int)flt;
       }
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return SQLSmallint.getAsShort(unsafe, memOffset);
+        return RowFormatter.readShort(memOffset);
       case StoredFormatIds.CHAR_TYPE_ID: {
-        final String str = SQLChar.getAsString(unsafe, memOffset, columnWidth,
+        final String str = SQLChar.getAsString(memOffset, columnWidth,
             bs, dtd).trim();
         try {
           return Integer.parseInt(str);
@@ -1656,7 +1697,7 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.LONGVARCHAR_TYPE_ID:
       case StoredFormatIds.VARCHAR_TYPE_ID:
       case StoredFormatIds.CLOB_TYPE_ID: {
-        final String str = SQLVarchar.getAsString(unsafe, memOffset,
+        final String str = SQLVarchar.getAsString(memOffset,
             columnWidth, bs, dtd).trim();
         try {
           return Integer.parseInt(str);
@@ -1668,13 +1709,13 @@ public abstract class DataTypeUtilities {
       }
       default: {
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         return dvd.getInt();
       }
     }
   }
 
-  public static final long getAsLong(final byte[] inBytes, final int offset,
+  public static long getAsLong(final byte[] inBytes, final int offset,
       final int columnWidth, final ColumnDescriptor cd)
       throws StandardException {
 
@@ -1692,7 +1733,7 @@ public abstract class DataTypeUtilities {
       }
 
       case StoredFormatIds.INT_TYPE_ID: {
-        return SQLInteger.getAsInteger(inBytes, offset);
+        return RowFormatter.readInt(inBytes, offset);
       }
       case StoredFormatIds.DECIMAL_TYPE_ID: {
         final BigDecimal bd = SQLDecimal.getAsBigDecimal(inBytes, offset,
@@ -1700,7 +1741,7 @@ public abstract class DataTypeUtilities {
         return SQLDecimal.getLong(bd);
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        return SQLLongint.getAsLong(inBytes, offset);
+        return RowFormatter.readLong(inBytes, offset);
       }
       case StoredFormatIds.REAL_TYPE_ID: {
         final float flt = SQLReal.getAsFloat(inBytes, offset);
@@ -1712,7 +1753,7 @@ public abstract class DataTypeUtilities {
         return (long)flt;
       }
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return SQLSmallint.getAsShort(inBytes, offset);
+        return RowFormatter.readShort(inBytes, offset);
       case StoredFormatIds.CHAR_TYPE_ID: {
         final String str = SQLChar.getAsString(inBytes, offset, columnWidth,
             dtd).trim();
@@ -1745,15 +1786,15 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final long getAsLong(final UnsafeWrapper unsafe,
-      final long memOffset, final int columnWidth, final OffHeapByteSource bs,
-      final ColumnDescriptor cd) throws StandardException {
+  public static long getAsLong(final long memOffset, final int columnWidth,
+      final OffHeapByteSource bs, final ColumnDescriptor cd)
+      throws StandardException {
 
     final DataTypeDescriptor dtd = cd.getType();
     final int formatID = dtd.getTypeId().getTypeFormatId();
     switch (formatID) {
       case StoredFormatIds.DOUBLE_TYPE_ID: {
-        final double value = SQLDouble.getAsDouble(unsafe, memOffset);
+        final double value = SQLDouble.getAsDouble(memOffset);
         if ((value > (Long.MAX_VALUE + 1.0d))
             || (value < (Long.MIN_VALUE - 1.0d)))
           throw StandardException.newException(
@@ -1763,18 +1804,18 @@ public abstract class DataTypeUtilities {
       }
 
       case StoredFormatIds.INT_TYPE_ID: {
-        return SQLInteger.getAsInteger(unsafe, memOffset);
+        return RowFormatter.readInt(memOffset);
       }
       case StoredFormatIds.DECIMAL_TYPE_ID: {
-        final BigDecimal bd = SQLDecimal.getAsBigDecimal(unsafe, memOffset,
+        final BigDecimal bd = SQLDecimal.getAsBigDecimal(memOffset,
             columnWidth);
         return SQLDecimal.getLong(bd);
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        return SQLLongint.getAsLong(unsafe, memOffset);
+        return RowFormatter.readLong(memOffset);
       }
       case StoredFormatIds.REAL_TYPE_ID: {
-        final float flt = SQLReal.getAsFloat(unsafe, memOffset);
+        final float flt = SQLReal.getAsFloat(memOffset);
         if ((flt > ((Long.MAX_VALUE + 1.0d)))
             || (flt < (Long.MIN_VALUE - 1.0d)))
           throw StandardException.newException(
@@ -1783,9 +1824,9 @@ public abstract class DataTypeUtilities {
         return (long)flt;
       }
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return SQLSmallint.getAsShort(unsafe, memOffset);
+        return RowFormatter.readShort(memOffset);
       case StoredFormatIds.CHAR_TYPE_ID: {
-        final String str = SQLChar.getAsString(unsafe, memOffset, columnWidth,
+        final String str = SQLChar.getAsString(memOffset, columnWidth,
             bs, dtd).trim();
         try {
           return Long.parseLong(str);
@@ -1798,7 +1839,7 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.LONGVARCHAR_TYPE_ID:
       case StoredFormatIds.VARCHAR_TYPE_ID:
       case StoredFormatIds.CLOB_TYPE_ID: {
-        final String str = SQLVarchar.getAsString(unsafe, memOffset,
+        final String str = SQLVarchar.getAsString(memOffset,
             columnWidth, bs, dtd).trim();
         try {
           return Long.parseLong(str);
@@ -1810,13 +1851,13 @@ public abstract class DataTypeUtilities {
       }
       default: {
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         return dvd.getLong();
       }
     }
   }
 
-  public static final float getAsFloat(final byte[] inBytes, final int offset,
+  public static float getAsFloat(final byte[] inBytes, final int offset,
       final int columnWidth, final ColumnDescriptor cd)
       throws StandardException {
 
@@ -1832,18 +1873,18 @@ public abstract class DataTypeUtilities {
         return (float)value;
       }
       case StoredFormatIds.INT_TYPE_ID:
-        return SQLInteger.getAsInteger(inBytes, offset);
+        return RowFormatter.readInt(inBytes, offset);
       case StoredFormatIds.DECIMAL_TYPE_ID: {
         final BigDecimal localValue = SQLDecimal.getAsBigDecimal(inBytes,
             offset, columnWidth);
         return NumberDataType.normalizeREAL(localValue.floatValue());
       }
       case StoredFormatIds.LONGINT_TYPE_ID:
-        return SQLLongint.getAsLong(inBytes, offset);
+        return RowFormatter.readLong(inBytes, offset);
       case StoredFormatIds.REAL_TYPE_ID:
         return SQLReal.getAsFloat(inBytes, offset);
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return SQLSmallint.getAsShort(inBytes, offset);
+        return RowFormatter.readShort(inBytes, offset);
       case StoredFormatIds.CHAR_TYPE_ID: {
         final String str = SQLChar.getAsString(inBytes, offset, columnWidth,
             dtd).trim();
@@ -1876,15 +1917,15 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final float getAsFloat(final UnsafeWrapper unsafe,
-      final long memOffset, final int columnWidth, final OffHeapByteSource bs,
-      final ColumnDescriptor cd) throws StandardException {
+  public static float getAsFloat(final long memOffset, final int columnWidth,
+      final OffHeapByteSource bs, final ColumnDescriptor cd)
+      throws StandardException {
 
     final DataTypeDescriptor dtd = cd.getType();
     final int formatID = dtd.getTypeId().getTypeFormatId();
     switch (formatID) {
       case StoredFormatIds.DOUBLE_TYPE_ID: {
-        final double value = SQLDouble.getAsDouble(unsafe, memOffset);
+        final double value = SQLDouble.getAsDouble(memOffset);
         if (Float.isInfinite((float)value))
           throw StandardException.newException(
               SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE, TypeId.REAL_NAME,
@@ -1892,20 +1933,20 @@ public abstract class DataTypeUtilities {
         return (float)value;
       }
       case StoredFormatIds.INT_TYPE_ID:
-        return SQLInteger.getAsInteger(unsafe, memOffset);
+        return RowFormatter.readInt(memOffset);
       case StoredFormatIds.DECIMAL_TYPE_ID: {
-        final BigDecimal localValue = SQLDecimal.getAsBigDecimal(unsafe,
+        final BigDecimal localValue = SQLDecimal.getAsBigDecimal(
             memOffset, columnWidth);
         return NumberDataType.normalizeREAL(localValue.floatValue());
       }
       case StoredFormatIds.LONGINT_TYPE_ID:
-        return SQLLongint.getAsLong(unsafe, memOffset);
+        return RowFormatter.readLong(memOffset);
       case StoredFormatIds.REAL_TYPE_ID:
-        return SQLReal.getAsFloat(unsafe, memOffset);
+        return SQLReal.getAsFloat(memOffset);
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return SQLSmallint.getAsShort(unsafe, memOffset);
+        return RowFormatter.readShort(memOffset);
       case StoredFormatIds.CHAR_TYPE_ID: {
-        final String str = SQLChar.getAsString(unsafe, memOffset, columnWidth,
+        final String str = SQLChar.getAsString(memOffset, columnWidth,
             bs, dtd).trim();
         try {
           return Float.parseFloat(str);
@@ -1918,7 +1959,7 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.LONGVARCHAR_TYPE_ID:
       case StoredFormatIds.VARCHAR_TYPE_ID:
       case StoredFormatIds.CLOB_TYPE_ID: {
-        final String str = SQLVarchar.getAsString(unsafe, memOffset,
+        final String str = SQLVarchar.getAsString(memOffset,
             columnWidth, bs, dtd).trim();
         try {
           return Float.parseFloat(str);
@@ -1930,7 +1971,7 @@ public abstract class DataTypeUtilities {
       }
       default: {
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         return dvd.getFloat();
       }
     }
@@ -1946,17 +1987,17 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.DOUBLE_TYPE_ID:
         return SQLDouble.getAsDouble(inBytes, offset);
       case StoredFormatIds.INT_TYPE_ID:
-        return SQLInteger.getAsInteger(inBytes, offset);
+        return RowFormatter.readInt(inBytes, offset);
       case StoredFormatIds.DECIMAL_TYPE_ID:
         final BigDecimal bd = SQLDecimal.getAsBigDecimal(inBytes, offset,
             columnWidth);
         return SQLDecimal.getDouble(bd);
       case StoredFormatIds.LONGINT_TYPE_ID:
-        return SQLLongint.getAsLong(inBytes, offset);
+        return RowFormatter.readLong(inBytes, offset);
       case StoredFormatIds.REAL_TYPE_ID:
         return SQLReal.getAsFloat(inBytes, offset);
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return SQLSmallint.getAsShort(inBytes, offset);
+        return RowFormatter.readShort(inBytes, offset);
       case StoredFormatIds.CHAR_TYPE_ID: {
         final String str = SQLChar.getAsString(inBytes, offset, columnWidth,
             dtd).trim();
@@ -1988,29 +2029,29 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final double getAsDouble(final UnsafeWrapper unsafe,
-      final long memOffset, final int columnWidth, final OffHeapByteSource bs,
-      final ColumnDescriptor cd) throws StandardException {
+  public static double getAsDouble(final long memOffset, final int columnWidth,
+      final OffHeapByteSource bs, final ColumnDescriptor cd)
+      throws StandardException {
 
     final DataTypeDescriptor dtd = cd.getType();
     final int formatID = dtd.getTypeId().getTypeFormatId();
     switch (formatID) {
       case StoredFormatIds.DOUBLE_TYPE_ID:
-        return SQLDouble.getAsDouble(unsafe, memOffset);
+        return SQLDouble.getAsDouble(memOffset);
       case StoredFormatIds.INT_TYPE_ID:
-        return SQLInteger.getAsInteger(unsafe, memOffset);
+        return RowFormatter.readInt(memOffset);
       case StoredFormatIds.DECIMAL_TYPE_ID:
-        final BigDecimal bd = SQLDecimal.getAsBigDecimal(unsafe, memOffset,
+        final BigDecimal bd = SQLDecimal.getAsBigDecimal(memOffset,
             columnWidth);
         return SQLDecimal.getDouble(bd);
       case StoredFormatIds.LONGINT_TYPE_ID:
-        return SQLLongint.getAsLong(unsafe, memOffset);
+        return RowFormatter.readLong(memOffset);
       case StoredFormatIds.REAL_TYPE_ID:
-        return SQLReal.getAsFloat(unsafe, memOffset);
+        return SQLReal.getAsFloat(memOffset);
       case StoredFormatIds.SMALLINT_TYPE_ID:
-        return SQLSmallint.getAsShort(unsafe, memOffset);
+        return RowFormatter.readShort(memOffset);
       case StoredFormatIds.CHAR_TYPE_ID: {
-        final String str = SQLChar.getAsString(unsafe, memOffset, columnWidth,
+        final String str = SQLChar.getAsString(memOffset, columnWidth,
             bs, dtd).trim();
         try {
           return Double.parseDouble(str);
@@ -2023,7 +2064,7 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.LONGVARCHAR_TYPE_ID:
       case StoredFormatIds.VARCHAR_TYPE_ID:
       case StoredFormatIds.CLOB_TYPE_ID: {
-        final String str = SQLVarchar.getAsString(unsafe, memOffset,
+        final String str = SQLVarchar.getAsString(memOffset,
             columnWidth, bs, dtd).trim();
         try {
           return Double.parseDouble(str);
@@ -2035,12 +2076,12 @@ public abstract class DataTypeUtilities {
       }
       default:
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         return dvd.getDouble();
     }
   }
 
-  public static final BigDecimal getAsBigDecimal(final byte[] inBytes,
+  public static BigDecimal getAsBigDecimal(final byte[] inBytes,
       final int offset, final int columnWidth, final ColumnDescriptor cd)
       throws StandardException {
 
@@ -2059,15 +2100,15 @@ public abstract class DataTypeUtilities {
           return new BigDecimal(Float.toString(flt));
         }
         case StoredFormatIds.INT_TYPE_ID: {
-          final int v = SQLInteger.getAsInteger(inBytes, offset);
+          final int v = RowFormatter.readInt(inBytes, offset);
           return BigDecimal.valueOf(v);
         }
         case StoredFormatIds.LONGINT_TYPE_ID: {
-          final long v = SQLLongint.getAsLong(inBytes, offset);
+          final long v = RowFormatter.readLong(inBytes, offset);
           return BigDecimal.valueOf(v);
         }
         case StoredFormatIds.SMALLINT_TYPE_ID: {
-          final short v = SQLSmallint.getAsShort(inBytes, offset);
+          final short v = RowFormatter.readShort(inBytes, offset);
           return BigDecimal.valueOf(v);
         }
         case StoredFormatIds.CHAR_TYPE_ID: {
@@ -2091,8 +2132,8 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final BigDecimal getAsBigDecimal(final UnsafeWrapper unsafe,
-      final long memOffset, final int columnWidth, final OffHeapByteSource bs,
+  public static BigDecimal getAsBigDecimal(final long memOffset,
+      final int columnWidth, final OffHeapByteSource bs,
       final ColumnDescriptor cd) throws StandardException {
 
     final DataTypeDescriptor dtd = cd.getType();
@@ -2100,40 +2141,40 @@ public abstract class DataTypeUtilities {
     try {
       switch (formatID) {
         case StoredFormatIds.DECIMAL_TYPE_ID:
-          return SQLDecimal.getAsBigDecimal(unsafe, memOffset, columnWidth);
+          return SQLDecimal.getAsBigDecimal(memOffset, columnWidth);
         case StoredFormatIds.DOUBLE_TYPE_ID: {
-          final double value = SQLDouble.getAsDouble(unsafe, memOffset);
+          final double value = SQLDouble.getAsDouble(memOffset);
           return BigDecimal.valueOf(value);
         }
         case StoredFormatIds.REAL_TYPE_ID: {
-          final float flt = SQLReal.getAsFloat(unsafe, memOffset);
+          final float flt = SQLReal.getAsFloat(memOffset);
           return new BigDecimal(Float.toString(flt));
         }
         case StoredFormatIds.INT_TYPE_ID: {
-          final int v = SQLInteger.getAsInteger(unsafe, memOffset);
+          final int v = RowFormatter.readInt(memOffset);
           return BigDecimal.valueOf(v);
         }
         case StoredFormatIds.LONGINT_TYPE_ID: {
-          final long v = SQLLongint.getAsLong(unsafe, memOffset);
+          final long v = RowFormatter.readLong(memOffset);
           return BigDecimal.valueOf(v);
         }
         case StoredFormatIds.SMALLINT_TYPE_ID: {
-          final short v = SQLSmallint.getAsShort(unsafe, memOffset);
+          final short v = RowFormatter.readShort(memOffset);
           return BigDecimal.valueOf(v);
         }
         case StoredFormatIds.CHAR_TYPE_ID: {
-          final String str = SQLChar.getAsString(unsafe, memOffset,
+          final String str = SQLChar.getAsString(memOffset,
               columnWidth, bs, dtd);
           return new BigDecimal(str);
         }
         case StoredFormatIds.LONGVARCHAR_TYPE_ID:
         case StoredFormatIds.VARCHAR_TYPE_ID:
-          String str = SQLVarchar.getAsString(unsafe, memOffset, columnWidth,
+          String str = SQLVarchar.getAsString(memOffset, columnWidth,
               bs);
           return new BigDecimal(str);
         default: {
           final DataValueDescriptor dvd = dtd.getNull();
-          dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+          dvd.readBytes(memOffset, columnWidth, bs);
           return SQLDecimal.getBigDecimal(dvd);
         }
       }
@@ -2143,7 +2184,7 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final byte[] getAsBytes(final byte[] inBytes, final int offset,
+  public static byte[] getAsBytes(final byte[] inBytes, final int offset,
       final int columnWidth, final DataTypeDescriptor dtd)
       throws StandardException {
 
@@ -2185,10 +2226,9 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final byte[] getAsBytes(final UnsafeWrapper unsafe,
-      final long memAddr, final int addrOffset, final int columnWidth,
-      final OffHeapByteSource bs, final DataTypeDescriptor dtd)
-      throws StandardException {
+  public static byte[] getAsBytes(final long memAddr, final int addrOffset,
+      final int columnWidth, final OffHeapByteSource bs,
+      final DataTypeDescriptor dtd) throws StandardException {
 
     final int formatID = dtd.getTypeId().getTypeFormatId();
     switch (formatID) {
@@ -2214,7 +2254,7 @@ public abstract class DataTypeUtilities {
       }
       default: {
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memAddr + addrOffset, columnWidth, bs);
+        dvd.readBytes(memAddr + addrOffset, columnWidth, bs);
         if (!dvd.isNull()) {
           return dvd.getBytes();
         }
@@ -2225,7 +2265,50 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final java.sql.Date getAsDate(final byte[] inBytes,
+  public static long getAsDateMillis(final byte[] inBytes,
+      final int offset, final int columnWidth, final Calendar cal,
+      final DataTypeDescriptor dtd) throws StandardException {
+    final int formatID = dtd.getTypeId().getTypeFormatId();
+    switch (formatID) {
+      case StoredFormatIds.DATE_TYPE_ID:
+        return SQLDate.getAsDateMillis(inBytes, offset, cal);
+      case StoredFormatIds.TIMESTAMP_TYPE_ID:
+        return SQLTimestamp.getAsDateMillis(inBytes, offset, cal);
+      default: {
+        final DataValueDescriptor dvd = dtd.getNull();
+        dvd.readBytes(inBytes, offset, columnWidth);
+        if (!dvd.isNull()) {
+          return dvd.getDate(cal).getTime();
+        } else {
+          return 0L;
+        }
+      }
+    }
+  }
+
+  public static long getAsDateMillis(final UnsafeWrapper unsafe,
+      final long memOffset, final int columnWidth, final OffHeapByteSource bs,
+      final Calendar cal, final DataTypeDescriptor dtd)
+      throws StandardException {
+    final int formatID = dtd.getTypeId().getTypeFormatId();
+    switch (formatID) {
+      case StoredFormatIds.DATE_TYPE_ID:
+        return SQLDate.getAsDateMillis(unsafe, memOffset, cal);
+      case StoredFormatIds.TIMESTAMP_TYPE_ID:
+        return SQLTimestamp.getAsDateMillis(unsafe, memOffset, cal);
+      default: {
+        final DataValueDescriptor dvd = dtd.getNull();
+        dvd.readBytes(memOffset, columnWidth, bs);
+        if (!dvd.isNull()) {
+          return dvd.getDate(cal).getTime();
+        } else {
+          return 0L;
+        }
+      }
+    }
+  }
+
+  public static java.sql.Date getAsDate(final byte[] inBytes,
       final int offset, final int columnWidth, final Calendar cal,
       final DataTypeDescriptor dtd) throws StandardException {
     final int formatID = dtd.getTypeId().getTypeFormatId();
@@ -2247,7 +2330,7 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final java.sql.Date getAsDate(final UnsafeWrapper unsafe,
+  public static java.sql.Date getAsDate(final UnsafeWrapper unsafe,
       final long memOffset, final int columnWidth, final OffHeapByteSource bs,
       final Calendar cal, final DataTypeDescriptor dtd)
       throws StandardException {
@@ -2259,7 +2342,7 @@ public abstract class DataTypeUtilities {
         return SQLTimestamp.getAsDate(unsafe, memOffset, cal);
       default: {
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         if (dvd.isNull()) {
           return null;
         }
@@ -2270,7 +2353,54 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final java.sql.Timestamp getAsTimestamp(final byte[] inBytes,
+  public static long getTimestampMicros(final java.sql.Timestamp ts) {
+    return ts.getTime() * 1000L + (ts.getNanos() / 1000L);
+  }
+
+  public static long getAsTimestampMicros(final byte[] inBytes,
+      final int offset, final int columnWidth, final Calendar cal,
+      final DataTypeDescriptor dtd) throws StandardException {
+    final int formatID = dtd.getTypeId().getTypeFormatId();
+    switch (formatID) {
+      case StoredFormatIds.TIMESTAMP_TYPE_ID:
+        return SQLTimestamp.getAsTimeStampMicros(inBytes, offset, cal);
+      case StoredFormatIds.DATE_TYPE_ID:
+        return SQLDate.getAsTimeStampMicros(inBytes, offset, cal);
+      default: {
+        final DataValueDescriptor dvd = dtd.getNull();
+        dvd.readBytes(inBytes, offset, columnWidth);
+        if (!dvd.isNull()) {
+          return getTimestampMicros(dvd.getTimestamp(cal));
+        } else {
+          return 0L;
+        }
+      }
+    }
+  }
+
+  public static long getAsTimestampMicros(
+      final UnsafeWrapper unsafe, final long memOffset, final int columnWidth,
+      final OffHeapByteSource bs, final Calendar cal,
+      final DataTypeDescriptor dtd) throws StandardException {
+    final int formatID = dtd.getTypeId().getTypeFormatId();
+    switch (formatID) {
+      case StoredFormatIds.TIMESTAMP_TYPE_ID:
+        return SQLTimestamp.getAsTimeStampMicros(unsafe, memOffset, cal);
+      case StoredFormatIds.DATE_TYPE_ID:
+        return SQLDate.getAsTimeStampMicros(unsafe, memOffset, cal);
+      default: {
+        final DataValueDescriptor dvd = dtd.getNull();
+        dvd.readBytes(memOffset, columnWidth, bs);
+        if (!dvd.isNull()) {
+          return getTimestampMicros(dvd.getTimestamp(cal));
+        } else {
+          return 0L;
+        }
+      }
+    }
+  }
+
+  public static java.sql.Timestamp getAsTimestamp(final byte[] inBytes,
       final int offset, final int columnWidth, final Calendar cal,
       final DataTypeDescriptor dtd) throws StandardException {
     final int formatID = dtd.getTypeId().getTypeFormatId();
@@ -2294,7 +2424,7 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final java.sql.Timestamp getAsTimestamp(
+  public static java.sql.Timestamp getAsTimestamp(
       final UnsafeWrapper unsafe, final long memOffset, final int columnWidth,
       final OffHeapByteSource bs, final Calendar cal,
       final DataTypeDescriptor dtd) throws StandardException {
@@ -2308,7 +2438,7 @@ public abstract class DataTypeUtilities {
         return SQLTimestamp.getAsTimeStamp(unsafe, memOffset, cal);
       default: {
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         if (dvd.isNull()) {
           return null;
         }
@@ -2319,7 +2449,7 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final java.sql.Time getAsTime(final byte[] inBytes,
+  public static java.sql.Time getAsTime(final byte[] inBytes,
       final int offset, final int columnWidth, final Calendar cal,
       final DataTypeDescriptor dtd) throws StandardException {
     final int formatID = dtd.getTypeId().getTypeFormatId();
@@ -2341,7 +2471,7 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final java.sql.Time getAsTime(final UnsafeWrapper unsafe,
+  public static java.sql.Time getAsTime(final UnsafeWrapper unsafe,
       final long memOffset, final int columnWidth, final OffHeapByteSource bs,
       final Calendar cal, final DataTypeDescriptor dtd)
       throws StandardException {
@@ -2353,7 +2483,7 @@ public abstract class DataTypeUtilities {
         return SQLTimestamp.getAsTime(unsafe, memOffset, cal);
       default: {
         final DataValueDescriptor dvd = dtd.getNull();
-        dvd.readBytes(unsafe, memOffset, columnWidth, bs);
+        dvd.readBytes(memOffset, columnWidth, bs);
         if (dvd.isNull()) {
           return null;
         }
@@ -2364,14 +2494,14 @@ public abstract class DataTypeUtilities {
     }
   }
 
-  public static final int NULL_MAX = Integer.MAX_VALUE >>> 1;
-  public static final int NULL_MIN = -NULL_MAX;
+  public static int NULL_MAX = Integer.MAX_VALUE >>> 1;
+  public static int NULL_MIN = -NULL_MAX;
 
   /**
    * Compare two columns (inside byte arrays or off-heap byte sources). Null
    * handling is done.
    */
-  public static final int compare(final UnsafeWrapper unsafe, byte[] lhsBytes,
+  public static int compare(final UnsafeWrapper unsafe, byte[] lhsBytes,
       long lhsMemAddr, OffHeapByteSource lhsBS, byte[] rhsBytes,
       long rhsMemAddr, OffHeapByteSource rhsBS, long lhsOffsetWidth,
       long rhsOffsetWidth, final boolean nullsOrderedLow,
@@ -2414,8 +2544,8 @@ public abstract class DataTypeUtilities {
     final TypeId typeId = dtd.getTypeId();
     final int formatID = typeId.getTypeFormatId();
 
-    int lhsColumnWidth = (int) (lhsOffsetWidth & 0xFFFFFFFF);
-    int lhsOffset = (int) (lhsOffsetWidth >>> Integer.SIZE);
+    int lhsColumnWidth = (int)lhsOffsetWidth;
+    int lhsOffset = (int)(lhsOffsetWidth >>> Integer.SIZE);
 
     int rhsColumnWidth;
     int rhsOffset;
@@ -2441,51 +2571,51 @@ public abstract class DataTypeUtilities {
         lhsOffset = 0;
         lhsColumnWidth = lhsBytes != null ? lhsBytes.length : 0;
       }
-      rhsColumnWidth = (int) (rhsOffsetWidth & 0xFFFFFFFF);
-      rhsOffset = (int) (rhsOffsetWidth >>> Integer.SIZE);
+      rhsColumnWidth = (int)rhsOffsetWidth;
+      rhsOffset = (int)(rhsOffsetWidth >>> Integer.SIZE);
     }
 
     switch (formatID) {
       case StoredFormatIds.SMALLINT_TYPE_ID: {
-        final int lhsV = lhsMemAddr != 0 ? SQLSmallint.getAsShort(unsafe,
-            lhsMemAddr + lhsOffset) : SQLSmallint.getAsShort(lhsBytes,
+        final int lhsV = lhsMemAddr != 0 ? RowFormatter.readShort(
+            lhsMemAddr + lhsOffset) : RowFormatter.readShort(lhsBytes,
             lhsOffset);
-        final int rhsV = rhsMemAddr != 0 ? SQLSmallint.getAsShort(unsafe,
-            rhsMemAddr + rhsOffset) : SQLSmallint.getAsShort(rhsBytes,
+        final int rhsV = rhsMemAddr != 0 ? RowFormatter.readShort(
+            rhsMemAddr + rhsOffset) : RowFormatter.readShort(rhsBytes,
             rhsOffset);
         return (lhsV - rhsV);
       }
       case StoredFormatIds.INT_TYPE_ID: {
         // using long below to avoid overflow of (lhsV - rhsV)
-        final long lhsV = lhsMemAddr != 0 ? SQLInteger.getAsInteger(unsafe,
-            lhsMemAddr + lhsOffset) : SQLInteger.getAsInteger(lhsBytes,
+        final long lhsV = lhsMemAddr != 0 ? RowFormatter.readInt(
+            lhsMemAddr + lhsOffset) : RowFormatter.readInt(lhsBytes,
             lhsOffset);
-        final long rhsV = rhsMemAddr != 0 ? SQLInteger.getAsInteger(unsafe,
-            rhsMemAddr + rhsOffset) : SQLInteger.getAsInteger(rhsBytes,
+        final long rhsV = rhsMemAddr != 0 ? RowFormatter.readInt(
+            rhsMemAddr + rhsOffset) : RowFormatter.readInt(rhsBytes,
             rhsOffset);
         return (int)(lhsV - rhsV);
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        final long lhsV = lhsMemAddr != 0 ? SQLLongint.getAsLong(unsafe,
-            lhsMemAddr + lhsOffset) : SQLLongint.getAsLong(lhsBytes, lhsOffset);
-        final long rhsV = rhsMemAddr != 0 ? SQLLongint.getAsLong(unsafe,
-            rhsMemAddr + rhsOffset) : SQLLongint.getAsLong(rhsBytes, rhsOffset);
+        final long lhsV = lhsMemAddr != 0 ? RowFormatter.readLong(
+            lhsMemAddr + lhsOffset) : RowFormatter.readLong(lhsBytes, lhsOffset);
+        final long rhsV = rhsMemAddr != 0 ? RowFormatter.readLong(
+            rhsMemAddr + rhsOffset) : RowFormatter.readLong(rhsBytes, rhsOffset);
         // can't use (lhsV - rhsV) since it can overflow
         return lhsV < rhsV ? -1 : (lhsV == rhsV ? 0 : 1);
       }
       case StoredFormatIds.DOUBLE_TYPE_ID: {
-        final double lhsV = lhsMemAddr != 0 ? SQLDouble.getAsDouble(unsafe,
+        final double lhsV = lhsMemAddr != 0 ? SQLDouble.getAsDouble(
             lhsMemAddr + lhsOffset) : SQLDouble
             .getAsDouble(lhsBytes, lhsOffset);
-        final double rhsV = rhsMemAddr != 0 ? SQLDouble.getAsDouble(unsafe,
+        final double rhsV = rhsMemAddr != 0 ? SQLDouble.getAsDouble(
             rhsMemAddr + rhsOffset) : SQLDouble
             .getAsDouble(rhsBytes, rhsOffset);
         return Double.compare(lhsV, rhsV);
       }
       case StoredFormatIds.REAL_TYPE_ID: {
-        final float lhsV = lhsMemAddr != 0 ? SQLReal.getAsFloat(unsafe,
+        final float lhsV = lhsMemAddr != 0 ? SQLReal.getAsFloat(
             lhsMemAddr + lhsOffset) : SQLReal.getAsFloat(lhsBytes, lhsOffset);
-        final float rhsV = rhsMemAddr != 0 ? SQLReal.getAsFloat(unsafe,
+        final float rhsV = rhsMemAddr != 0 ? SQLReal.getAsFloat(
             rhsMemAddr + rhsOffset) : SQLReal.getAsFloat(rhsBytes, rhsOffset);
         return Float.compare(lhsV, rhsV);
       }
@@ -2542,10 +2672,10 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.DECIMAL_TYPE_ID: {
         // TODO: PERF: optimize to use byte[]s directly?
         final BigDecimal lhsV = lhsMemAddr != 0 ? SQLDecimal.getAsBigDecimal(
-            unsafe, lhsMemAddr + lhsOffset, lhsColumnWidth) : SQLDecimal
+            lhsMemAddr + lhsOffset, lhsColumnWidth) : SQLDecimal
             .getAsBigDecimal(lhsBytes, lhsOffset, lhsColumnWidth);
         final BigDecimal rhsV = rhsMemAddr != 0 ? SQLDecimal.getAsBigDecimal(
-            unsafe, rhsMemAddr + rhsOffset, rhsColumnWidth) : SQLDecimal
+            rhsMemAddr + rhsOffset, rhsColumnWidth) : SQLDecimal
             .getAsBigDecimal(rhsBytes, rhsOffset, rhsColumnWidth);
 
         if (lhsV != null) {
@@ -2563,21 +2693,21 @@ public abstract class DataTypeUtilities {
 
       case StoredFormatIds.DATE_TYPE_ID: {
         // using long below to avoid overflow of (lhs - rhs)
-        final long lhsEncodedDate = lhsMemAddr != 0 ? SQLInteger.getAsInteger(
-            unsafe, lhsMemAddr + lhsOffset) : SQLInteger.getAsInteger(lhsBytes,
+        final long lhsEncodedDate = lhsMemAddr != 0 ? RowFormatter.readInt(
+            lhsMemAddr + lhsOffset) : RowFormatter.readInt(lhsBytes,
             lhsOffset);
-        final long rhsEncodedDate = rhsMemAddr != 0 ? SQLInteger.getAsInteger(
-            unsafe, rhsMemAddr + rhsOffset) : SQLInteger.getAsInteger(rhsBytes,
+        final long rhsEncodedDate = rhsMemAddr != 0 ? RowFormatter.readInt(
+            rhsMemAddr + rhsOffset) : RowFormatter.readInt(rhsBytes,
             rhsOffset);
         return (int)(lhsEncodedDate - rhsEncodedDate);
       }
       case StoredFormatIds.TIME_TYPE_ID: {
         // using long below to avoid overflow of (lhs - rhs)
-        final long lhsEncodedTime = lhsMemAddr != 0 ? SQLInteger.getAsInteger(
-            unsafe, lhsMemAddr + lhsOffset) : SQLInteger.getAsInteger(lhsBytes,
+        final long lhsEncodedTime = lhsMemAddr != 0 ? RowFormatter.readInt(
+            lhsMemAddr + lhsOffset) : RowFormatter.readInt(lhsBytes,
             lhsOffset);
-        final long rhsEncodedTime = rhsMemAddr != 0 ? SQLInteger.getAsInteger(
-            unsafe, rhsMemAddr + rhsOffset) : SQLInteger.getAsInteger(rhsBytes,
+        final long rhsEncodedTime = rhsMemAddr != 0 ? RowFormatter.readInt(
+            rhsMemAddr + rhsOffset) : RowFormatter.readInt(rhsBytes,
             rhsOffset);
 
         // [sb] right now we are not reading encodedTimeFraction as its always
@@ -2586,11 +2716,11 @@ public abstract class DataTypeUtilities {
         return (int)(lhsEncodedTime - rhsEncodedTime);
       }
       case StoredFormatIds.TIMESTAMP_TYPE_ID: {
-        final long lhsEncodedDate = lhsMemAddr != 0 ? SQLInteger.getAsInteger(
-            unsafe, lhsMemAddr + lhsOffset) : SQLInteger.getAsInteger(lhsBytes,
+        final long lhsEncodedDate = lhsMemAddr != 0 ? RowFormatter.readInt(
+            lhsMemAddr + lhsOffset) : RowFormatter.readInt(lhsBytes,
             lhsOffset);
-        final long rhsEncodedDate = rhsMemAddr != 0 ? SQLInteger.getAsInteger(
-            unsafe, rhsMemAddr + rhsOffset) : SQLInteger.getAsInteger(rhsBytes,
+        final long rhsEncodedDate = rhsMemAddr != 0 ? RowFormatter.readInt(
+            rhsMemAddr + rhsOffset) : RowFormatter.readInt(rhsBytes,
             rhsOffset);
 
         if (lhsEncodedDate < rhsEncodedDate) {
@@ -2602,12 +2732,12 @@ public abstract class DataTypeUtilities {
         else {
           lhsOffset += GemFireXDUtils.IntegerBytesLen;
           rhsOffset += GemFireXDUtils.IntegerBytesLen;
-          final long lhsEncodedTime = lhsMemAddr != 0 ? SQLInteger
-              .getAsInteger(unsafe, lhsMemAddr + lhsOffset) : SQLInteger
-              .getAsInteger(lhsBytes, lhsOffset);
-          final long rhsEncodedTime = rhsMemAddr != 0 ? SQLInteger
-              .getAsInteger(unsafe, rhsMemAddr + rhsOffset) : SQLInteger
-              .getAsInteger(rhsBytes, rhsOffset);
+          final long lhsEncodedTime = lhsMemAddr != 0 ? RowFormatter.readInt(
+              lhsMemAddr + lhsOffset) : RowFormatter.readInt(
+              lhsBytes, lhsOffset);
+          final long rhsEncodedTime = rhsMemAddr != 0 ? RowFormatter.readInt(
+              rhsMemAddr + rhsOffset) : RowFormatter.readInt(
+              rhsBytes, rhsOffset);
 
           if (lhsEncodedTime < rhsEncodedTime) {
             return -1;
@@ -2618,11 +2748,11 @@ public abstract class DataTypeUtilities {
           else {
             lhsOffset += GemFireXDUtils.IntegerBytesLen;
             rhsOffset += GemFireXDUtils.IntegerBytesLen;
-            final long lhsNanos = lhsMemAddr != 0 ? SQLInteger.getAsInteger(
-                unsafe, lhsMemAddr + lhsOffset) : SQLInteger.getAsInteger(
+            final long lhsNanos = lhsMemAddr != 0 ? RowFormatter.readInt(
+                lhsMemAddr + lhsOffset) : RowFormatter.readInt(
                 lhsBytes, lhsOffset);
-            final long rhsNanos = rhsMemAddr != 0 ? SQLInteger.getAsInteger(
-                unsafe, rhsMemAddr + rhsOffset) : SQLInteger.getAsInteger(
+            final long rhsNanos = rhsMemAddr != 0 ? RowFormatter.readInt(
+                rhsMemAddr + rhsOffset) : RowFormatter.readInt(
                 rhsBytes, rhsOffset);
 
             return (int)(lhsNanos - rhsNanos);
@@ -2641,7 +2771,7 @@ public abstract class DataTypeUtilities {
       default:
         DataValueDescriptor lhsDVD = dtd.getNull();
         if (lhsBS != null) {
-          lhsDVD.readBytes(unsafe, lhsMemAddr + lhsOffset, lhsColumnWidth,
+          lhsDVD.readBytes(lhsMemAddr + lhsOffset, lhsColumnWidth,
               lhsBS);
         }
         else {
@@ -2649,7 +2779,7 @@ public abstract class DataTypeUtilities {
         }
         DataValueDescriptor rhsDVD = dtd.getNull();
         if (rhsBS != null) {
-          rhsDVD.readBytes(unsafe, rhsMemAddr + rhsOffset, rhsColumnWidth,
+          rhsDVD.readBytes(rhsMemAddr + rhsOffset, rhsColumnWidth,
               rhsBS);
         }
         else {
@@ -2664,7 +2794,7 @@ public abstract class DataTypeUtilities {
    * Compare two columns (part of byte arrays or off-heap byte sources or left
    * side a DVD). Null handling is done.
    */
-  public static final int compare(final UnsafeWrapper unsafe,
+  public static int compare(final UnsafeWrapper unsafe,
       DataValueDescriptor lhsDVD, byte[] rhsBytes, long rhsMemAddr,
       OffHeapByteSource rhsBS, long rhsOffsetWidth,
       final boolean nullsOrderedLow, final boolean caseSensitive,
@@ -2736,43 +2866,43 @@ public abstract class DataTypeUtilities {
       rhsColumnWidth = rhsBytes != null ? rhsBytes.length : 0;
     }
     else {
-      rhsColumnWidth = (int)(rhsOffsetWidth & 0xFFFFFFFF);
+      rhsColumnWidth = (int)rhsOffsetWidth;
       rhsOffset = (int)(rhsOffsetWidth >>> Integer.SIZE);
     }
 
     switch (formatID) {
       case StoredFormatIds.SMALLINT_TYPE_ID: {
         final int lhsV = lhsDVD.getShort();
-        final int rhsV = rhsMemAddr != 0 ? SQLSmallint.getAsShort(unsafe,
-            rhsMemAddr + rhsOffset) : SQLSmallint.getAsShort(rhsBytes,
+        final int rhsV = rhsMemAddr != 0 ? RowFormatter.readShort(
+            rhsMemAddr + rhsOffset) : RowFormatter.readShort(rhsBytes,
             rhsOffset);
         return (lhsV - rhsV);
       }
       case StoredFormatIds.INT_TYPE_ID: {
         // using long below to avoid overflow of (lhsV - rhsV)
         final long lhsV = lhsDVD.getInt();
-        final long rhsV = rhsMemAddr != 0 ? SQLInteger.getAsInteger(unsafe,
-            rhsMemAddr + rhsOffset) : SQLInteger.getAsInteger(rhsBytes,
+        final long rhsV = rhsMemAddr != 0 ? RowFormatter.readInt(
+            rhsMemAddr + rhsOffset) : RowFormatter.readInt(rhsBytes,
             rhsOffset);
         return (int)(lhsV - rhsV);
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
         final long lhsV = lhsDVD.getLong();
-        final long rhsV = rhsMemAddr != 0 ? SQLLongint.getAsLong(unsafe,
-            rhsMemAddr + rhsOffset) : SQLLongint.getAsLong(rhsBytes, rhsOffset);
+        final long rhsV = rhsMemAddr != 0 ? RowFormatter.readLong(
+            rhsMemAddr + rhsOffset) : RowFormatter.readLong(rhsBytes, rhsOffset);
         // can't use (lhsV - rhsV) since it can overflow
         return lhsV < rhsV ? -1 : (lhsV == rhsV ? 0 : 1);
       }
       case StoredFormatIds.DOUBLE_TYPE_ID: {
         final double lhsV = lhsDVD.getDouble();
-        final double rhsV = rhsMemAddr != 0 ? SQLDouble.getAsDouble(unsafe,
+        final double rhsV = rhsMemAddr != 0 ? SQLDouble.getAsDouble(
             rhsMemAddr + rhsOffset) : SQLDouble
             .getAsDouble(rhsBytes, rhsOffset);
         return Double.compare(lhsV, rhsV);
       }
       case StoredFormatIds.REAL_TYPE_ID: {
         final float lhsV = lhsDVD.getFloat();
-        final float rhsV = rhsMemAddr != 0 ? SQLReal.getAsFloat(unsafe,
+        final float rhsV = rhsMemAddr != 0 ? SQLReal.getAsFloat(
             rhsMemAddr + rhsOffset) : SQLReal.getAsFloat(rhsBytes, rhsOffset);
         return Float.compare(lhsV, rhsV);
       }
@@ -2807,7 +2937,7 @@ public abstract class DataTypeUtilities {
         // TODO: PERF: optimize to use byte[]s directly?
         final BigDecimal lhsV = (BigDecimal)lhsDVD.getObject();
         final BigDecimal rhsV = rhsMemAddr != 0 ? SQLDecimal.getAsBigDecimal(
-            unsafe, rhsMemAddr + rhsOffset, rhsColumnWidth) : SQLDecimal
+            rhsMemAddr + rhsOffset, rhsColumnWidth) : SQLDecimal
             .getAsBigDecimal(rhsBytes, rhsOffset, rhsColumnWidth);
 
         if (lhsV != null) {
@@ -2827,8 +2957,8 @@ public abstract class DataTypeUtilities {
         // using long below to avoid overflow of (lhs - rhs)
         final long lhsEncodedDate = ((DateTimeDataValue)lhsDVD)
             .getEncodedDate();
-        final long rhsEncodedDate = rhsMemAddr != 0 ? SQLInteger.getAsInteger(
-            unsafe, rhsMemAddr + rhsOffset) : SQLInteger.getAsInteger(rhsBytes,
+        final long rhsEncodedDate = rhsMemAddr != 0 ? RowFormatter.readInt(
+            rhsMemAddr + rhsOffset) : RowFormatter.readInt(rhsBytes,
             rhsOffset);
         return (int)(lhsEncodedDate - rhsEncodedDate);
       }
@@ -2836,8 +2966,8 @@ public abstract class DataTypeUtilities {
         // using long below to avoid overflow of (lhs - rhs)
         final long lhsEncodedTime = ((DateTimeDataValue)lhsDVD)
             .getEncodedTime();
-        final long rhsEncodedTime = rhsMemAddr != 0 ? SQLInteger.getAsInteger(
-            unsafe, rhsMemAddr + rhsOffset) : SQLInteger.getAsInteger(rhsBytes,
+        final long rhsEncodedTime = rhsMemAddr != 0 ? RowFormatter.readInt(
+            rhsMemAddr + rhsOffset) : RowFormatter.readInt(rhsBytes,
             rhsOffset);
 
         // [sb] right now we are not reading encodedTimeFraction as its always
@@ -2848,8 +2978,8 @@ public abstract class DataTypeUtilities {
       case StoredFormatIds.TIMESTAMP_TYPE_ID: {
         final DateTimeDataValue ts = (DateTimeDataValue)lhsDVD;
         final int lhsEncodedDate = ts.getEncodedDate();
-        final long rhsEncodedDate = rhsMemAddr != 0 ? SQLInteger.getAsInteger(
-            unsafe, rhsMemAddr + rhsOffset) : SQLInteger.getAsInteger(rhsBytes,
+        final long rhsEncodedDate = rhsMemAddr != 0 ? RowFormatter.readInt(
+            rhsMemAddr + rhsOffset) : RowFormatter.readInt(rhsBytes,
             rhsOffset);
 
         if (lhsEncodedDate < rhsEncodedDate) {
@@ -2861,9 +2991,9 @@ public abstract class DataTypeUtilities {
         else {
           rhsOffset += GemFireXDUtils.IntegerBytesLen;
           final int lhsEncodedTime = ts.getEncodedTime();
-          final long rhsEncodedTime = rhsMemAddr != 0 ? SQLInteger
-              .getAsInteger(unsafe, rhsMemAddr + rhsOffset) : SQLInteger
-              .getAsInteger(rhsBytes, rhsOffset);
+          final long rhsEncodedTime = rhsMemAddr != 0 ? RowFormatter.readInt(
+              rhsMemAddr + rhsOffset) : RowFormatter.readInt(
+              rhsBytes, rhsOffset);
 
           if (lhsEncodedTime < rhsEncodedTime) {
             return -1;
@@ -2874,8 +3004,8 @@ public abstract class DataTypeUtilities {
           else {
             rhsOffset += GemFireXDUtils.IntegerBytesLen;
             final long lhsNanos = ts.getNanos();
-            final long rhsNanos = rhsMemAddr != 0 ? SQLInteger.getAsInteger(
-                unsafe, rhsMemAddr + rhsOffset) : SQLInteger.getAsInteger(
+            final long rhsNanos = rhsMemAddr != 0 ? RowFormatter.readInt(
+                rhsMemAddr + rhsOffset) : RowFormatter.readInt(
                 rhsBytes, rhsOffset);
 
             return (int)(lhsNanos - rhsNanos);
@@ -2893,7 +3023,7 @@ public abstract class DataTypeUtilities {
       default:
         DataValueDescriptor rhsDVD = dtd.getNull();
         if (rhsBS != null) {
-          rhsDVD.readBytes(unsafe, rhsMemAddr + rhsOffset, rhsColumnWidth,
+          rhsDVD.readBytes(rhsMemAddr + rhsOffset, rhsColumnWidth,
               rhsBS);
         }
         else {
@@ -2906,10 +3036,8 @@ public abstract class DataTypeUtilities {
 
   /**
    * Null handling is done. Caller must handle default column values.
-   * 
-   * @throws StandardException
    */
-  public static final int compare(byte[] lhs, byte[] rhs,
+  public static int compare(byte[] lhs, byte[] rhs,
       long lhsOffsetWidth, long rhsOffsetWidth,
       final boolean nullsOrderedLow, final boolean caseSensitive,
       final ColumnDescriptor cd) throws StandardException {
@@ -2946,7 +3074,7 @@ public abstract class DataTypeUtilities {
     final TypeId typeId = dtd.getTypeId();
     final int formatID = typeId.getTypeFormatId();
 
-    int lhsColumnWidth = (int)(lhsOffsetWidth & 0xFFFFFFFF);
+    int lhsColumnWidth = (int)lhsOffsetWidth;
     int lhsOffset = (int)(lhsOffsetWidth >>> Integer.SIZE);
 
     int rhsColumnWidth;
@@ -2969,25 +3097,25 @@ public abstract class DataTypeUtilities {
         lhsOffset = 0;
         lhsColumnWidth = lhs.length;
       }
-      rhsColumnWidth = (int)(rhsOffsetWidth & 0xFFFFFFFF);
+      rhsColumnWidth = (int)rhsOffsetWidth;
       rhsOffset = (int)(rhsOffsetWidth >>> Integer.SIZE);
     }
 
     switch (formatID) {
       case StoredFormatIds.SMALLINT_TYPE_ID: {
-        final int lhsV = SQLSmallint.getAsShort(lhs, lhsOffset);
-        final int rhsV = SQLSmallint.getAsShort(rhs, rhsOffset);
+        final int lhsV = RowFormatter.readShort(lhs, lhsOffset);
+        final int rhsV = RowFormatter.readShort(rhs, rhsOffset);
         return (lhsV - rhsV);
       }
       case StoredFormatIds.INT_TYPE_ID: {
         // using long below to avoid overflow of (lhsV - rhsV)
-        final long lhsV = SQLInteger.getAsInteger(lhs, lhsOffset);
-        final long rhsV = SQLInteger.getAsInteger(rhs, rhsOffset);
+        final long lhsV = RowFormatter.readInt(lhs, lhsOffset);
+        final long rhsV = RowFormatter.readInt(rhs, rhsOffset);
         return (int)(lhsV - rhsV);
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
-        final long lhsV = SQLLongint.getAsLong(lhs, lhsOffset);
-        final long rhsV = SQLLongint.getAsLong(rhs, rhsOffset);
+        final long lhsV = RowFormatter.readLong(lhs, lhsOffset);
+        final long rhsV = RowFormatter.readLong(rhs, rhsOffset);
         // can't use (lhsV - rhsV) since it can overflow
         return lhsV < rhsV ? -1 : (lhsV == rhsV ? 0 : 1);
       }
@@ -3096,13 +3224,11 @@ public abstract class DataTypeUtilities {
         return lhsDVD.compare(rhsDVD);
     }
   }
- 
+
   /**
    * Null handling is done. Caller must handle default column values.
-   * 
-   * @throws StandardException
    */
-  public static final int compare(DataValueDescriptor lhsDVD, byte[] rhs,
+  public static int compare(DataValueDescriptor lhsDVD, byte[] rhs,
       long rhsOffsetWidth, final boolean nullsOrderedLow,
       final boolean caseSensitive, final ColumnDescriptor cd)
       throws StandardException {
@@ -3171,25 +3297,25 @@ public abstract class DataTypeUtilities {
       rhsColumnWidth = rhs.length;
     }
     else {
-      rhsColumnWidth = (int)(rhsOffsetWidth & 0xFFFFFFFF);
+      rhsColumnWidth = (int)rhsOffsetWidth;
       rhsOffset = (int)(rhsOffsetWidth >>> Integer.SIZE);
     }
 
     switch (formatID) {
       case StoredFormatIds.SMALLINT_TYPE_ID: {
         final int lhsV = lhsDVD.getShort();
-        final int rhsV = SQLSmallint.getAsShort(rhs, rhsOffset);
+        final int rhsV = RowFormatter.readShort(rhs, rhsOffset);
         return (lhsV - rhsV);
       }
       case StoredFormatIds.INT_TYPE_ID: {
         // using long below to avoid overflow of (lhsV - rhsV)
         final long lhsV = lhsDVD.getInt();
-        final long rhsV = SQLInteger.getAsInteger(rhs, rhsOffset);
+        final long rhsV = RowFormatter.readInt(rhs, rhsOffset);
         return (int)(lhsV - rhsV);
       }
       case StoredFormatIds.LONGINT_TYPE_ID: {
         final long lhsV = lhsDVD.getLong();
-        final long rhsV = SQLLongint.getAsLong(rhs, rhsOffset);
+        final long rhsV = RowFormatter.readLong(rhs, rhsOffset);
         // can't use (lhsV - rhsV) since it can overflow
         return lhsV < rhsV ? -1 : (lhsV == rhsV ? 0 : 1);
       }
@@ -3301,18 +3427,6 @@ public abstract class DataTypeUtilities {
 
   public static TypeId getNumericTypeIdForNumber(String num) {
     try {
-      Byte byet = Byte.valueOf(num);
-      return TypeId.getBuiltInTypeId(Types.TINYINT);
-    } catch (NumberFormatException ignore) {
-    }
-
-    try {
-      Short shorrt = Short.valueOf(num);
-      return TypeId.getBuiltInTypeId(Types.SMALLINT);
-    } catch (NumberFormatException ignore) {
-    }
-
-    try {
       Integer integer = Integer.valueOf(num);
       return TypeId.getBuiltInTypeId(Types.INTEGER);
     } catch (NumberFormatException ignore) {
@@ -3335,9 +3449,14 @@ public abstract class DataTypeUtilities {
       return TypeId.getBuiltInTypeId(Types.DOUBLE);
     } catch (NumberFormatException ignore) {
     }
+
+    try {
+      new BigDecimal(num);
+      return TypeId.getBuiltInTypeId(Types.DECIMAL);
+    } catch (NumberFormatException ignore) {
+    }
+
     return null;
-    // TODO: Will big decimal create trouble. Lets c . else we will see if the
-    // string can be represented by Big decimal
   }
-  // GemStone changes END
+// GemStone changes END
 }

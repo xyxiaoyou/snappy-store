@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -16,15 +16,20 @@
  */
 
 plugins {
-  id 'com.github.johnrengelman.shadow' version '1.2.3'
+  id 'com.github.johnrengelman.shadow' version '2.0.4'
 }
 
 dependencies {
-  compile project(subprojectBase + 'gemfirexd-shared')
+  compile "org.apache.thrift:libthrift:${thriftVersion}"
+  compile "net.java.dev.jna:jna:${jnaVersion}"
+
+  compile project(subprojectBase + 'snappydata-store-shared')
+  compile 'org.apache.tomcat:tomcat-jdbc:8.5.23'
+  compile group: 'org.apache.tomcat', name: 'tomcat-juli', version: '8.5.23'
 }
 
 task generatePropertiesFiles(dependsOn: 'processResources') {
-  def infoDir = file("${buildDir}/resources/main/com/pivotal/gemfirexd/internal/info")
+  def infoDir = file("${buildDir}/classes/main/com/pivotal/gemfirexd/internal/info")
   outputs.files "${infoDir}/dnc.properties", "${infoDir}/thrift.properties"
   inputs.dir compileJava.destinationDir
 
@@ -50,17 +55,17 @@ task generatePropertiesFiles(dependsOn: 'processResources') {
 }
 
 compileJava {
-  dependsOn project(subprojectBase + 'gemfirexd-core').jar
   dependsOn generatePropertiesFiles
 }
 
 archivesBaseName = 'snappydata-store-client'
 
 jar {
+  dependsOn subprojectBase + 'snappydata-store-core:doSplit'
   baseName = 'snappydata-store-client'
   manifest {
     attributes = getManifest('gemfirexdclient', '*',
-        'com.pivotal.gemfirexd.jdbc', [])
+        'io.snappydata.jdbc', [])
   }
 
   doFirst {
@@ -72,6 +77,8 @@ shadowJar {
   dependsOn jar
   baseName = 'snappydata-client'
   classifier = ''
+  // avoid conflict with the older incompatible thrift versions
+  relocate 'org.apache.thrift', 'io.snappydata.org.apache.thrift'
 
   mergeServiceFiles()
 }

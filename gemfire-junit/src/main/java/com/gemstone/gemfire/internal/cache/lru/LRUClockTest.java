@@ -366,6 +366,11 @@ public class LRUClockTest extends junit.framework.TestCase {
       return 0;
     }
 
+    @Override
+    public boolean isValueNull() {
+      return false;
+    }
+
     public void setInList() {
       inList = true;
     }
@@ -396,6 +401,8 @@ public class LRUClockTest extends junit.framework.TestCase {
       "Number of bytes in region.";
     final String lruEvictionsDesc = 
       "Number of total entry evictions triggered by LRU.";
+    final String lruFaultInsDesc =
+        "Number of total entry faultIns triggered by read/write operations.";
     final String lruEvaluationsDesc = 
       "Number of entries evaluated during LRU operations.";
     final String lruGreedyReturnsDesc =
@@ -411,6 +418,7 @@ public class LRUClockTest extends junit.framework.TestCase {
         f.createLongGauge("bytesAllowed", bytesAllowedDesc, "bytes" ),
         f.createLongGauge("byteCount", byteCountDesc, "bytes" ),
         f.createLongCounter("lruEvictions", lruEvictionsDesc, "entries" ),
+        f.createLongCounter("lruFaultIns", lruFaultInsDesc, "entries" ),
         f.createLongCounter("lruEvaluations", lruEvaluationsDesc, "entries" ),
         f.createLongCounter("lruGreedyReturns", lruGreedyReturnsDesc, "entries"),
         f.createLongCounter("lruDestroys", lruDestroysDesc, "entries" ),
@@ -463,6 +471,10 @@ public class LRUClockTest extends junit.framework.TestCase {
 
       public int getEvictionsStatId() {
         return statType.nameToId("lruEvictions");
+      }
+
+      public int getFaultInsStatId() {
+        return statType.nameToId("lruFaultIns");
       }
 
       public int getDestroysStatId() {

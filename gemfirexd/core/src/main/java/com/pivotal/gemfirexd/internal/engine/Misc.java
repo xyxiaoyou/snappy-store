@@ -20,17 +20,13 @@ package com.pivotal.gemfirexd.internal.engine;
 import java.io.CharArrayWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Serializable;
 import java.io.StringWriter;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.TreeMap;
-import java.util.TreeSet;
 import java.util.concurrent.locks.Condition;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -57,32 +53,44 @@ import com.gemstone.gemfire.distributed.DistributedMember;
 import com.gemstone.gemfire.distributed.internal.InternalDistributedSystem;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
+import com.gemstone.gemfire.internal.GemFireStatSampler;
 import com.gemstone.gemfire.internal.InsufficientDiskSpaceException;
 import com.gemstone.gemfire.internal.LocalLogWriter;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
 import com.gemstone.gemfire.internal.cache.LocalRegion;
 import com.gemstone.gemfire.internal.cache.NoDataStoreAvailableException;
 import com.gemstone.gemfire.internal.cache.PRHARedundancyProvider;
+import com.gemstone.gemfire.internal.cache.PartitionedRegion;
 import com.gemstone.gemfire.internal.cache.PutAllPartialResultException;
 import com.gemstone.gemfire.internal.cache.TXManagerImpl;
 import com.gemstone.gemfire.internal.cache.execute.BucketMovedException;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
+import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
+import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
 import com.gemstone.gemfire.internal.snappy.StoreCallbacks;
 import com.gemstone.gemfire.internal.util.DebuggerSupport;
+import com.pivotal.gemfirexd.Attribute;
+import com.pivotal.gemfirexd.Constants;
+import com.pivotal.gemfirexd.auth.callback.UserAuthenticator;
 import com.pivotal.gemfirexd.internal.engine.distributed.FunctionExecutionException;
+import com.pivotal.gemfirexd.internal.engine.distributed.GfxdDistributionAdvisor;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.jdbc.GemFireXDRuntimeException;
 import com.pivotal.gemfirexd.internal.engine.sql.conn.GfxdHeapThresholdListener;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireStore;
 import com.pivotal.gemfirexd.internal.iapi.error.DerbySQLException;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
+import com.pivotal.gemfirexd.internal.iapi.jdbc.AuthenticationService;
 import com.pivotal.gemfirexd.internal.iapi.reference.SQLState;
 import com.pivotal.gemfirexd.internal.iapi.services.context.ContextService;
 import com.pivotal.gemfirexd.internal.iapi.sql.conn.LanguageConnectionContext;
 import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.TableDescriptor;
+import com.pivotal.gemfirexd.internal.iapi.sql.execute.ExecutionContext;
 import com.pivotal.gemfirexd.internal.iapi.types.DataValueDescriptor;
 import com.pivotal.gemfirexd.internal.impl.jdbc.Util;
+import com.pivotal.gemfirexd.internal.impl.jdbc.authentication.AuthenticationServiceBase;
+import com.pivotal.gemfirexd.internal.impl.jdbc.authentication.LDAPAuthenticationSchemeImpl;
 import com.pivotal.gemfirexd.internal.impl.sql.execute.PlanUtils;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.tools.planexporter.CreateXML;
@@ -163,6 +171,19 @@ public abstract class Misc {
     return GemFireStore.getBootingInstance();
   }
 
+  public static void waitForSamplerInitialization() {
+    InternalDistributedSystem system = getDistributedSystem();
+    final GemFireStatSampler sampler = system.getStatSampler();
+    if (sampler != null) {
+      try {
+        sampler.waitForInitialization(system.getConfig().getAckWaitThreshold() * 1000L);
+      } catch (InterruptedException ie) {
+        checkIfCacheClosing(ie);
+        Thread.currentThread().interrupt();
+      }
+    }
+  }
+
   /**
    * Return true if initial DDL replay is in progress. It may happen that this
    * is false even when {@link #initialDDLReplayDone()} returns false since
@@ -234,6 +255,26 @@ public abstract class Misc {
     }
   }
 
+  public static Set<DistributedMember> getLeadNode() {
+    GfxdDistributionAdvisor advisor = GemFireXDUtils.getGfxdAdvisor();
+    InternalDistributedSystem ids = Misc.getDistributedSystem();
+    if (ids.isLoner()) {
+      return Collections.<DistributedMember>singleton(
+          ids.getDistributedMember());
+    }
+    Set<DistributedMember> allMembers = ids.getAllOtherMembers();
+    for (DistributedMember m : allMembers) {
+      GfxdDistributionAdvisor.GfxdProfile profile = advisor
+          .getProfile((InternalDistributedMember)m);
+      if (profile != null && profile.hasSparkURL()) {
+        Set<DistributedMember> s = new HashSet<DistributedMember>();
+        s.add(m);
+        return Collections.unmodifiableSet(s);
+      }
+    }
+    throw new NoMemberFoundException("SnappyData Lead node is not available");
+  }
+
   /**
    * Check if {@link GemFireCache} is closed or is in the process of closing and
    * throw {@link CacheClosedException} if so.
@@ -293,6 +334,91 @@ public abstract class Misc {
     if (isCancelling == null) {
       throw e;
     }
+  }
+
+  public static <K, V> PartitionResolver createPartitionResolverForSampleTable(final String reservoirRegionName) {
+    // TODO: Should this be serializable?
+    // TODO: Should this have call back from bucket movement module?
+    return new PartitionResolver() {
+
+      public String getName()
+      {
+        return "PartitionResolverForSampleTable";
+      }
+
+      public Serializable getRoutingObject(EntryOperation opDetails)
+      {
+        Object k = opDetails.getKey();
+        StoreCallbacks callback = CallbackFactoryProvider.getStoreCallbacks();
+        int v = callback.getLastIndexOfRow(k);
+        if (v != -1) {
+          return (Serializable)v;
+        } else {
+          return (Serializable)k;
+        }
+      }
+
+      public void close() {}
+    };
+  }
+
+  public static <K, V> String getReservoirRegionNameForSampleTable(String schema, String resolvedBaseName) {
+    Region<K, V> regionBase = Misc.getRegionForTable(resolvedBaseName, false);
+    return schema + "_SAMPLE_INTERNAL_" + regionBase.getName();
+  }
+
+  public volatile static boolean reservoirRegionCreated = false;
+
+  public static <K, V> PartitionedRegion createReservoirRegionForSampleTable(String reservoirRegionName, String resolvedBaseName) {
+    Region<K, V> regionBase = Misc.getRegionForTable(resolvedBaseName, false);
+    GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
+    Region<K, V> childRegion = cache.getRegion(reservoirRegionName);
+    if (childRegion == null) {
+      RegionAttributes<K, V> attributesBase = regionBase.getAttributes();
+      PartitionAttributes<K, V> partitionAttributesBase = attributesBase.getPartitionAttributes();
+      AttributesFactory afact = new AttributesFactory();
+      afact.setDataPolicy(attributesBase.getDataPolicy());
+      PartitionAttributesFactory paf = new PartitionAttributesFactory();
+      paf.setTotalNumBuckets(partitionAttributesBase.getTotalNumBuckets());
+      paf.setRedundantCopies(partitionAttributesBase.getRedundantCopies());
+      paf.setLocalMaxMemory(partitionAttributesBase.getLocalMaxMemory());
+      PartitionResolver partResolver = createPartitionResolverForSampleTable(reservoirRegionName);
+      paf.setPartitionResolver(partResolver);
+      paf.setColocatedWith(regionBase.getFullPath());
+      afact.setPartitionAttributes(paf.create());
+      childRegion = cache.createRegion(reservoirRegionName, afact.create());
+    }
+    reservoirRegionCreated = true;
+    return (PartitionedRegion)childRegion;
+  }
+
+  public static <K, V> PartitionedRegion getReservoirRegionForSampleTable(String reservoirRegionName) {
+    if (reservoirRegionName != null) {
+      GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
+      Region<K, V> childRegion = cache.getRegion(reservoirRegionName);
+      if (childRegion != null) {
+        return (PartitionedRegion) childRegion;
+      }
+    }
+    return null;
+  }
+
+  public static void dropReservoirRegionForSampleTable(PartitionedRegion reservoirRegion) {
+    if (reservoirRegion != null) {
+      reservoirRegion.destroyRegion(null);
+    }
+  }
+
+  public static PartitionedRegion.PRLocalScanIterator
+  getLocalBucketsIteratorForSampleTable(PartitionedRegion reservoirRegion,
+      Set<Integer> bucketSet, boolean fetchFromRemote) {
+    if (reservoirRegion != null && bucketSet != null) {
+      if (bucketSet.size() > 0) {
+        return reservoirRegion.getAppropriateLocalEntriesIterator(bucketSet,
+            true, false, true, null, fetchFromRemote);
+      }
+    }
+    return null;
   }
 
   /**
@@ -552,33 +678,6 @@ public abstract class Misc {
     return sw.toString();
   }
 
-  public static String serializeXMLAsString(Element el, String xsltFileName) {
-    try {
-      TransformerFactory tFactory = TransformerFactory.newInstance();
-      StringWriter sw = new StringWriter();
-      DOMSource source = new DOMSource(el);
-
-      ClassLoader cl = InternalDistributedSystem.class.getClassLoader();
-      // fix for bug 33274 - null classloader in Sybase app server
-      if (cl == null) {
-        cl = ClassLoader.getSystemClassLoader();
-      }
-      InputStream is = cl
-          .getResourceAsStream("com/pivotal/gemfirexd/internal/impl/tools/planexporter/resources/"
-              + xsltFileName);
-
-      Transformer transformer = tFactory
-          .newTransformer(new javax.xml.transform.stream.StreamSource(is));
-      StreamResult result = new StreamResult(sw);
-
-      transformer.transform(source, result);
-      return sw.toString();
-    } catch (TransformerException te) {
-      throw GemFireXDRuntimeException.newRuntimeException(
-          "serializeXMLAsString: unexpected exception", te);
-    }
-  }
-
   public static char[] serializeXMLAsCharArr(List<Element> el,
       String xsltFileName) {
     try {
@@ -615,8 +714,9 @@ public abstract class Misc {
         transformer.transform(source, result);
       }
 
+      is.close();
       return cw.toCharArray();
-    } catch (TransformerException te) {
+    } catch (Exception te) {
       throw GemFireXDRuntimeException.newRuntimeException(
           "serializeXMLAsCharArr: unexpected exception", te);
     }
@@ -655,6 +755,60 @@ public abstract class Misc {
     } else {
       return 0;
     }
+  }
+
+  /**
+   * Returns true if security is enabled for SnappyData.
+   * Only LDAP scheme is supported currently.
+   */
+  public static boolean isSecurityEnabled() {
+    AuthenticationService authService = Misc.getMemStoreBooting()
+        .getDatabase().getAuthenticationService();
+    if (authService != null) {
+      UserAuthenticator auth = ((AuthenticationServiceBase)authService)
+          .getAuthenticationScheme();
+      return auth instanceof LDAPAuthenticationSchemeImpl;
+    }
+    return false;
+  }
+
+  /* Returns true if LDAP Security is Enabled */
+  public static boolean checkLDAPAuthProvider(Map<Object, Object> map) {
+    return Constants.AUTHENTICATION_PROVIDER_LDAP.equalsIgnoreCase(
+        String.valueOf(map.get(Attribute.AUTH_PROVIDER)));
+  }
+
+  /**
+   * Check if ldapGroupName is indeed name of a LDAP group. Expand that group and check if user
+   * belongs to that group.
+   */
+  public static boolean checkLDAPGroupOwnership(String schemaName, String ldapGroupName, String user)
+      throws StandardException {
+    if (ldapGroupName.startsWith(Constants.LDAP_GROUP_PREFIX)) {
+      UserAuthenticator auth = ((AuthenticationServiceBase)Misc.getMemStoreBooting()
+          .getDatabase().getAuthenticationService()).getAuthenticationScheme();
+      if (auth instanceof LDAPAuthenticationSchemeImpl) {
+        String group = ldapGroupName.substring(Constants.LDAP_GROUP_PREFIX.length());
+        try {
+          if (((LDAPAuthenticationSchemeImpl)auth).getLDAPGroupMembers(group).contains(user)) {
+            if (GemFireXDUtils.TraceAuthentication) {
+              SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_AUTHENTICATION,
+                  "Found user " + user + " in LDAP group " + group + " for schema " + schemaName);
+            }
+            return true;
+          }
+        } catch (Exception e) {
+          throw StandardException.newException(
+              SQLState.AUTH_INVALID_LDAP_GROUP, e, group);
+        }
+        if (GemFireXDUtils.TraceAuthentication) {
+          SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_AUTHENTICATION,
+              "Could not find user " + user + " in LDAP group " + group + " for schema "
+                  + schemaName);
+        }
+      }
+    }
+    return false;
   }
 
   // added by jing for processing the exception
@@ -1091,15 +1245,7 @@ public abstract class Misc {
   }
 
   public static boolean parseBoolean(String s) {
-    if (s != null) {
-      if (s.length() == 1) {
-        return Integer.parseInt(s) != 0;
-      } else {
-        return Boolean.parseBoolean(s);
-      }
-    } else {
-      return false;
-    }
+    return ClientSharedUtils.parseBoolean(s);
   }
 
   public static TreeSet<Map.Entry<Integer, Long>> sortByValue(
@@ -1229,5 +1375,27 @@ public abstract class Misc {
 
     return str;
   }
-  
+
+  public static final String SNAPPY_HIVE_METASTORE =
+      SystemProperties.SNAPPY_HIVE_METASTORE;
+
+  public static boolean isSnappyHiveMetaTable(String schemaName) {
+    return SNAPPY_HIVE_METASTORE.equalsIgnoreCase(schemaName);
+  }
+
+  public static boolean routeQuery(LanguageConnectionContext lcc) {
+    return Misc.getMemStore().isSnappyStore() && lcc.isQueryRoutingFlagTrue() &&
+        // if isolation level is not NONE, autocommit should be true to enable query routing
+        (lcc.getCurrentIsolationLevel() == ExecutionContext.UNSPECIFIED_ISOLATION_LEVEL ||
+            lcc.getAutoCommit());
+  }
+
+  public static void invalidSnappyDataFeature(String featureDescription)
+      throws SQLException {
+    if(getMemStore().isSnappyStore()) {
+      throw Util.generateCsSQLException(SQLState.NOT_IMPLEMENTED,
+          featureDescription + " is not supported in SnappyData. " +
+              "This feature is supported when product is started in rowstore mode");
+    }
+  }
 }

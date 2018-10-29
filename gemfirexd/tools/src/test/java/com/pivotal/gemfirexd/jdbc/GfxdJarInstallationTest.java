@@ -23,18 +23,17 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.UnknownHostException;
 import java.sql.CallableStatement;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Connection;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Properties;
 
 import com.gemstone.gemfire.internal.AvailablePort;
-import com.gemstone.gemfire.internal.SocketCreator;
+import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.pivotal.gemfirexd.TestUtil;
-import com.pivotal.gemfirexd.internal.client.am.Cursor;
 import com.pivotal.gemfirexd.tools.internal.JarTools;
 
 public class GfxdJarInstallationTest extends JdbcTestBase {
@@ -268,7 +267,7 @@ public class GfxdJarInstallationTest extends JdbcTestBase {
     checkMergeResults(cs);
 
     // now check with the jar tools
-    final String localHostName = SocketCreator.getLocalHost().getHostName();
+    final String localHostName = "localhost";
     if (netPort <= 0) {
       netPort = startNetserverAndReturnPort();
     }
@@ -505,7 +504,7 @@ public class GfxdJarInstallationTest extends JdbcTestBase {
 
     // try hard to ensure that old ClassLoaders are GCed
     if (expectClassLoadEx) {
-      Cursor.ALLOW_THREADCONTEXT_CLASSLOADER.set(Boolean.TRUE);
+      ClientSharedUtils.ALLOW_THREADCONTEXT_CLASSLOADER.set(Boolean.TRUE);
       System.gc();
       System.runFinalization();
     }

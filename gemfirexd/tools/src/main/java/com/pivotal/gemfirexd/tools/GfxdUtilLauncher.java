@@ -26,14 +26,14 @@ import java.util.TreeSet;
 import com.gemstone.gemfire.InternalGemFireError;
 import com.gemstone.gemfire.internal.GemFireTerminateError;
 import com.gemstone.gemfire.internal.GemFireUtilLauncher;
-import com.gemstone.gemfire.internal.GemFireUtilLauncher.CommandEntry;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
+import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.pivotal.gemfirexd.internal.iapi.tools.i18n.LocalizedResource;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.tools.ij;
+import com.pivotal.gemfirexd.tools.internal.GfxdServerLauncher;
 import com.pivotal.gemfirexd.tools.internal.JarTools;
 import com.pivotal.gemfirexd.tools.internal.MiscTools;
-import com.pivotal.gemfirexd.tools.internal.GfxdServerLauncher;
 import jline.console.ConsoleReader;
 import jline.console.history.FileHistory;
 
@@ -50,18 +50,18 @@ import jline.console.history.FileHistory;
 public class GfxdUtilLauncher extends GemFireUtilLauncher {
 
   /**
-   * Name of the script that launches {@link #main(String[])}. This should be
-   * changed if the script name changes.
-   */
-  static final String SCRIPT_NAME = "gfxd";
-
-  /**
    * Special internal argument to just resolve the full path from the given path
    * including any symlinks (see #43722).
    */
-  static final String GET_CANONICAL_PATH_ARG = "--get-canonical-path";
+  protected static final String GET_CANONICAL_PATH_ARG = "--get-canonical-path";
 
   protected static boolean snappyStore;
+
+  static {
+    String scriptName = System.getenv("SNAPPY_SCRIPT_NAME");
+    SCRIPT_NAME = scriptName != null && scriptName.length() > 0
+        ? scriptName : "gfxd";
+  }
 
   public static boolean isSnappyStore() {
     return snappyStore;
@@ -116,10 +116,7 @@ public class GfxdUtilLauncher extends GemFireUtilLauncher {
     try {
       gfxdDdlUtilsClass = Class
           .forName("com.pivotal.gemfirexd.tools.internal.GfxdDdlUtils");
-    } catch (LinkageError le) {
-      // ddlutils dir is likely not on path, so ignore it
-      gfxdDdlUtilsClass = null;
-    } catch (ClassNotFoundException cnfe) {
+    } catch (LinkageError | ClassNotFoundException e) {
       // ddlutils dir is likely not on path, so ignore it
       gfxdDdlUtilsClass = null;
     } catch (Exception e) {
@@ -142,7 +139,9 @@ public class GfxdUtilLauncher extends GemFireUtilLauncher {
     return m;
   }
 
-  protected GfxdUtilLauncher() {}
+  protected GfxdUtilLauncher() {
+    ClientSharedUtils.setThriftDefault(false);
+  }
 
  /**
   * This method should be overridden if the name of the script is different.

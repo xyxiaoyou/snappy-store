@@ -33,7 +33,6 @@ import com.gemstone.gemfire.internal.shared.Version;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.GfxdDataSerializable;
 import com.pivotal.gemfirexd.internal.engine.GfxdSerializable;
-import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireStore;
 import com.pivotal.gemfirexd.internal.iapi.services.sanity.SanityManager;
@@ -144,6 +143,8 @@ public final class DDLConflatable extends GfxdDataSerializable implements
   private static final int F_IS_DROP_FK_CONSTRAINT = 0x04;
   private static final int F_IS_ADD_FK_CONSTRAINT = 0x08;
   private static final int F_DEFAULT_PERSISTENT = 0x10;
+  /** true if metastore should be stored in datadictionary */
+  private static final int F_METASTORE_IN_DD = 0x20;
 
   private String constraintName; 
   private Set<String> droppedFKConstraints = null;
@@ -157,7 +158,10 @@ public final class DDLConflatable extends GfxdDataSerializable implements
 
   public DDLConflatable(String sqlText, String defaultSchema,
       DDLConstantAction constantAction, Object additionalArgs,
-      DDLConflatable implicitSchema, long ddlId, boolean queueInitialized) {
+      DDLConflatable implicitSchema, long ddlId, boolean queueInitialized,
+      LanguageConnectionContext lcc) {
+    // by default newer versions always store metastore in datadictionary
+    this.additionalFlags = F_METASTORE_IN_DD;
     if (constantAction instanceof CreateTableConstantAction) {
       this.flags = GemFireXDUtils.set(this.flags, IS_CREATE_TABLE);
       this.colocatedWithTable = ((CreateTableConstantAction)constantAction)
@@ -172,7 +176,6 @@ public final class DDLConflatable extends GfxdDataSerializable implements
       this.additionalFlags = GemFireXDUtils.set(this.additionalFlags,
           F_HAS_IMPLICIT_SCHEMA);
     }
-    LanguageConnectionContext lcc = Misc.getLanguageConnectionContext();
     if (lcc != null && lcc.isDefaultPersistent()) {
       this.additionalFlags = GemFireXDUtils.set(this.additionalFlags,
           F_DEFAULT_PERSISTENT);
@@ -352,6 +355,10 @@ public final class DDLConflatable extends GfxdDataSerializable implements
         F_DEFAULT_PERSISTENT);
   }
 
+  public final boolean persistMetaStoreInDataDictionary() {
+    return GemFireXDUtils.isSet(this.additionalFlags, F_METASTORE_IN_DD);
+  }
+
   public final boolean isCreateIndex() {
     return GemFireXDUtils.isSet(this.flags, IS_CREATE_INDEX);
   }
@@ -438,14 +445,24 @@ public final class DDLConflatable extends GfxdDataSerializable implements
    */
   public String getSchemaForTable() {
     assert isCreateTable() || isAlterTable();
-    
-    final int dotIndex = this.fullTableName.indexOf('.');
-    if (dotIndex == -1) {
-      return null;
-    }
-    return this.fullTableName.substring(0, dotIndex);
+    return getSchemaForTable_internal();
   }
-  
+
+  private String getSchemaForTable_internal() {
+    if (this.fullTableName != null) {
+      final int dotIndex = this.fullTableName.indexOf('.');
+      if (dotIndex == -1) {
+        return null;
+      }
+      return this.fullTableName.substring(0, dotIndex);
+    }
+    return null;
+  }
+
+  public String getSchemaForTableNoThrow() {
+    return getSchemaForTable_internal();
+  }
+
   public final String getColocatedWithTable() {
     return this.colocatedWithTable;
   }
@@ -569,7 +586,8 @@ public final class DDLConflatable extends GfxdDataSerializable implements
   @Override
   public void appendFields(StringBuilder sb) {
     sb.append(" [").append(this.ddlId).append(']');
-    sb.append(" SQLText [").append(this.sqlText);
+    sb.append(" SQLText [");
+    sb.append(GemFireXDUtils.maskGenericPasswordFromSQLString(this.sqlText));
     sb.append("] fullTableName=").append(this.fullTableName);
     sb.append(";defaultSchema=").append(this.defaultSchema);
     sb.append(";objectName=").append(this.objectName);

@@ -62,6 +62,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import com.pivotal.gemfirexd.internal.engine.Misc;
+import com.pivotal.gemfirexd.internal.engine.diag.SysVTIs;
 import com.pivotal.gemfirexd.internal.engine.locks.GfxdLockSet;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.internal.iapi.reference.Limits;
@@ -72,7 +73,6 @@ import com.pivotal.gemfirexd.internal.iapi.services.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.iapi.sql.conn.LanguageConnectionContext;
 import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.DataDictionary;
 import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.SPSDescriptor;
-import com.pivotal.gemfirexd.internal.iapi.store.access.TransactionController;
 import com.pivotal.gemfirexd.internal.impl.sql.execute.GenericConstantActionFactory;
 import com.pivotal.gemfirexd.internal.impl.sql.execute.GenericExecutionFactory;
 
@@ -818,7 +818,7 @@ public class EmbedDatabaseMetaData extends ConnectionChild
 	 * 
      */
 	public boolean supportsFullOuterJoins()  {
-		return false;
+		return true; // supported in Spark
 	}
 
     /**
@@ -1794,21 +1794,27 @@ public class EmbedDatabaseMetaData extends ConnectionChild
 		/* Original code
 		final int numberOfTableTypesInDerby = 4;
 		*/
-		final int numberOfTableTypesInDerby = 5;
+		final int numberOfTableTypesInDerby = 10;
+		boolean hasVTI = false;
 		//GemStone changes END
 
 		if (types == null)  {// null means all types 
-			types = new String[] {"TABLE","VIEW","SYNONYM","SYSTEM TABLE"/*GemStone changes BEGIN*/, "COLUMN TABLE"/*GemStone changes END*/};
+			types = new String[] {"ROW TABLE","VIEW","SYNONYM","SYSTEM TABLE"
+			/* GemStone changes BEGIN */, "COLUMN TABLE",
+			"EXTERNAL TABLE", "STREAM TABLE", "SAMPLE TABLE", "TOPK TABLE", "VIRTUAL TABLE",
+			/* GemStone changes END */};
 		}
 		String[] typeParams = new String[numberOfTableTypesInDerby];
 		for (int i=0; i < numberOfTableTypesInDerby;i++)
 			typeParams[i] = null;
 		
 		for (int i = 0; i<types.length; i++){
-			if ("TABLE".equals(types[i]))
+			if ("TABLE".equals(types[i]) || "ROW TABLE".equals(types[i]) || "ROW_TABLE".equals(types[i]))
 				typeParams[0] = "T";
-			else if ("VIEW".equals(types[i]))
+			else if ("VIEW".equals(types[i])) {
 				typeParams[1] = "V";
+				typeParams[9] = "VIEW"; // for hive-metastore tables
+			}
 			else if ("SYNONYM".equals(types[i]))
 				typeParams[2] = "A";
 			else if ("SYSTEM TABLE".equals(types[i]) ||
@@ -1817,7 +1823,17 @@ public class EmbedDatabaseMetaData extends ConnectionChild
 			//GemStone changes BEGIN
 			else if ("COLUMN TABLE".equals(types[i]) ||
 			    "COLUMN_TABLE".equals(types[i])) // In case we treat it like SYSTEM_TABLE
-			    typeParams[4] = "C";
+			    typeParams[4] = "COLUMN";
+			else if ("EXTERNAL TABLE".equals(types[i]) || "EXTERNAL_TABLE".equals(types[i]) )
+			    typeParams[5] = "EXTERNAL";
+			else if ("STREAM TABLE".equals(types[i]) || "STREAM_TABLE".equals(types[i]) )
+			    typeParams[6] = "STREAM";
+			else if ("SAMPLE TABLE".equals(types[i]) || "SAMPLE_TABLE".equals(types[i]))
+			    typeParams[7] = "SAMPLE";
+			else if ("TOPK TABLE".equals(types[i]) || "TOPK_TABLE".equals(types[i]))
+			    typeParams[8] = "TOPK";
+			else if ("VIRTUAL TABLE".equals(types[i]) || "VIRTUAL_TABLE".equals(types[i]))
+			    hasVTI = true;
 			//GemStone changes END
 			// If user puts in other types we simply ignore.
 			}
@@ -1830,8 +1846,28 @@ public class EmbedDatabaseMetaData extends ConnectionChild
 			else
 				s.setString(i+4,typeParams[i]);	
 					
+		// add schema/table again for hive tables
+		s.setString(numberOfTableTypesInDerby + 4, swapNull(schemaPattern));
+		s.setString(numberOfTableTypesInDerby + 5, swapNull(tableNamePattern));
+		// add parameters for VTI tables
+		if (hasVTI) {
+			s.setString(numberOfTableTypesInDerby + 6, "VIRTUAL TABLE");
+			s.setString(numberOfTableTypesInDerby + 7, SysVTIs.LOCAL_VTI);
+		} else {
+			s.setNull(numberOfTableTypesInDerby + 6, Types.CHAR);
+			s.setNull(numberOfTableTypesInDerby + 7, Types.CHAR);
+		}
+		s.setString(numberOfTableTypesInDerby + 8, swapNull(schemaPattern));
+		s.setString(numberOfTableTypesInDerby + 9, swapNull(tableNamePattern));
 		return s.executeQuery();
 	}
+
+
+	public ResultSet getTableSchemas() throws SQLException {
+		PreparedStatement s = getPreparedQuery("getTableSchemas");
+		return s.executeQuery();
+	}
+
 
     /**
      * Get the schema names available in this database.  The results
@@ -1995,13 +2031,21 @@ public class EmbedDatabaseMetaData extends ConnectionChild
 		s.setString(2, swapNull(schemaPattern));
                 s.setString(3, swapNull(tableNamePattern));
                 s.setString(4, swapNull(columnNamePattern));
-		//GemStone changes BEGIN
-		//for #51194, using sysaliases
-                s.setString(5, swapNull(catalog));
-                s.setString(6, swapNull(schemaPattern));
-                s.setString(7, swapNull(tableNamePattern));
-                s.setString(8, swapNull(columnNamePattern));
-                //GemStone changes END
+		// GemStone changes BEGIN
+		// for #51194, using sysaliases
+		s.setString(5, swapNull(catalog));
+		s.setString(6, swapNull(schemaPattern));
+		s.setString(7, swapNull(tableNamePattern));
+		s.setString(8, swapNull(columnNamePattern));
+		// for hive external tables
+		s.setString(9, swapNull(schemaPattern));
+		s.setString(10, swapNull(tableNamePattern));
+		s.setString(11, swapNull(columnNamePattern));
+		// for VTIs
+		s.setString(12, swapNull(schemaPattern));
+		s.setString(13, swapNull(tableNamePattern));
+		s.setString(14, swapNull(columnNamePattern));
+		// GemStone changes END
 		return s.executeQuery();
 	}
 
@@ -2089,6 +2133,10 @@ public class EmbedDatabaseMetaData extends ConnectionChild
 		s.setString(1, swapNull(catalog));
 		s.setString(2, swapNull(schemaPattern));
 		s.setString(3, swapNull(tableNamePattern));
+		s.setString(4, swapNull(schemaPattern));
+		s.setString(5, swapNull(tableNamePattern));
+		s.setString(6, swapNull(schemaPattern));
+		s.setString(7, swapNull(tableNamePattern));
 		return s.executeQuery();
 	}
 
@@ -3522,6 +3570,7 @@ public class EmbedDatabaseMetaData extends ConnectionChild
         PreparedStatement s = getPreparedQuery("getSchemas");
         s.setString(1, swapNull(catalog));
         s.setString(2, swapNull(schemaPattern));
+        s.setString(3, swapNull(schemaPattern));
         return s.executeQuery();
     }
 
@@ -3593,6 +3642,13 @@ public class EmbedDatabaseMetaData extends ConnectionChild
                                                                 boolean net)
         throws SQLException 
 	{
+		// [snappydata] treat system procedures like other normal ones
+		String queryText = getQueryDescriptions(net).getProperty(nameKey);
+		if (queryText == null) {
+			throw Util.notImplemented(nameKey);
+		}
+		return getEmbedConnection().prepareMetaDataStatement(queryText);
+		/* (original code)
 		synchronized (getConnectionSynchronization())
 		{
 			setupContextStack(true);
@@ -3621,6 +3677,7 @@ public class EmbedDatabaseMetaData extends ConnectionChild
 			}
 			return ps;
 		}
+		*/
 	}
 
 	/**

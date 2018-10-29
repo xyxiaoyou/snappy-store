@@ -185,13 +185,13 @@ public class JDBCDisplayUtil {
 		@param rs the ResultSet that may have warnings on it
 	 */
 	static public int /* GemStoneChange void */ ShowWarnings(PrintWriter out, ResultSet rs) {
+	    int result = 0;
 	    try {
 		// GET RESULTSET WARNINGS
 		SQLWarning warning = null;
 
 		if (rs != null) {
-		  return // GemStoneAddition
-			ShowWarnings(out, rs.getWarnings());
+			result = ShowWarnings(out, rs.getWarnings());
 		}
 
 		if (rs != null) {
@@ -200,7 +200,7 @@ public class JDBCDisplayUtil {
 	    } catch (SQLException e) {
 			ShowSQLException(out, e);
 	    }
-	    return 0; // GemStoneAddition
+	    return result; // GemStoneAddition
 	} // ShowResultSetWarnings
 
 	/**
@@ -250,18 +250,19 @@ public class JDBCDisplayUtil {
 	 */
 	static public void DisplayResults(PrintWriter out, Statement stmt, Connection conn,
 	    ConsoleReader reader /* GemStoneAddition */,
-	    StopWatch timer /* GemStoneAddition */) throws SQLException
+	    StopWatch timer /* GemStoneAddition */, boolean displayCount /* GemStoneAddition */)
+      throws SQLException
 	{
 		indent_DisplayResults( out, stmt, conn, 0, null, null,
 		    reader /* GemStoneAddition */,
-		    timer /* GemStoneAddition */);			
+		    timer /* GemStoneAddition */, displayCount /* GemStoneAddition */);
 	}
 
 	static private void indent_DisplayResults
 	(PrintWriter out, Statement stmt, Connection conn, int indentLevel,
 	 int[] displayColumns, int[] displayColumnWidths,
 	 ConsoleReader reader /* GemStoneAddition */,
-	 StopWatch timer /* GemStoneAddition */)
+	 StopWatch timer /* GemStoneAddition */, boolean displayCount /* GemStoneAddition */)
 		throws SQLException {
 
 		checkNotNull(stmt, "Statement");
@@ -275,7 +276,9 @@ public class JDBCDisplayUtil {
 			rs.close(); // let the result set go away
 		}
 		else {
-			DisplayUpdateCount(out,stmt.getUpdateCount(), indentLevel);
+			if (displayCount) {
+			    DisplayUpdateCount(out, stmt.getUpdateCount(), indentLevel);
+			}
 		}
 
 		ShowWarnings(out,stmt);

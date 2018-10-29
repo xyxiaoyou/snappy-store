@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -17,49 +17,99 @@
 
 package com.pivotal.gemfirexd.internal.engine.sql.execute;
 
-import com.gemstone.gemfire.internal.cache.LocalRegion;
-import com.pivotal.gemfirexd.internal.catalog.ExternalCatalog;
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Vector;
+
+import com.gemstone.gemfire.internal.cache.TXManagerImpl;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdQueryResultCollector;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdQueryStreamingResultCollector;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdResultCollector;
+import com.pivotal.gemfirexd.internal.engine.distributed.SnappyResultHolder;
 import com.pivotal.gemfirexd.internal.engine.distributed.message.LeadNodeExecutorMsg;
 import com.pivotal.gemfirexd.internal.engine.distributed.metadata.DMLQueryInfo;
-import com.pivotal.gemfirexd.internal.engine.distributed.metadata.TableQueryInfo;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.jdbc.GemFireXDRuntimeException;
+import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
+import com.pivotal.gemfirexd.internal.iapi.sql.ParameterValueSet;
 import com.pivotal.gemfirexd.internal.iapi.sql.ResultDescription;
 import com.pivotal.gemfirexd.internal.iapi.sql.ResultSet;
 import com.pivotal.gemfirexd.internal.iapi.sql.conn.LanguageConnectionContext;
 import com.pivotal.gemfirexd.internal.iapi.sql.execute.ExecPreparedStatement;
 import com.pivotal.gemfirexd.internal.iapi.sql.execute.NoPutResultSet;
 import com.pivotal.gemfirexd.internal.iapi.sql.execute.TemporaryRowHolder;
+import com.pivotal.gemfirexd.internal.iapi.types.DataTypeDescriptor;
+import com.pivotal.gemfirexd.internal.impl.sql.GenericPreparedStatement;
 import com.pivotal.gemfirexd.internal.impl.sql.GenericResultDescription;
 import com.pivotal.gemfirexd.internal.impl.sql.execute.BaseActivation;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.snappy.LeadNodeExecutionContext;
-
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Vector;
 
 /**
  * Activation implementation for getting results from lead node.
  */
 public class SnappyActivation extends BaseActivation {
 
-  volatile AbstractGemFireResultSet currentRS = null;
   private String sql;
-  boolean returnRows;
+  private boolean returnRows;
+  private boolean isPrepStmt;
+  private boolean isUpdateOrDelete;
 
-  public SnappyActivation(LanguageConnectionContext lcc, ExecPreparedStatement eps, boolean returnRows) {
+  public SnappyActivation(LanguageConnectionContext lcc, ExecPreparedStatement eps, 
+      boolean returnRows,  boolean isPrepStmt, boolean isUpdateOrDelete) {
     super(lcc);
     sql = eps.getSource();
     this.preStmt = eps;
     this.returnRows = returnRows;
     this.connectionID = lcc.getConnectionId();
+    this.isPrepStmt = isPrepStmt;
+    this.isUpdateOrDelete = isUpdateOrDelete;
+  }
+
+  public void initialize_pvs() throws StandardException {
+    SnappyPrepareResultSet preparedResult = prepare();
+
+    try {
+      // Also see ParamConstants.getSQLType()
+      // Index 0: Number of parameter
+      // Index 1 - 1st parameter: DataTYpe
+      // Index 2 - 1st parameter: precision
+      // Index 3 - 1st parameter: scale
+      // Index 4 - 1st parameter: nullable
+      // ...and so on
+      int[] typeNames = preparedResult.makePrepareResult();
+      assert typeNames != null;
+      assert typeNames.length > 0;
+      int numberOfParameters = typeNames[0];
+      DataTypeDescriptor[] types = new DataTypeDescriptor[numberOfParameters];
+      for (int i = 0; i < numberOfParameters; i++) {
+        int index = i * 4 + 1;
+        SnappyResultHolder.getNewNullDVD(typeNames[index], i, types,
+            typeNames[index + 1], typeNames[index + 2], typeNames[index + 2] == 1);
+      }
+
+      pvs = lcc.getLanguageFactory().newParameterValueSet(
+          lcc.getLanguageConnectionFactory().getClassFactory().getClassInspector(),
+          numberOfParameters, false);
+      pvs.initialize(types);
+      if (preStmt instanceof GenericPreparedStatement) {
+        GenericPreparedStatement gps = (GenericPreparedStatement)preStmt;
+        gps.setParameterTypes(types);
+        final String statementType;
+        if (isUpdateOrDelete) {
+          statementType = "INSERT"; // Default
+        } else {
+          statementType = "SELECT";
+        }
+        gps.setResultDescription(preparedResult.makeResultDescription(statementType));
+      }
+    }  catch (IOException ioex) {
+      throw StandardException.newException(ioex.getMessage(), ioex);
+    }
   }
 
   @Override
@@ -73,10 +123,31 @@ public class SnappyActivation extends BaseActivation {
 
   }
 
+  public final SnappyPrepareResultSet prepare() throws StandardException {
+    try {
+      SnappyPrepareResultSet rs = createPrepareResultSet();
+      if (GemFireXDUtils.TraceQuery) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
+            "SnappyActivation.prepare: Created SnappySelectResultSet: " + rs);
+      }
+      prepareWithResultSet(rs);
+      if (GemFireXDUtils.TraceQuery) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
+            "SnappyActivation.prepare: Done.");
+      }
+      return rs;
+    } catch (GemFireXDRuntimeException gfxdrtex) {
+      StandardException cause = getCause(gfxdrtex);
+      if (cause != null) {
+        throw cause;
+      }
+      throw gfxdrtex;
+    }
+  }
+
   public final ResultSet execute() throws StandardException {
     try {
-      this.currentRS = null;
-      SnappySelectResultSet rs = createResultSet(0);
+      SnappySelectResultSet rs = createResultSet();
       if (GemFireXDUtils.TraceQuery) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
             "SnappyActivation.execute: Created SnappySelectResultSet: " + rs);
@@ -84,7 +155,6 @@ public class SnappyActivation extends BaseActivation {
       rs.open();
       this.resultSet = rs;
       executeWithResultSet(rs);
-      this.currentRS = rs;
       if (GemFireXDUtils.TraceQuery) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
             "SnappyActivation.execute: Done");
@@ -110,28 +180,50 @@ public class SnappyActivation extends BaseActivation {
     return null;
   }
 
-  protected SnappySelectResultSet createResultSet(int resultsetNumber)
+  private SnappySelectResultSet createResultSet()
       throws StandardException {
-    return new SnappySelectResultSet(this, this.returnRows);
+    if (isUpdateOrDelete) {
+      return new SnappyUpdateDeleteResultSet(this, this.returnRows);
+    } else {
+      return new SnappySelectResultSet(this, this.returnRows);
+    }
   }
 
-  protected void executeWithResultSet(SnappySelectResultSet rs)
+  private SnappyPrepareResultSet createPrepareResultSet()
+      throws StandardException {
+    return new SnappyPrepareResultSet(this);
+  }
+
+  private void executeWithResultSet(SnappySelectResultSet rs)
       throws StandardException {
     boolean enableStreaming = this.lcc.streamingEnabled();
-    GfxdResultCollector<Object> rc = null;
-    rc = getResultCollector(enableStreaming, rs);
-    executeOnLeadNode(rs, rc, sql, enableStreaming, this.getConnectionID(), this.lcc.getCurrentSchemaName());
+    GfxdResultCollector<Object> rc = getResultCollector(enableStreaming, rs);
+    executeOnLeadNode(rs, rc, this.sql, enableStreaming, this.getConnectionID(), this.lcc
+        .getCurrentSchemaName(), this.pvs, this.isPrepStmt, this.isUpdateOrDelete, this.lcc);
   }
 
-  protected GfxdResultCollector<Object> getResultCollector(
-      final boolean enableStreaming, final SnappySelectResultSet rs)
+  private void prepareWithResultSet(SnappyPrepareResultSet rs)
       throws StandardException {
+    GfxdResultCollector<Object> rc = getPrepareResultCollector(rs);
+    prepareOnLeadNode(rs, rc, this.sql, this.getConnectionID(), this.lcc
+        .getCurrentSchemaName(), this.pvs, this.isUpdateOrDelete, this.lcc);
+  }
+
+  private GfxdResultCollector<Object> getResultCollector(final boolean enableStreaming,
+      final SnappySelectResultSet rs) throws StandardException {
     final GfxdResultCollector<Object> rc;
     if (enableStreaming) {
       rc = new GfxdQueryStreamingResultCollector();
     } else {
       rc = new GfxdQueryResultCollector();
     }
+    rs.setupRC(rc);
+    return rc;
+  }
+
+  private GfxdResultCollector<Object> getPrepareResultCollector(final SnappyPrepareResultSet rs)
+      throws StandardException {
+    final GfxdResultCollector<Object> rc = new GfxdQueryResultCollector();
     rs.setupRC(rc);
     return rc;
   }
@@ -216,51 +308,76 @@ public class SnappyActivation extends BaseActivation {
 
   public void postConstructor() throws StandardException {
     throw new UnsupportedOperationException("SnappyActivation::postConstructor: not implemented");
-
   }
 
   public void setResultDescription(GenericResultDescription resultDescription) {
     this.resultDescription = resultDescription;
   }
 
-  public static void executeOnLeadNode(SnappySelectResultSet rs, GfxdResultCollector<Object> rc, String sql,
-      boolean enableStreaming, long connId, String schema)
+  private static void executeOnLeadNode(SnappySelectResultSet rs, GfxdResultCollector<Object> rc,
+      String sql, boolean enableStreaming, long connId, String schema, ParameterValueSet pvs,
+      boolean isPreparedStatement, boolean isUpdateOrDelete, LanguageConnectionContext lcc)
       throws StandardException {
     // TODO: KN probably username, statement id and connId to be sent in
     // execution and of course tx id when transaction will be supported.
     LeadNodeExecutionContext ctx = new LeadNodeExecutionContext(connId);
-    LeadNodeExecutorMsg msg = new LeadNodeExecutorMsg(sql, schema, ctx, rc);
+    LeadNodeExecutorMsg msg = new LeadNodeExecutorMsg(sql, schema, ctx, rc, pvs,
+        isPreparedStatement, false, isUpdateOrDelete);
+    // release all locks before sending the message else it can lead to deadlocks
+    if (lcc != null) {
+      lcc.getTransactionExecute().releaseAllLocks(true, true);
+    }
+    // wait for any pending transactions before routing new operations to lead
+    final TXManagerImpl.TXContext txContext = TXManagerImpl
+        .currentTXContext();
+    if (txContext != null) {
+      txContext.waitForPendingCommit();
+    }
     try {
       msg.executeFunction(enableStreaming, false, rs, true);
-    } catch (SQLException se) {
+    } catch (RuntimeException | SQLException ex) {
+      Exception e = LeadNodeExecutorMsg.handleLeadNodeException(ex, sql);
       throw Misc.processFunctionException(
-          "SnappyActivation::execute", se, null, null);
+          "SnappyActivation::executeOnLeadNode", e, null, null);
     }
   }
 
-  public static boolean isColumnTable(DMLQueryInfo dmlQueryInfo, boolean skipLocks) {
+  private static void prepareOnLeadNode(SnappyPrepareResultSet rs, GfxdResultCollector<Object> rc,
+      String sql, long connId, String schema, ParameterValueSet pvs,
+      boolean isUpdateOrDelete, LanguageConnectionContext lcc) throws StandardException {
+    // TODO: KN probably username, statement id and connId to be sent in
+    // execution and of course tx id when transaction will be supported.
+    LeadNodeExecutionContext ctx = new LeadNodeExecutionContext(connId);
+    LeadNodeExecutorMsg msg = new LeadNodeExecutorMsg(sql, schema, ctx, rc, pvs,
+        true, true, isUpdateOrDelete);
+    if (lcc != null) {
+      lcc.getTransactionExecute().releaseAllLocks(true, true);
+    }
+    try {
+      msg.executeFunction(false, false, rs, true);
+    } catch (RuntimeException | SQLException ex) {
+      Exception e = LeadNodeExecutorMsg.handleLeadNodeException(ex, sql);
+      throw Misc.processFunctionException(
+          "SnappyActivation::prepareOnLeadNode", e, null, null);
+    }
+  }
+
+  public static boolean isColumnTable(DMLQueryInfo dmlQueryInfo) {
     if (dmlQueryInfo != null) {
-      ExternalCatalog extCatalog = Misc.getMemStore().getExternalCatalog();
-      if (extCatalog != null) {
-        List<TableQueryInfo> allTables = dmlQueryInfo.getTableQueryInfoList();
-        if (allTables != null) {
-          for (TableQueryInfo t : allTables) {
-            if (null != t) {
-              LocalRegion region = t.getRegion();
-              // don't try to query hive for system tables etc
-              if (region != null && region.getScope().isLocal()) {
-                continue;
-              }
-              String tabName = t.getFullTableName();
-              boolean isColumnTable = extCatalog.isColumnTable(t.getSchemaName(), t.getTableName(), skipLocks);
-              if (GemFireXDUtils.TraceQuery) {
-                SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
-                    "SnappyActivation.isColumnTable: table-name=" + tabName +
-                        " ,isColumnTable=" + isColumnTable);
-              }
-              if (isColumnTable) {
-                return isColumnTable;
-              }
+      List<GemFireContainer> allContainers = dmlQueryInfo.getContainerList();
+      boolean isColumnTable;
+      if (allContainers != null) {
+        for (GemFireContainer container : allContainers) {
+          if (null != container) {
+            isColumnTable = container.isRowBuffer();
+            if (GemFireXDUtils.TraceQuery) {
+              String tabName = container.getSchemaName() + container.getTableName();
+              SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
+                  "SnappyActivation.isColumnTable: table-name=" + tabName +
+                      " ,isColumnTable=" + isColumnTable);
+            }
+            if (isColumnTable) {
+              return true;
             }
           }
         }

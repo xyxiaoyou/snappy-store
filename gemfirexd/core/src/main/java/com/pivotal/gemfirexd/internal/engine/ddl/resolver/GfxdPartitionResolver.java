@@ -95,8 +95,6 @@ public abstract class GfxdPartitionResolver implements
 
   protected GfxdPartitionResolver masterResolver;
 
-  protected DistributionDescriptor distributionDesc;
-
   protected String[] partitionColumnNames;
 
   protected volatile GemFireContainer globalIndexContainer;
@@ -380,12 +378,11 @@ public abstract class GfxdPartitionResolver implements
 
   public abstract int getPartitioningColumnIndex(String partitionColumn);
 
-  public void setDistributionDescriptor(DistributionDescriptor distributionDesc) {
-    this.distributionDesc = distributionDesc;
+  public void updateDistributionDescriptor(DistributionDescriptor desc) {
   }
 
-  public final DistributionDescriptor getDistributionDescriptor() {
-    return this.distributionDesc;
+  public String[] getPartitioningColumns() {
+    return getColumnNames();
   }
 
   public int getPartitioningColumnsCount() {
@@ -732,7 +729,7 @@ public abstract class GfxdPartitionResolver implements
     boolean allSupportedTypes = checkIfAllTypesSupported(typeFormatId);
     if (allSupportedTypes) {
       Map<InternalDistributedMember, String> mbrToServerMap = GemFireXDUtils
-          .getGfxdAdvisor().getAllDRDAServersAndCorrespondingMemberMapping();
+          .getGfxdAdvisor().getAllNetServersWithMembers();
       // now get the bucket information and set in the single hop info object
       PartitionedRegion region = (PartitionedRegion)this.gfContainer
           .getRegion();
@@ -748,7 +745,7 @@ public abstract class GfxdPartitionResolver implements
         bOwners.remove(pmbr);
         String primaryServer = mbrToServerMap.get(pmbr);
         if (primaryServer == null) {
-          if (SanityManager.TraceSingleHop) {
+          if (GemFireXDUtils.TraceQuery || SanityManager.TraceSingleHop) {
             SanityManager.DEBUG_PRINT(SanityManager.TRACE_SINGLE_HOP,
                 "GfxdPartitionResolver::isValidTypeForSingleHop server "
                     + "location of primary bucket server corresponding "

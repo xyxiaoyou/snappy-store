@@ -27,6 +27,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.cache.Cache;
@@ -44,9 +45,12 @@ import com.gemstone.gemfire.internal.cache.control.HeapMemoryMonitor;
 import com.gemstone.gemfire.internal.cache.control.InternalResourceManager;
 import com.gemstone.gemfire.internal.cache.control.InternalResourceManager.ResourceType;
 import com.gemstone.gemfire.internal.cache.control.MemoryEvent;
+import com.gemstone.gemfire.internal.cache.control.MemoryThresholds;
 import com.gemstone.gemfire.internal.cache.control.ResourceListener;
-import com.gemstone.gemfire.internal.concurrent.AB;
-import com.gemstone.gemfire.internal.concurrent.CFactory;
+import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
+import com.gemstone.gemfire.internal.shared.LauncherBase;
+import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
+import com.gemstone.gemfire.internal.snappy.StoreCallbacks;
 import com.gemstone.gnu.trove.THashSet;
 import com.gemstone.gnu.trove.TObjectLongHashMap;
 
@@ -68,14 +72,14 @@ public class HeapEvictor implements ResourceListener<MemoryEvent> {
       .getBoolean("gemfire.HeapLRUCapacityController.DISABLE_HEAP_EVICTIOR_THREAD_POOL");
 
   public static final String EVICT_HIGH_ENTRY_COUNT_BUCKETS_FIRST_PROP =
-      "gemfire.HeapLRUCapacityController.evictHighEntryCountBucketsFirst";
+      LauncherBase.EVICT_HIGH_ENTRY_COUNT_BUCKETS_FIRST_PROP;
 
   public static final boolean EVICT_HIGH_ENTRY_COUNT_BUCKETS_FIRST = Boolean.valueOf(
       System.getProperty(EVICT_HIGH_ENTRY_COUNT_BUCKETS_FIRST_PROP,
           "true")).booleanValue(); 
 
   public static final String EVICT_HIGH_ENTRY_COUNT_BUCKETS_FIRST_FOR_EVICTOR_PROP =
-      "gemfire.HeapLRUCapacityController.evictHighEntryCountBucketsFirstForEvictor";
+      LauncherBase.EVICT_HIGH_ENTRY_COUNT_BUCKETS_FIRST_FOR_EVICTOR_PROP;
 
   public static final boolean EVICT_HIGH_ENTRY_COUNT_BUCKETS_FIRST_FOR_EVICTOR =
       Boolean.valueOf(System.getProperty(EVICT_HIGH_ENTRY_COUNT_BUCKETS_FIRST_FOR_EVICTOR_PROP,
@@ -105,17 +109,17 @@ public class HeapEvictor implements ResourceListener<MemoryEvent> {
 
   private final LogWriterI18n logger;
 
-  private final AB mustEvict = CFactory.createAB(false);
+  private final AtomicBoolean mustEvict = new AtomicBoolean(false);
 
-  protected final Cache cache;  
+  protected final Cache cache;
 
-  private final ArrayList testTaskSetSizes = new  ArrayList();
+  private final ArrayList testTaskSetSizes = new ArrayList();
   public volatile int testAbortAfterLoopCount = Integer.MAX_VALUE;
-  
+
   private BlockingQueue<Runnable> poolQueue;
-  
-  private final AB isRunning = CFactory.createAB(true);
-  
+
+  private final AtomicBoolean isRunning = new AtomicBoolean(true);
+
   public HeapEvictor(Cache gemFireCache) {
     this.cache = gemFireCache;
     this.logger = cache.getLoggerI18n();
@@ -229,7 +233,18 @@ public class HeapEvictor implements ResourceListener<MemoryEvent> {
    * assigned to the threadpool.
    */
   private void submitRegionEvictionTask(Callable<Object> task) {
-    evictorThreadPool.submit(task);
+    evictorThreadPool.execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          task.call();
+        } catch (Exception e) {
+          if (logger.warningEnabled()) {
+            logger.warning(LocalizedStrings.ONE_ARG, e.toString(), e);
+          }
+        }
+      }
+    });
   }
 
   public ThreadPoolExecutor getEvictorThreadPool() {
@@ -352,11 +367,18 @@ public class HeapEvictor implements ResourceListener<MemoryEvent> {
   protected volatile int numFastLoops;
   private long previousBytesUsed;
   private final Object evictionLock = new Object();
+  StoreCallbacks callback = CallbackFactoryProvider.getStoreCallbacks();
   @Override
   public void onEvent(final MemoryEvent event) {
     if (DISABLE_HEAP_EVICTIOR_THREAD_POOL) {
       return;
     }
+
+    //Disable centralized eviction for snappydata. Critical_UP eviction will be still there.
+    if(callback.isSnappyStore() && event.getState() == MemoryThresholds.MemoryState.EVICTION){
+      return;
+    }
+
     
     // Do we care about eviction events and did the eviction event originate
     // in this VM ...
@@ -370,6 +392,9 @@ public class HeapEvictor implements ResourceListener<MemoryEvent> {
             logWriter.fine("Updating eviction in response to memory event: " + event + ". previousBytesUsed=" + previousBytesUsed);
           }
 
+          if(callback.isSnappyStore()){
+            logWriter.info("CRITICAL_UP event received by HeapEvictor thread. Total bytes used now is " + event.getBytesUsed());
+          }
           // We lock here to make sure that the thread that was previously
           // started and running eviction loops is in a state where it's okay
           // to update the number of fast loops to perform.
@@ -437,14 +462,14 @@ public class HeapEvictor implements ResourceListener<MemoryEvent> {
                 if (HeapEvictor.this.mustEvict.get()) {
                   // Submit this runnable back into the thread pool and execute
                   // another pass at eviction.
-                  HeapEvictor.this.evictorThreadPool.submit(this);
+                  HeapEvictor.this.evictorThreadPool.execute(this);
                 }
               } catch (RegionDestroyedException e) {
                 // A region destroyed exception might be thrown for Region.size() when a bucket
                 // moves due to rebalancing. retry submitting the eviction task without
                 // logging an error message. fixes bug 48162
                 if (HeapEvictor.this.mustEvict.get()) {
-                  HeapEvictor.this.evictorThreadPool.submit(this);
+                  HeapEvictor.this.evictorThreadPool.execute(this);
                 }
               }
             }
@@ -452,7 +477,7 @@ public class HeapEvictor implements ResourceListener<MemoryEvent> {
         };
         
         // Submit the first pass at eviction into the pool
-        this.evictorThreadPool.submit(evictionManagerTask);
+        this.evictorThreadPool.execute(evictionManagerTask);
           
       } else {
         this.mustEvict.set(false);

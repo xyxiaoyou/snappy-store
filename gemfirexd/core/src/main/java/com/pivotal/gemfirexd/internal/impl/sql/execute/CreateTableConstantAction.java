@@ -80,6 +80,7 @@ import com.pivotal.gemfirexd.internal.engine.management.GfxdResourceEvent;
 import com.pivotal.gemfirexd.internal.engine.sql.catalog.DistributionDescriptor;
 import com.pivotal.gemfirexd.internal.engine.sql.catalog.ExtraTableInfo;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
+import com.pivotal.gemfirexd.internal.engine.store.GemFireStore;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.internal.iapi.services.io.FormatableBitSet;
 import com.pivotal.gemfirexd.internal.iapi.services.sanity.SanityManager;
@@ -386,7 +387,8 @@ class CreateTableConstantAction extends DDLConstantAction
 
 		if ( tableType != TableDescriptor.GLOBAL_TEMPORARY_TABLE_TYPE )
 		{
-			td = ddg.newTableDescriptor(tableName, sd, tableType, lockGranularity);
+			td = ddg.newTableDescriptor(tableName, sd, tableType, lockGranularity,
+					TableDescriptor.DEFAULT_ROW_LEVEL_SECURITY_ENABLED);
 // GemStone changes BEGIN
 			// set the DistributionDescriptor before calling dd.addDescriptor()
 			td.setDistributionDescriptor(distributionDesc);
@@ -703,8 +705,9 @@ class CreateTableConstantAction extends DDLConstantAction
     // GemStone changes END
 
 
-    if (!"SYSSTAT".equalsIgnoreCase(this.schemaName)
-        || GemFireXDUtils.TraceConglom) {
+    if (!("SYSSTAT".equalsIgnoreCase(this.schemaName)
+		|| Misc.isSnappyHiveMetaTable((this.schemaName))
+        || GemFireXDUtils.TraceConglom)) {
       SanityManager.DEBUG_PRINT(
           "info:" + GfxdConstants.TRACE_CONGLOM,
           "Created table " + td.getQualifiedName() + " with UUID: "

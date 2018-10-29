@@ -25,6 +25,7 @@ import com.gemstone.gemfire.distributed.DistributedSystem;
 import com.gemstone.gemfire.internal.Config;
 import com.gemstone.gemfire.internal.LogWriterImpl;
 import com.gemstone.gemfire.internal.ManagerLogWriter;
+import com.gemstone.gemfire.internal.shared.LauncherBase;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.tcp.Connection;
 import com.gemstone.gemfire.memcached.GemFireMemcachedServer;
@@ -423,7 +424,7 @@ public interface DistributionConfig extends Config, ManagerLogWriter.LogConfig {
    */
   public boolean isLogFileModifiable();
   /** The name of the "logFile" property */
-  public static final String LOG_FILE_NAME = SystemProperties.LOG_FILE_NAME;
+  public static final String LOG_FILE_NAME = LauncherBase.LOG_FILE;
 
   /**
    * The default log file.
@@ -1425,7 +1426,7 @@ public interface DistributionConfig extends Config, ManagerLogWriter.LogConfig {
   public static final String CONSERVE_SOCKETS_NAME = "conserve-sockets";
 
   /** The default value of the "conserveSockets" property */
-  public static final boolean DEFAULT_CONSERVE_SOCKETS = true;
+  public static final boolean DEFAULT_CONSERVE_SOCKETS = false;
 
   /**
    * Returns the value of the <a
@@ -1989,7 +1990,10 @@ public interface DistributionConfig extends Config, ManagerLogWriter.LogConfig {
 
   /** The prefix used for Gemfire properties set through java system properties */
   public static final String GEMFIRE_PREFIX = "gemfire.";
-  
+
+  /** The prefix used for SnappyData properties set through java system properties */
+  public static final String SNAPPY_PREFIX = SystemProperties.SNAPPY_PREFIX;
+
   /** For the "custom-" prefixed properties */
   public static final String USERDEFINED_PREFIX_NAME = "custom-";
   
@@ -2228,7 +2232,7 @@ public interface DistributionConfig extends Config, ManagerLogWriter.LogConfig {
   public int getJmxManagerUpdateRate();
   public void setJmxManagerUpdateRate(int value);
   public boolean isJmxManagerUpdateRateModifiable();
-  public static final int DEFAULT_JMX_MANAGER_UPDATE_RATE = 2000;
+  public static final int DEFAULT_JMX_MANAGER_UPDATE_RATE = 4000;
   public static final int MIN_JMX_MANAGER_UPDATE_RATE = 1000;
   public static final int MAX_JMX_MANAGER_UPDATE_RATE = 60000*5;
   public static final String JMX_MANAGER_UPDATE_RATE_NAME =
@@ -2274,8 +2278,31 @@ public interface DistributionConfig extends Config, ManagerLogWriter.LogConfig {
   public void setOffHeapMemorySize(String value);
   /**
    * Returns true if the value of the <a 
-   * href="../DistributedSystem.html#off-heap-memory-size">"off-heap-memory-size"</a> 
+   * href="../DistributedSystem.html#memory-size">"memory-size"</a>
    * property can be modified. Some attributes can not be modified while the 
+   * system is running.
+   * @since SnappyData 0.9
+   */
+  public boolean isMemorySizeModifiable();
+
+  /**
+   * Returns the value of the <a
+   * href="../DistributedSystem.html#memory-size">"memory-size"</a>
+   * property.
+   * @since SnappyData 0.9
+   */
+  public String getMemorySize();
+  /**
+   * Sets the value of the <a
+   * href="../DistributedSystem.html#memory-size">"memory-size"</a>
+   * property.
+   * @since SnappyData 0.9
+   */
+  public void setMemorySize(String value);
+  /**
+   * Returns true if the value of the <a
+   * href="../DistributedSystem.html#off-heap-memory-size">"off-heap-memory-size"</a>
+   * property can be modified. Some attributes can not be modified while the
    * system is running.
    * @since 7.5
    */
@@ -2331,4 +2358,18 @@ public interface DistributionConfig extends Config, ManagerLogWriter.LogConfig {
    */
   public void setLockMemory(boolean value);
   public boolean isLockMemoryModifiable();
+
+  /**
+   * The name of the "memory-size" property. Total memory taken by SnappyData in off-heap mode.
+   * @since SnappyData 0.9 not used in rowstore
+   */
+  public static final String MEMORY_SIZE_NAME = "memory-size";
+
+  /**
+   * The default <a
+   * href="../DistributedSystem.html#memory-size">"memory-size"</a>
+   * value of <code>""</code>.
+   * @since SnappyData 0.9 not used in rowstore
+   */
+  public static final String DEFAULT_MEMORY_SIZE = "";
 }

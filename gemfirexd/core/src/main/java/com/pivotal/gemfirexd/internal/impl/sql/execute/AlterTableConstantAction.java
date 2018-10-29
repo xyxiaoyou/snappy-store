@@ -218,7 +218,7 @@ class AlterTableConstantAction extends DDLSingleTableConstantAction
 
     private	TableDescriptor 		        td;
 
-
+    private     int rowLevelSecurityAction = ROW_LEVEL_SECURITY_UNCHANGED;
 
     // CONSTRUCTORS
     private LanguageConnectionContext lcc;
@@ -227,6 +227,10 @@ class AlterTableConstantAction extends DDLSingleTableConstantAction
     private TransactionController tc;
     private Activation activation;
     private boolean isSet;
+
+    public final static int ROW_LEVEL_SECURITY_ENABLED = 2;
+	  public final static int ROW_LEVEL_SECURITY_DISABLED = 1;
+	  public final static int ROW_LEVEL_SECURITY_UNCHANGED = 0;
 
 	/**
 	 *	Make the AlterAction for an ALTER TABLE statement.
@@ -244,6 +248,7 @@ class AlterTableConstantAction extends DDLSingleTableConstantAction
 	 *	@param sequential	        If compress table/drop column, 
      *	                            whether or not sequential
 	 *  @param truncateTable	    Whether or not this is a truncate table
+	 *  @param rowLevelSecurityAction	    If Row Level Security is modified
 	 */
 
 	AlterTableConstantAction(
@@ -259,7 +264,7 @@ class AlterTableConstantAction extends DDLSingleTableConstantAction
     boolean                                 isSet,
     int				            behavior,
     boolean			            sequential,
-    boolean                     truncateTable)
+    boolean                     truncateTable, int rowLevelSecurityAction)
 	{
 		super(tableId);
 		this.sd                     = sd;
@@ -267,6 +272,7 @@ class AlterTableConstantAction extends DDLSingleTableConstantAction
 		this.tableConglomerateId    = tableConglomerateId;
 		this.tableType              = tableType;
 		this.columnInfo             = columnInfo;
+		this.rowLevelSecurityAction = rowLevelSecurityAction;
 		// GemStone changes BEGIN
     if (Misc.getMemStoreBooting().isHadoopGfxdLonerMode()
         && constraintActions != null) {
@@ -412,7 +418,7 @@ class AlterTableConstantAction extends DDLSingleTableConstantAction
     GfxdPartitionResolver spr = null;
     if (pattrs != null) {
       PartitionResolver<?, ?> pr = pattrs.getPartitionResolver();
-      if (pr != null && pr instanceof GfxdPartitionResolver) {
+      if (pr instanceof GfxdPartitionResolver) {
         spr = (GfxdPartitionResolver)pr;
       }
     }
@@ -797,6 +803,14 @@ class AlterTableConstantAction extends DDLSingleTableConstantAction
 			compressTable(activation);
 		}
 
+		if (this.rowLevelSecurityAction != ROW_LEVEL_SECURITY_UNCHANGED) {
+			// update the TableDescriptor
+			td.setRowLevelSecurityEnabledFlag(this.rowLevelSecurityAction
+					== AlterTableConstantAction.ROW_LEVEL_SECURITY_ENABLED);
+			// update the DataDictionary
+			dd.updateLockGranularity(td, sd, lockGranularity, tc);
+		}
+
 		// Are we doing a truncate table?
 		if (truncateTable)
 		{
@@ -811,6 +825,8 @@ class AlterTableConstantAction extends DDLSingleTableConstantAction
     // a) COMPRESS, b) truncate; these two call init() methods
     // with different parameters not having mutator object -- see
     // init methods in AlterTableNode
+    final GemFireContainer gfc = GemFireContainer.getGemFireContainer(td,
+        (GemFireTransaction)tc);
     if (this.mutator != null && !this.truncateTable) {
       CacheLoader<?, ?> ldr = attrs.getCacheLoader();
       if (ldr != null) {
@@ -832,7 +848,7 @@ class AlterTableConstantAction extends DDLSingleTableConstantAction
       // can very well be zero due to delayed region initializations.
       if (/* this.numBuckets > 0 && */ !isSet) {
         if (spr != null) {
-          DistributionDescriptor distributionDesc = spr
+          DistributionDescriptor distributionDesc = gfc
               .getDistributionDescriptor();
           // Update the distribution descriptor's column positions
           // even if there's data in the table
@@ -947,8 +963,6 @@ class AlterTableConstantAction extends DDLSingleTableConstantAction
       }
       // [yogesh]
       if (this.mutator.isAlterGatewaySender()) {
-        final GemFireContainer cntr = GemFireContainer.getGemFireContainer(td,
-            (GemFireTransaction)tc);
         Iterator<ColumnDescriptor> itr = td.getColumnDescriptorList()
             .iterator();
         while (itr.hasNext()) {
@@ -1955,6 +1969,8 @@ class AlterTableConstantAction extends DDLSingleTableConstantAction
 		} 
 		// else we are simply changing the default value
 	}
+
+
 
     /**
      * routine to process compress table or ALTER TABLE <t> DROP COLUMN <c>;

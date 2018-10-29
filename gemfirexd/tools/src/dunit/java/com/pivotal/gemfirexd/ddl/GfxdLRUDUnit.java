@@ -53,9 +53,9 @@ public class GfxdLRUDUnit extends DistributedSQLTestBase {
   }
 
   private void insertNBigElements(int n, PreparedStatement ps, int baseCnt) throws SQLException {
-    String dummyPrefix = "";
-    for(int i=0; i<100; i++) {
-      dummyPrefix += "jjjjjjjjjj";
+    StringBuilder dummyPrefix = new StringBuilder();
+    for (int i = 0; i < 100; i++) {
+      dummyPrefix.append("jjjjjjjjjj");
     }
     for (int i = baseCnt; i < n+baseCnt; i++) {
       String name = dummyPrefix + "_name"+i;
@@ -275,7 +275,8 @@ public class GfxdLRUDUnit extends DistributedSQLTestBase {
         "logVMHeapSizeAndCurrentHeapSize tot mem in bytes: " + totmem + " and free mem: " + freemem
             + " so used mem: " + (totmem - freemem) +" and heap max size: "+rt.maxMemory());
   }
-  
+
+  // Suranjan: MVCC destroy keeps the old value in the oldEntryMap. The test fails.
   public void testPRLRUHeapPercDestroy() throws Exception {
     try {
       // The test is valid only for transaction isolation level NONE.
@@ -292,11 +293,11 @@ public class GfxdLRUDUnit extends DistributedSQLTestBase {
       cs.setNull(2, Types.VARCHAR);
       cs.execute();
       cs = conn.prepareCall("call sys.set_eviction_heap_percentage_sg(?, ?)");
-      cs.setInt(1, 25);
+      cs.setInt(1, 5);
       cs.setNull(2, Types.VARCHAR);
       cs.execute();
       float evictionHeapPercentage = Misc.getGemFireCache().getResourceManager().getEvictionHeapPercentage();
-      assertEquals(Float.valueOf(25), evictionHeapPercentage);
+      assertEquals(Float.valueOf(5), evictionHeapPercentage);
       VM servervm = this.serverVMs.get(0);
       servervm.invoke(GfxdLRUDUnit.class, "assertHeapPercentage", new Object[]{Float.valueOf(evictionHeapPercentage)});
       servervm.invoke(GfxdLRUDUnit.class, "setDummytestBytes");

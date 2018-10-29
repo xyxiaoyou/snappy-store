@@ -25,24 +25,17 @@ import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.DataSerializable;
 import com.gemstone.gemfire.DataSerializer;
 import com.gemstone.gemfire.InternalGemFireError;
 import com.gemstone.gemfire.InternalGemFireException;
+import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.SystemFailure;
 import com.gemstone.gemfire.cache.DiskAccessException;
 import com.gemstone.gemfire.cache.RegionDestroyedException;
@@ -54,15 +47,7 @@ import com.gemstone.gemfire.cache.query.internal.CqStateImpl;
 import com.gemstone.gemfire.cache.query.internal.DefaultQueryService;
 import com.gemstone.gemfire.distributed.DistributedMember;
 import com.gemstone.gemfire.distributed.DistributedSystem;
-import com.gemstone.gemfire.distributed.internal.DM;
-import com.gemstone.gemfire.distributed.internal.DistributionManager;
-import com.gemstone.gemfire.distributed.internal.DistributionMessage;
-import com.gemstone.gemfire.distributed.internal.HighPriorityDistributionMessage;
-import com.gemstone.gemfire.distributed.internal.InternalDistributedSystem;
-import com.gemstone.gemfire.distributed.internal.MessageWithReply;
-import com.gemstone.gemfire.distributed.internal.ReplyException;
-import com.gemstone.gemfire.distributed.internal.ReplyMessage;
-import com.gemstone.gemfire.distributed.internal.ReplyProcessor21;
+import com.gemstone.gemfire.distributed.internal.*;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
 import com.gemstone.gemfire.internal.Assert;
@@ -91,8 +76,6 @@ import com.gemstone.gemfire.internal.cache.versions.VersionStamp;
 import com.gemstone.gemfire.internal.cache.versions.VersionTag;
 import com.gemstone.gemfire.internal.cache.vmotion.VMotionObserverHolder;
 import com.gemstone.gemfire.internal.cache.wan.serial.SerialGatewaySenderImpl;
-import com.gemstone.gemfire.internal.concurrent.AI;
-import com.gemstone.gemfire.internal.concurrent.CFactory;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.offheap.ByteSource;
 import com.gemstone.gemfire.internal.offheap.OffHeapHelper;
@@ -235,6 +218,22 @@ public class InitialImageOperation  {
     }
   }
 
+  private boolean hasLockedBucket = false;
+
+  private void unlockTargetBucketLock(InternalDistributedMember recipient) {
+    if (hasLockedBucket) {
+      LogWriterI18n logger = this.region.getDistributionManager().getLoggerI18n();
+      logger.info(LocalizedStrings.DEBUG, "Processing SnapshotBucketLockReleaseProcessor to " + recipient);
+      try {
+        SnapshotBucketLockReleaseMessage.send(recipient,
+            this.region.getDistributionManager(), region.getFullPath());
+        logger.info(LocalizedStrings.DEBUG, "Processing SnapshotBucketLockReleaseProcessor done " + recipient);
+      } catch (Throwable t) {
+        logger.warning(LocalizedStrings.DEBUG, t);
+      }
+    }
+  }
+
   /**
    * Fetch an initial image from a single recipient
    * 
@@ -280,11 +279,20 @@ public class InitialImageOperation  {
       }
     }
     long giiStart = this.region.getCachePerfStats().startGetInitialImage();
-    
+
+    InternalDistributedMember prevRecipient = null;
+
+    this.region.getLogWriterI18n().info(LocalizedStrings.DEBUG,
+        "InitialImageOperation starts for " + this.region.getFullPath() + ", Recipients are " + recipients);
     for (Iterator itr = recipients.iterator(); !this.gotImage && itr.hasNext();) {
       // if we got a partial image from the previous recipient, then clear it
-      
+
+      if(prevRecipient != null ){
+        unlockTargetBucketLock(prevRecipient);
+      }
+
       InternalDistributedMember recipient = (InternalDistributedMember)itr.next();
+      prevRecipient = recipient;
 //      log.info("InitialImageOperation for " + this.region.getFullPath() + " targeting " + recipient);
       
       // In case of HARegion, before getting the region snapshot(image) get the filters 
@@ -343,10 +351,13 @@ public class InitialImageOperation  {
         if (internalBeforeRequestRVV != null && internalBeforeRequestRVV.getRegionName().equals(this.region.getName())) {
           internalBeforeRequestRVV.run();
         }
-        received_rvv = getRVVFromProvider(dm, recipient, targetReinitialized);
+        RequestRVVProcessor rvvProcessor = getRVVDetailsFromProvider(dm, recipient, targetReinitialized);
+        received_rvv = rvvProcessor.received_rvv;
+        hasLockedBucket = rvvProcessor.snapshotGIIWriteLock;
         if (received_rvv == null) {
           continue;
         }
+
         // remote_rvv will be filled with the versions of unfinished keys
         // then if recoveredRVV is still newer than the filled remote_rvv, do fullGII
         remote_rvv = received_rvv.getCloneForTransmission();
@@ -380,6 +391,7 @@ public class InitialImageOperation  {
               this.region.getLogWriterI18n().fine(
                   "Going to do state flush operation on the parent bucket.");
             }
+            boolean interrupted = false;
             final StateFlushOperation sf;
             sf = new StateFlushOperation(parentBucket);
             final Set<InternalDistributedMember> r = new HashSet<InternalDistributedMember>();
@@ -400,13 +412,19 @@ public class InitialImageOperation  {
               Thread.currentThread().interrupt();
               region.getCancelCriterion().checkCancelInProgress(ie);
               this.region.getCachePerfStats().endNoGIIDone(giiStart);
+              interrupted = true;
               return GIIStatus.NO_GII;
+            } finally {
+              if (interrupted) {
+                unlockTargetBucketLock(prevRecipient);
+              }
             }
             if(this.region.getLogWriterI18n().fineEnabled()) {
               this.region.getLogWriterI18n().fine("Completed state flush operation on the parent bucket.");
             }
           }
         }
+        boolean interrupted = false;
         final StateFlushOperation sf;
         sf = new StateFlushOperation(this.region);
         final Set<InternalDistributedMember> r = new HashSet<InternalDistributedMember>();
@@ -419,6 +437,11 @@ public class InitialImageOperation  {
         int processorType = targetReinitialized ? DistributionManager.WAITING_POOL_EXECUTOR
             : DistributionManager.HIGH_PRIORITY_EXECUTOR;
         try {
+
+          if (internalNoGII != null && internalNoGII.getRegionName().equals(region.getName())) {
+            Thread.currentThread().interrupt();
+          }
+
           boolean success = sf.flush(r, recipient, processorType, false);
           if (!success) {
             continue;
@@ -427,7 +450,12 @@ public class InitialImageOperation  {
           Thread.currentThread().interrupt();
           region.getCancelCriterion().checkCancelInProgress(ie);
           this.region.getCachePerfStats().endNoGIIDone(giiStart);
+          interrupted = true;
           return GIIStatus.NO_GII;
+        } finally {
+          if (interrupted) {
+            unlockTargetBucketLock(prevRecipient);
+          }
         }
       }
       
@@ -481,11 +509,12 @@ public class InitialImageOperation  {
           processor.enableSevereAlertProcessing();
           m.severeAlertEnabled = true;
         }
-      
-        // do not remove the following log statement
-        this.region.getCache().getLoggerI18n().info(
-            LocalizedStrings.InitialImageOperation_REGION_0_REQUESTING_INITIAL_IMAGE_FROM_1,
-            new Object[] { this.region.getName(), recipient });
+        if (!LocalRegion.isMetaTable(this.region.getFullPath())) {
+          // do not remove the following log statement
+          this.region.getCache().getLoggerI18n().info(
+                  LocalizedStrings.InitialImageOperation_REGION_0_REQUESTING_INITIAL_IMAGE_FROM_1,
+                  new Object[]{this.region.getName(), recipient});
+        }
 
         dm.putOutgoing(m);
         this.region.cache.getCancelCriterion().checkCancelInProgress(null);
@@ -523,13 +552,20 @@ public class InitialImageOperation  {
           }
 
           int numTimesRequested = 0;
-          while(requestUnappliedDeltas(dm, recipient)) {
-            LogWriterI18n logger = this.region.getLogWriterI18n();
-            if(TRACE_GII || logger.fineEnabled()) {
-              region.getLogWriterI18n().info(LocalizedStrings.DEBUG, 
-                  "Requested the base value for unapplied deltas for region: " + 
-                  this.region + " for " + (++numTimesRequested) + " time");
+          region.writeLockEnqueueDelta();
+          try {
+            ImageState imgState = region.getImageState();
+            while (requestUnappliedDeltas(dm, recipient)) {
+              imgState.setRequestedUnappliedDelta(true);
+              LogWriterI18n logger = this.region.getLogWriterI18n();
+              if (TRACE_GII || logger.fineEnabled()) {
+                region.getLogWriterI18n().info(LocalizedStrings.DEBUG,
+                    "Requested the base value for unapplied deltas for region: " +
+                        this.region + " for " + (++numTimesRequested) + " time");
+              }
             }
+          } finally {
+            region.writeUnlockEnqueueDelta();
           }
           continue;
         } catch (InternalGemFireException ex) {
@@ -557,17 +593,20 @@ public class InitialImageOperation  {
           if (this.region.getLogWriterI18n().infoEnabled()) {
             if (this.gotImage) {
               // TODO add localizedString
-              this.region.getLogWriterI18n().info(LocalizedStrings.DEBUG,
-                  this.region.getName() + " is done getting image from "
-                      + recipient + ". isDeltaGII is " + this.isDeltaGII
-                      + " rvv is " + this.region.getVersionVector());
+              if (!LocalRegion.isMetaTable(this.region.getFullPath())) {
+                this.region.getLogWriterI18n().info(LocalizedStrings.DEBUG,
+                        this.region.getName() + " is done getting image from "
+                        + recipient + ". isDeltaGII is " + this.isDeltaGII
+                        + " rvv is " + this.region.getVersionVector());
+              }
             } else {
               // TODO add localizedString
               this.region.getLogWriterI18n().info(LocalizedStrings.DEBUG, this.region.getName() + " failed to get image from " + recipient);
             }
           }
           if (this.region.dataPolicy.withPersistence()
-              && this.region.getLogWriterI18n().infoEnabled()) {
+              && this.region.getLogWriterI18n().infoEnabled()
+              && !LocalRegion.isMetaTable(this.region.getFullPath())) {
             this.region.getLogWriterI18n().info(
                     LocalizedStrings.InitialImageOperation_REGION_0_INITIALIZED_PERSISTENT_REGION_WITH_ID_1_FROM_2,
                     new Object[] {this.region.getName(),
@@ -611,7 +650,6 @@ public class InitialImageOperation  {
   private boolean requestUnappliedDeltas(DistributionManager dm, InternalDistributedMember recipient) {
     ImageState imgState = region.getImageState();
     LogWriterI18n logger = region.getLogWriterI18n();
-    
     //See if there are any deltas that have not yet been merged
     Iterator<Object> deltas = imgState.getDeltaEntries();
     Set<Object> unappliedDeltas = new HashSet<Object>();
@@ -781,7 +819,7 @@ public class InitialImageOperation  {
               needsSync = new HashSet<VersionSource>();
             }
             needsSync.add(tag.getMemberID());
-            rvv.recordVersion(tag.getMemberID(),  tag.getRegionVersion());
+            rvv.recordVersion(tag.getMemberID(),  tag.getRegionVersion(), null);
           }
         }
         if (needsSync != null) {
@@ -1000,7 +1038,7 @@ public class InitialImageOperation  {
                   // writing to disk if the incoming value is same as recovered
                   tmplEntry.clearForReuse((byte)0);
                   final DM dm = this.region.getDistributionManager();
-                  if (re.fillInValue(this.region, tmplEntry, in, dm, null)) {
+                  if (re.fillInValue(this.region, tmplEntry, dm, null)) {
                     try {
                       if (tmplEntry.value != null) {
                         final byte[] valueInCache;
@@ -1100,7 +1138,7 @@ public class InitialImageOperation  {
                   }
                   boolean record;
                   if (this.region.getVersionVector() != null) {
-                    this.region.getVersionVector().recordVersion(tag.getMemberID(), tag);
+                    this.region.getVersionVector().recordVersion(tag.getMemberID(), tag, null);
                     record = true;
                   } else {
                     // bug #50992
@@ -1157,7 +1195,7 @@ public class InitialImageOperation  {
                   +lastModified+",tmpValue="+tmpValue+",wasRecovered="+wasRecovered+",tag="+tag);
             }
             if (this.region.getVersionVector() != null) {
-              this.region.getVersionVector().recordVersion(tag.getMemberID(), tag);
+              this.region.getVersionVector().recordVersion(tag.getMemberID(), tag, null);
             }
             this.entries.initialImagePut(entry.key, lastModified, tmpValue,
                 wasRecovered, false, tag, sender, this.isSynchronizing);
@@ -1310,7 +1348,7 @@ public class InitialImageOperation  {
     }
   }
 
-  protected RegionVersionVector getRVVFromProvider(final DistributionManager dm, InternalDistributedMember recipient,
+  protected RequestRVVProcessor getRVVDetailsFromProvider(final DistributionManager dm, InternalDistributedMember recipient,
       boolean targetReinitialized) {
     RegionVersionVector received_rvv = null;
     // RequestRVVMessage is to send rvv of gii provider for both persistent and non-persistent region
@@ -1329,7 +1367,6 @@ public class InitialImageOperation  {
 
     try {
       rvv_processor.waitForRepliesUninterruptibly();
-      received_rvv = rvv_processor.received_rvv;
     } catch (InternalGemFireException ex) {
       Throwable cause = ex.getCause();
       if (cause instanceof com.gemstone.gemfire.cache.TimeoutException) {
@@ -1341,7 +1378,7 @@ public class InitialImageOperation  {
         e.handleAsUnexpected();
       }
     }
-    return received_rvv;
+    return rvv_processor;
   }
 
   /** 
@@ -1374,7 +1411,7 @@ public class InitialImageOperation  {
         if (!remoteRVV.contains(id, stamp.getRegionVersion())) {
           // found an unfinished operation
           keys.add(mapEntry.getKeyCopy());
-          remoteRVV.recordVersion(id, stamp.getRegionVersion());
+          remoteRVV.recordVersion(id, stamp.getRegionVersion(), null);
           
           if (count<10) {
             if (TRACE_GII) {
@@ -1409,7 +1446,7 @@ public class InitialImageOperation  {
     //that are concurrent updates. We want to keep those updates. However
     //it might also reflect things that we recovered from disk that we are going
     //to remove. We'll need to remove those from the RVV somehow.
-    region.getVersionVector().recordVersions(rvv);
+    region.getVersionVector().recordVersions(rvv, null);
     if(region.getDataPolicy().withPersistence()) {
       region.getDiskRegion().writeRVV(region, false);
       region.getDiskRegion().writeRVVGC(region);
@@ -1442,7 +1479,7 @@ public class InitialImageOperation  {
     /**
      * number of outstanding executors currently in-flight on this request
      */
-    private final AI msgsBeingProcessed = CFactory.createAI();
+    private final AtomicInteger msgsBeingProcessed = new AtomicInteger();
 
     /** used to wait for processing until TXId chunk is received */
     private final StoppableCountDownLatch txIdChunkRecvLatch =
@@ -1922,15 +1959,18 @@ public class InitialImageOperation  {
       final LogWriterI18n logger = dm.getLoggerI18n();
       final boolean lclAbortTest = abortTest;
       if (lclAbortTest) abortTest = false;
-            
+      logger.info(LocalizedStrings.DEBUG, "processing GII for "+regionPath);
       boolean sendFailureMessage = true;
+      DistributedRegion giiRegion = null;
       try {
         Assert.assertTrue(this.regionPath != null, "Region path is null.");
         final DistributedRegion rgn = (DistributedRegion)getGIIRegion(dm, this.regionPath, this.targetReinitialized);
+        giiRegion = rgn;
         if (rgn == null) {
           return;
         }
-         
+
+
         // can simulate gc tombstone in middle of packing
         if (internalAfterReceivedRequestImage != null && internalAfterReceivedRequestImage.getRegionName().equals(rgn.getName())) {
           internalAfterReceivedRequestImage.run();
@@ -2062,6 +2102,7 @@ public class InitialImageOperation  {
                 flowControl, fid, seriesNum, numSeries);
 
             final RegionVersionHolder holderToSend = holderToSync;
+
             boolean finished = rgn.chunkEntries(sender, CHUNK_SIZE_IN_BYTES, !keysOnly, versionVector,
                 (HashSet)this.unfinishedKeys, unfinishedKeysOnly, flowControl, new TObjectIntProcedure() {
               int msgNum = txMsgNum;
@@ -2137,6 +2178,7 @@ public class InitialImageOperation  {
             ((HARegion)rgn).endServingGIIRequest();
           }
           flowControl.unregister();
+
         }
         // This should never happen in production code!!!!
         
@@ -2187,6 +2229,9 @@ public class InitialImageOperation  {
 //          logger.fine("RequestImageMessage: wrapping up, sendFailureMessage = " 
 //              + sendFailureMessage);
 //        }
+        if (giiRegion instanceof BucketRegion) {
+          ((BucketRegion)giiRegion).releaseSnapshotGIIWriteLock();
+        }
         if (sendFailureMessage) {
           // if we get here then send reply possibly with an exception
           ReplyException rex = null;
@@ -2217,8 +2262,14 @@ public class InitialImageOperation  {
 
       final ArrayList<TXRegionState> txrss = new ArrayList<TXRegionState>();
       final THashMap txIdMap = new THashMap();
-      // first acquire locks on all TXStates
-      for (TXStateProxy proxy : txMgr.getHostedTransactionsInProgress()) {
+      // first acquire locks on all TXStates in a particular order to avoid deadlock
+      Collection<TXStateProxy> inProgressTXns = txMgr.getHostedTransactionsInProgress();
+      final TXStateProxy[] orderedInProgressTXns = inProgressTXns
+          .toArray(new TXStateProxy[inProgressTXns.size()]);
+      Arrays.sort(orderedInProgressTXns,
+          Comparator.comparing(t -> t.getTransactionId()));
+
+      for (TXStateProxy proxy : orderedInProgressTXns) {
         final TXState txState = proxy.getLocalTXState();
         if (txState != null && txState.isInProgress()) {
           boolean added = false;
@@ -2627,6 +2678,7 @@ public class InitialImageOperation  {
   class RequestRVVProcessor extends ReplyProcessor21  {
 //    Set keysOfUnfinishedOps;
     RegionVersionVector received_rvv;
+    boolean snapshotGIIWriteLock ;
     public RequestRVVProcessor(final InternalDistributedSystem system,
                           InternalDistributedMember member) {
       super(system, member);
@@ -2659,6 +2711,7 @@ public class InitialImageOperation  {
         if (reply instanceof RVVReplyMessage) {
           RVVReplyMessage rvv_reply = (RVVReplyMessage)reply;
           received_rvv = rvv_reply.versionVector;
+          snapshotGIIWriteLock = rvv_reply.snapshotGIIWriteLock;
         }
       } finally {
         if (received_rvv == null) {
@@ -2699,20 +2752,24 @@ public class InitialImageOperation  {
       return false; 
     } 
  
-    RegionVersionVector versionVector; 
+    RegionVersionVector versionVector;
+
+    boolean snapshotGIIWriteLock;
      
     public RVVReplyMessage() { 
     } 
  
-    private RVVReplyMessage(InternalDistributedMember mbr, int processorId, RegionVersionVector rvv) { 
+    private RVVReplyMessage(InternalDistributedMember mbr, int processorId,
+        RegionVersionVector rvv, boolean snapshotGIIWriteLock) {
       setRecipient(mbr); 
       setProcessorId(processorId); 
       this.versionVector = rvv;
+      this.snapshotGIIWriteLock = snapshotGIIWriteLock;
     } 
      
     public static void send(DM dm, InternalDistributedMember dest, int processorId, 
-        RegionVersionVector rvv, ReplyException ex) {
-      RVVReplyMessage msg = new RVVReplyMessage(dest, processorId, rvv); 
+        RegionVersionVector rvv, ReplyException ex, boolean snapshotGIIWriteLock) {
+      RVVReplyMessage msg = new RVVReplyMessage(dest, processorId, rvv, snapshotGIIWriteLock);
       if (ex != null) {
         msg.setException(ex);
       }
@@ -2726,6 +2783,7 @@ public class InitialImageOperation  {
         dop.writeBoolean(true);
         dop.writeBoolean(versionVector instanceof DiskRegionVersionVector);
         versionVector.toData(dop);
+        dop.writeBoolean(snapshotGIIWriteLock);
       } else {
         dop.writeBoolean(false);
       }
@@ -2747,6 +2805,7 @@ public class InitialImageOperation  {
       if (has) {
         boolean persistent = dip.readBoolean();
         versionVector = RegionVersionVector.create(persistent, dip);
+        snapshotGIIWriteLock = dip.readBoolean();
       }
     } 
      
@@ -2791,6 +2850,20 @@ public class InitialImageOperation  {
       return this.targetReinitialized ? DistributionManager.WAITING_POOL_EXECUTOR :
                                 DistributionManager.HIGH_PRIORITY_EXECUTOR;
     }
+
+    /**
+     * GII operation will wait if there are some running transaction after
+     * StateFlush message. This method will make GII wait till all those transactions
+     * are finished.
+     */
+    protected boolean waitForRunningTXs(DistributedRegion rgn,
+                                     InternalDistributedMember sender) {
+     // Wait for all write operations to get over.
+     BucketRegion bucketRegion = (BucketRegion)rgn;
+      InitializingBucketMembershipObserver listener =
+              new InitializingBucketMembershipObserver(bucketRegion, ((BucketRegion) rgn).cache, sender);
+     return bucketRegion.takeSnapshotGIIWriteLock(listener);
+    }
     
     @Override  
     protected void process(final DistributionManager dm) {
@@ -2800,21 +2873,31 @@ public class InitialImageOperation  {
       LocalRegion lclRgn = null;
       ReplyException rex = null;
       RegionVersionVector<?> rvv;
+      boolean snapshotGIIWriteLock = false;
       try {
         Assert.assertTrue(this.regionPath != null, "Region path is null.");        
         final DistributedRegion rgn = (DistributedRegion)getGIIRegion(dm, this.regionPath, this.targetReinitialized);
         if (rgn == null) {
           return;
         }
+
+        if( rgn instanceof BucketRegion) {
+          snapshotGIIWriteLock = waitForRunningTXs(rgn, getSender());
+        }
+
+        if (internalAfterGIILock != null && internalAfterGIILock.getRegionName().equals(rgn.getName())) {
+          internalAfterGIILock.run();
+        }
+
         if (!rgn.getGenerateVersionTag() || (rvv = rgn.getVersionVector()) == null) {
           logger.fine(this + " non-persistent proxy region, nothing to do. Just reply");
           // allow finally block to send a failure message
-          RVVReplyMessage.send(dm, getSender(), processorId, null, null);
+          RVVReplyMessage.send(dm, getSender(), processorId, null, null, snapshotGIIWriteLock);
           sendFailureMessage = false;
           return;
         } else {
           rvv = rvv.getCloneForTransmission();
-          RVVReplyMessage.send(dm, getSender(), processorId, rvv, null);
+          RVVReplyMessage.send(dm, getSender(), processorId, rvv, null, snapshotGIIWriteLock);
           sendFailureMessage = false;
         }
       }
@@ -2848,7 +2931,7 @@ public class InitialImageOperation  {
             rex = new ReplyException(thr);
           }
           
-          RVVReplyMessage.send(dm, getSender(), processorId, null, rex);
+          RVVReplyMessage.send(dm, getSender(), processorId, null, rex, snapshotGIIWriteLock);
         } // !success
       }
     }
@@ -4545,6 +4628,8 @@ public class InitialImageOperation  {
   private static GIITestHook internalDuringApplyDelta;
   private static GIITestHook internalBeforeCleanExpiredTombstones;
   private static GIITestHook internalAfterSavedRVVEnd;
+  private static GIITestHook internalAfterGIILock;
+  private static GIITestHook internalNoGII;
 
   /**
    * For test purpose to be used in ImageProcessor
@@ -4573,7 +4658,9 @@ public class InitialImageOperation  {
     AfterReceivedImageReply,
     DuringApplyDelta,
     BeforeCleanExpiredTombstones,
-    AfterSavedRVVEnd
+    AfterSavedRVVEnd,
+    AfterGIILock,
+    NoGIITrigger
   }
   
   public static GIITestHook getGIITestHookForCheckingPurpose(final GIITestHookType type) {
@@ -4608,6 +4695,10 @@ public class InitialImageOperation  {
       return internalBeforeCleanExpiredTombstones;
     case AfterSavedRVVEnd: // 13
       return internalAfterSavedRVVEnd;
+    case AfterGIILock: // 14
+      return internalAfterGIILock;
+      case NoGIITrigger: // 14
+      return internalNoGII;
     default:
       throw new RuntimeException("Illegal test hook type");
     }
@@ -4671,6 +4762,14 @@ public class InitialImageOperation  {
       assert internalAfterSavedRVVEnd == null;
       internalAfterSavedRVVEnd = callback;
       break;
+    case AfterGIILock: // 14
+      assert internalAfterGIILock == null;
+      internalAfterGIILock = callback;
+      break;
+      case NoGIITrigger: // 15
+      assert internalNoGII == null;
+        internalNoGII = callback;
+      break;
     default:
       throw new RuntimeException("Illegal test hook type");
     }
@@ -4690,7 +4789,9 @@ public class InitialImageOperation  {
     internalAfterReceivedImageReply != null ||
     internalDuringApplyDelta != null ||
     internalBeforeCleanExpiredTombstones != null ||
-    internalAfterSavedRVVEnd != null);
+    internalAfterSavedRVVEnd != null ||
+    internalAfterGIILock != null ||
+    internalNoGII != null);
   }
 
   public static void resetGIITestHook(final GIITestHookType type, final boolean setNull) {
@@ -4809,6 +4910,22 @@ public class InitialImageOperation  {
         }
       }
       break;
+    case AfterGIILock: // 14
+      if (internalAfterGIILock != null) {
+        internalAfterGIILock.reset();
+        if (setNull) {
+          internalAfterGIILock = null;
+        }
+      }
+      break;
+      case NoGIITrigger: // 15
+      if (internalNoGII != null) {
+        internalNoGII.reset();
+        if (setNull) {
+          internalNoGII = null;
+        }
+      }
+      break;
     default:
       throw new RuntimeException("Illegal test hook type");
     }
@@ -4831,6 +4948,170 @@ public class InitialImageOperation  {
     internalDuringApplyDelta = null;
     internalBeforeCleanExpiredTombstones = null;
     internalAfterSavedRVVEnd = null;
+    internalAfterGIILock = null;
+    internalNoGII = null;
   }
-}
 
+  /**
+   * Monitors distributed membership for a given bucket for which GII is in progress
+   * and a write lock is successfully taken.
+   */
+  private static class InitializingBucketMembershipObserver implements MembershipListener {
+    final BucketRegion bucketToMonitor;
+
+    final LogWriter logger;
+    InternalDistributedMember requestingMember;
+
+    public InitializingBucketMembershipObserver(BucketRegion b, GemFireCacheImpl cache,
+                                                InternalDistributedMember member) {
+      this.bucketToMonitor = b;
+      this.logger = cache.getLogger();
+      this.requestingMember = member;
+    }
+
+    public void memberJoined(InternalDistributedMember id) {
+      if (logger.fineEnabled()) {
+        logger.fine("InitializingBucketMembershipObserver for bucket " + this.bucketToMonitor
+            + " member joined " + id);
+      }
+    }
+
+    public void memberSuspect(InternalDistributedMember id,
+        InternalDistributedMember whoSuspected) {
+    }
+
+    public void memberDeparted(InternalDistributedMember id, boolean crashed) {
+      if (logger.fineEnabled()) {
+        logger.fine("InitializingBucketMembershipObserver for bucket " + this.bucketToMonitor
+            + " member departed " + id);
+      }
+      // Only release the lock iff requesting member has parted
+      if (this.bucketToMonitor.isHosting() && id.equals(requestingMember)) {
+        BucketRegion br = bucketToMonitor.getHostedBucketRegion();
+        br.releaseSnapshotGIIWriteLock();
+      }
+    }
+
+    @Override
+    public void quorumLost(Set<InternalDistributedMember> failures,
+        List<InternalDistributedMember> remaining) {
+    }
+
+  }
+
+  public static final class SnapshotBucketLockReleaseMessage
+      extends HighPriorityDistributionMessage
+      implements MessageWithReply {
+
+    /**
+     * Name of the region.
+     */
+    protected String regionPath;
+
+    /**
+     * Id of the {@link InitialImageOperation.ImageProcessor} that will handle the replies
+     */
+    protected int processorId;
+
+    public SnapshotBucketLockReleaseMessage() {
+    }
+
+    private SnapshotBucketLockReleaseMessage(String regionPath, int processorId) {
+      this.regionPath = regionPath;
+      this.processorId = processorId;
+    }
+
+    @Override
+    public int getProcessorId() {
+      return this.processorId;
+    }
+
+    public static void send(
+        InternalDistributedMember members, DM dm, String regionPath) throws ReplyException {
+      ReplyProcessor21 processor = new ReplyProcessor21(dm, members);
+      SnapshotBucketLockReleaseMessage msg =
+          new SnapshotBucketLockReleaseMessage(regionPath, processor.getProcessorId());
+      msg.setRecipient(members);
+      dm.putOutgoing(msg);
+      processor.waitForRepliesUninterruptibly();
+    }
+
+
+    @Override
+    protected void process(DistributionManager dm) {
+      boolean failed = true;
+      ReplyException replyException = null;
+      final LogWriterI18n logger = dm.getLoggerI18n();
+      try {
+        DistributedSystem system = dm.getSystem();
+
+        if (logger.fineEnabled()) {
+          logger.fine("SnapshotBucketLockReleaseMessage:" +
+              " attempting to release the snapshot GII lock for " + regionPath);
+        }
+        LocalRegion rgn = LocalRegion.getRegionFromPath(system, regionPath);
+        if (rgn instanceof BucketRegion) {
+          BucketRegion bucketRegion = (BucketRegion)rgn;
+          bucketRegion.releaseSnapshotGIIWriteLock();
+        }
+        failed = false; // nothing above threw anything
+      } catch (RuntimeException e) {
+        replyException = new ReplyException(e);
+        throw e;
+      } catch (Error e) {
+        if (SystemFailure.isJVMFailureError(e)) {
+          SystemFailure.initiateFailure(e);
+          // If this ever returns, rethrow the error. We're poisoned
+          // now, so don't let this thread continue.
+          replyException = new ReplyException(e);
+          throw e;
+        }
+        // Whenever you catch Error or Throwable, you must also
+        // check for fatal JVM error (see above).  However, there is
+        SystemFailure.checkFailure();
+        replyException = new ReplyException(e);
+        throw e;
+      } finally {
+        if (failed) {
+          // above code failed so now ensure reply is sent
+          if (logger.fineEnabled()) {
+            logger.fine(
+                "SnapshotBucketLockReleaseMessage.process failed for <" + this + ">");
+          }
+          ReplyMessage replyMsg = new ReplyMessage();
+          replyMsg.setProcessorId(this.processorId);
+          replyMsg.setRecipient(getSender());
+          replyMsg.setException(replyException);
+          dm.putOutgoing(replyMsg);
+        } else {
+          if (logger.fineEnabled()) {
+            logger.fine("SnapshotBucketLockReleaseMessage.process done for <" +
+                this + '>');
+          }
+          ReplyMessage.send(getSender(), this.processorId, null, dm, null);
+        }
+      }
+    }
+
+    @Override
+    public int getDSFID() {
+      return SNAPSHOT_GII_UNLOCK_MESSAGE;
+    }
+
+    @Override
+    public void toData(DataOutput out) throws IOException {
+      super.toData(out);
+      DataSerializer.writeString(this.regionPath, out);
+      out.writeInt(this.processorId);
+    }
+
+    @Override
+    public void fromData(DataInput in)
+        throws IOException, ClassNotFoundException {
+      super.fromData(in);
+      this.regionPath = DataSerializer.readString(in);
+      this.processorId = in.readInt();
+    }
+  }
+
+}

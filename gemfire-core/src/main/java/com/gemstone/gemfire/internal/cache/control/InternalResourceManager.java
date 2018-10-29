@@ -17,6 +17,7 @@
 package com.gemstone.gemfire.internal.cache.control;
 
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -49,6 +50,7 @@ import com.gemstone.gemfire.internal.cache.control.ResourceAdvisor.ResourceManag
 import com.gemstone.gemfire.internal.cache.partitioned.LoadProbe;
 import com.gemstone.gemfire.internal.cache.partitioned.SizedBasedLoadProbe;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
+import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
 
 /**
  * Implementation of ResourceManager with additional internal-only methods.
@@ -73,6 +75,7 @@ public class InternalResourceManager implements ResourceManager {
   private Map<ResourceType, Set<ResourceListener>> listeners = new HashMap<ResourceType, Set<ResourceListener>>();
   
   private final ScheduledExecutorService scheduledExecutor;
+  private final ScheduledThreadPoolExecutor recoveryExecutor;
   private final ExecutorService notifyExecutor;
   
   //The set of in progress rebalance operations.
@@ -122,6 +125,20 @@ public class InternalResourceManager implements ResourceManager {
     };
     this.scheduledExecutor = new ScheduledThreadPoolExecutor(1, tf);
 
+    final ThreadGroup recoveryThrdGrp = LogWriterImpl.createThreadGroup(
+        "BucketRecoveryThreadGroup", cache.getLoggerI18n());
+    ThreadFactory recoveryFactory = new ThreadFactory() {
+      @Override
+      public Thread newThread(Runnable r) {
+        Thread thread = new Thread(recoveryThrdGrp, r, "BucketRecoveryThread");
+        thread.setDaemon(true);
+        return thread;
+      }
+    };
+    recoveryExecutor = new ScheduledThreadPoolExecutor(1, recoveryFactory);
+    recoveryExecutor.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+    recoveryExecutor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+
     // Initialize the load probe
     try {
       Class loadProbeClass = ClassPathLoader.getLatest().forName(PR_LOAD_PROBE_CLASS);
@@ -149,7 +166,7 @@ public class InternalResourceManager implements ResourceManager {
         eventProcessorFactory);
     
     // Create the monitors
-    Map<ResourceType, ResourceMonitor> tempMonitors = new HashMap<ResourceType, ResourceMonitor>();
+    EnumMap<ResourceType, ResourceMonitor> tempMonitors = new EnumMap<>(ResourceType.class);
     tempMonitors.put(ResourceType.HEAP_MEMORY, new HeapMemoryMonitor(this, cache, this.stats));
     tempMonitors.put(ResourceType.OFFHEAP_MEMORY, new OffHeapMemoryMonitor(this, cache, this.stats));
     this.resourceMonitors = Collections.unmodifiableMap(tempMonitors);
@@ -169,6 +186,7 @@ public class InternalResourceManager implements ResourceManager {
     }
     
     stopExecutor(this.scheduledExecutor);
+    stopExecutor(this.recoveryExecutor);
     stopExecutor(this.notifyExecutor);
     
     this.stats.close();
@@ -322,6 +340,9 @@ public class InternalResourceManager implements ResourceManager {
       RegionFilter filter = new FilterByPath(this.includedRegions, this.excludedRegions);
       RebalanceOperationImpl op = new RebalanceOperationImpl(InternalResourceManager.this.cache, false,filter);
       op.start();
+      // needed for Snappy Spark Smart connector as we cache buckets to server
+      // mapping for tables
+      CallbackFactoryProvider.getStoreCallbacks().registerRelationDestroyForHiveStore();
       return op;
     }
 
@@ -363,7 +384,11 @@ public class InternalResourceManager implements ResourceManager {
   public ScheduledExecutorService getExecutor() {
     return this.scheduledExecutor;
   }
-  
+
+  public ScheduledExecutorService getRecoveryExecutor() {
+    return this.recoveryExecutor;
+  }
+
   public ResourceManagerStats getStats() {
     return this.stats;
   }

@@ -15,21 +15,20 @@
  * LICENSE file.
  */
 
+/**
+ * Do not modify this class. It was generated.
+ * Instead modify LeafRegionEntry.cpp and then run
+ * bin/generateRegionEntryClasses.sh from the directory
+ * that contains your build.xml.
+ */
 package com.pivotal.gemfirexd.internal.engine.store.entry;
-// DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-
-
-
-
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import com.gemstone.gemfire.internal.cache.Token;
 import com.gemstone.gemfire.internal.concurrent.AtomicUpdaterFactory;
-
 import com.gemstone.gemfire.internal.offheap.OffHeapRegionEntryHelper;
 import com.gemstone.gemfire.internal.offheap.annotations.Released;
 import com.gemstone.gemfire.internal.offheap.annotations.Retained;
 import com.gemstone.gemfire.internal.offheap.annotations.Unretained;
-
-
 import com.gemstone.gemfire.cache.EntryEvent;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.internal.cache.versions.VersionSource;
@@ -69,22 +68,6 @@ import com.gemstone.gemfire.internal.cache.Token;
 import com.gemstone.gemfire.internal.cache.OffHeapRegionEntry;
 import com.pivotal.gemfirexd.internal.engine.store.CompactCompositeRegionKey;
 import com.pivotal.gemfirexd.internal.engine.store.offheap.OffHeapRegionEntryUtils;
-// macros whose definition changes this class:
-// disk: DISK
-// lru: LRU
-// stats: STATS
-// versioned: VERSIONED
-// offheap: OFFHEAP
-// rowlocation: ROWLOCATION
-// local: LOCAL
-// bucket: BUCKET
-// package: PKG
-/**
- * Do not modify this class. It was generated.
- * Instead modify LeafRegionEntry.cpp and then run
- * bin/generateRegionEntryClasses.sh from the directory
- * that contains your build.xml.
- */
 public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocationThinRegionEntry
     implements OffHeapRegionEntry, VersionStamp
 {
@@ -95,13 +78,10 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
     super(context,
           value
         );
-    // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
     this.tableInfo = RegionEntryUtils.entryGetTableInfo(context, key, value);
     this.bucketId = RegionEntryUtils.getBucketId(context);
     this.key = RegionEntryUtils.entryGetRegionKey(key, value);
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-  // common code
   protected int hash;
   private HashEntry<Object, Object> next;
   @SuppressWarnings("unused")
@@ -111,62 +91,51 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
   protected long getlastModifiedField() {
     return lastModifiedUpdater.get(this);
   }
-  protected boolean compareAndSetLastModifiedField(long expectedValue, long newValue) {
+  protected final boolean compareAndSetLastModifiedField(long expectedValue,
+      long newValue) {
     return lastModifiedUpdater.compareAndSet(this, expectedValue, newValue);
   }
-  /**
-   * @see HashEntry#getEntryHash()
-   */
   @Override
   public final int getEntryHash() {
     return this.hash;
   }
   @Override
-  protected void setEntryHash(int v) {
+  protected final void setEntryHash(int v) {
     this.hash = v;
   }
-  /**
-   * @see HashEntry#getNextEntry()
-   */
   @Override
   public final HashEntry<Object, Object> getNextEntry() {
     return this.next;
   }
-  /**
-   * @see HashEntry#setNextEntry
-   */
   @Override
   public final void setNextEntry(final HashEntry<Object, Object> n) {
     this.next = n;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-  // versioned code
   private VersionSource memberID;
   private short entryVersionLowBytes;
   private short regionVersionHighBytes;
   private int regionVersionLowBytes;
   private byte entryVersionHighByte;
   private byte distributedSystemId;
-  public int getEntryVersion() {
+  public final int getEntryVersion() {
     return ((entryVersionHighByte << 16) & 0xFF0000) | (entryVersionLowBytes & 0xFFFF);
   }
-  public long getRegionVersion() {
+  public final long getRegionVersion() {
     return (((long)regionVersionHighBytes) << 32) | (regionVersionLowBytes & 0x00000000FFFFFFFFL);
   }
-  public long getVersionTimeStamp() {
+  public final long getVersionTimeStamp() {
     return getLastModified();
   }
-  public void setVersionTimeStamp(long time) {
+  public final void setVersionTimeStamp(long time) {
     setLastModified(time);
   }
-  public VersionSource getMemberID() {
+  public final VersionSource getMemberID() {
     return this.memberID;
   }
-  public int getDistributedSystemId() {
+  public final int getDistributedSystemId() {
     return this.distributedSystemId;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-  public void setVersions(VersionTag tag) {
+  public final void setVersions(VersionTag tag) {
     this.memberID = tag.getMemberID();
     int eVersion = tag.getEntryVersion();
     this.entryVersionLowBytes = (short)(eVersion & 0xffff);
@@ -184,15 +153,14 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
     }
     this.distributedSystemId = (byte)(tag.getDistributedSystemId() & 0xff);
   }
-  public void setMemberID(VersionSource memberID) {
+  public final void setMemberID(VersionSource memberID) {
     this.memberID = memberID;
   }
   @Override
-  public VersionStamp getVersionStamp() {
+  public final VersionStamp getVersionStamp() {
     return this;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-  public VersionTag asVersionTag() {
+  public final VersionTag asVersionTag() {
     VersionTag tag = VersionTag.create(memberID);
     tag.setEntryVersion(getEntryVersion());
     tag.setRegionVersion(this.regionVersionHighBytes, this.regionVersionLowBytes);
@@ -200,80 +168,67 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
     tag.setDistributedSystemId(this.distributedSystemId);
     return tag;
   }
-  public void processVersionTag(LocalRegion r, VersionTag tag,
+  public final void processVersionTag(LocalRegion r, VersionTag tag,
       boolean isTombstoneFromGII, boolean hasDelta,
       VersionSource thisVM, InternalDistributedMember sender, boolean checkForConflicts) {
     basicProcessVersionTag(r, tag, isTombstoneFromGII, hasDelta, thisVM, sender, checkForConflicts);
   }
   @Override
-  public void processVersionTag(EntryEvent cacheEvent) {
-    // this keeps Eclipse happy.  without it the sender chain becomes confused
-    // while browsing this code
+  public final void processVersionTag(EntryEvent cacheEvent) {
     super.processVersionTag(cacheEvent);
   }
-  /** get rvv internal high byte.  Used by region entries for transferring to storage */
-  public short getRegionVersionHighBytes() {
+  public final short getRegionVersionHighBytes() {
     return this.regionVersionHighBytes;
   }
-  /** get rvv internal low bytes.  Used by region entries for transferring to storage */
-  public int getRegionVersionLowBytes() {
+  public final int getRegionVersionLowBytes() {
     return this.regionVersionLowBytes;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
-  // key code
   private Object key;
   @Override
   public final Object getRawKey() {
     return this.key;
   }
   @Override
-  protected void _setRawKey(Object key) {
+  protected final void _setRawKey(Object key) {
     this.key = key;
   }
-  /**
-   * All access done using ohAddrUpdater so it is used even though the compiler can not tell it is.
-   */
   @Retained @Released private volatile long ohAddress;
-  /**
-   * I needed to add this because I wanted clear to call setValue which normally can only be called while the re is synced.
-   * But if I sync in that code it causes a lock ordering deadlock with the disk regions because they also get a rw lock in clear.
-   * Some hardware platforms do not support CAS on a long. If gemfire is run on one of those the AtomicLongFieldUpdater does a sync
-   * on the re and we will once again be deadlocked.
-   * I don't know if we support any of the hardware platforms that do not have a 64bit CAS. If we do then we can expect deadlocks
-   * on disk regions.
-   */
   private final static AtomicLongFieldUpdater<VersionedBucketRowLocationThinRegionEntryOffHeap> ohAddrUpdater =
       AtomicUpdaterFactory.newLongFieldUpdater(VersionedBucketRowLocationThinRegionEntryOffHeap.class, "ohAddress");
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
   @Override
-  public Token getValueAsToken() {
+  public final boolean isOffHeap() {
+    return true;
+  }
+  @Override
+  public final Token getValueAsToken() {
     return OffHeapRegionEntryHelper.getValueAsToken(this);
   }
   @Override
   @Unretained
-  protected Object getValueField() {
+  protected final Object getValueField() {
     return OffHeapRegionEntryHelper._getValue(this);
   }
   @Override
-  protected void setValueField(@Unretained Object v) {
+  protected final void setValueField(@Unretained Object v) {
     OffHeapRegionEntryHelper.setValue(this, v);
   }
   @Override
   @Retained
-  public Object _getValueRetain(RegionEntryContext context, boolean decompress) {
+  public final Object _getValueRetain(RegionEntryContext context,
+      boolean decompress) {
     return OffHeapRegionEntryHelper._getValueRetain(this, decompress);
   }
   @Override
-  public long getAddress() {
+  public final long getAddress() {
     return ohAddrUpdater.get(this);
   }
   @Override
-  public boolean setAddress(long expectedAddr, long newAddr) {
+  public final boolean setAddress(long expectedAddr, long newAddr) {
     return ohAddrUpdater.compareAndSet(this, expectedAddr, newAddr);
   }
   @Override
   @Released
-  public void release() {
+  public final void release() {
     OffHeapRegionEntryHelper.releaseEntry(this);
   }
   private transient ExtraTableInfo tableInfo;
@@ -305,7 +260,6 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
     if (container != null && container.isByteArrayStore()) {
       tabInfo = container.getExtraTableInfo(val);
       this.tableInfo = tabInfo;
-      // cleanup the key if required
       if (tabInfo != null && tabInfo.regionKeyPartOfValue()) {
         return tabInfo;
       }
@@ -313,11 +267,11 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
     return null;
   }
   @Override
-  public int estimateMemoryUsage() {
+  public final int estimateMemoryUsage() {
     return ClassSize.refSize;
   }
   @Override
-  public int getTypeFormatId() {
+  public final int getTypeFormatId() {
     return StoredFormatIds.ACCESS_MEM_HEAP_ROW_LOCATION_ID;
   }
   @Override
@@ -330,29 +284,27 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
   }
   @Override
   public final int compare(DataValueDescriptor other) {
-    // just use some arbitrary criteria like hashCode for ordering
     if (this == other) {
       return 0;
     }
     return this.hashCode() - other.hashCode();
   }
   @Override
-  public DataValueDescriptor recycle() {
+  public final DataValueDescriptor recycle() {
     return this;
   }
   @Override
-  public DataValueDescriptor getNewNull() {
+  public final DataValueDescriptor getNewNull() {
     return DataValueFactory.DUMMY;
   }
   @Override
-  public boolean isNull() {
+  public final boolean isNull() {
     return this == DataValueFactory.DUMMY;
   }
   @Override
-  public Object getObject() throws StandardException {
+  public final Object getObject() throws StandardException {
     return this;
   }
-  // Unimplemented methods not expected to be invoked
   @Override
   public DataValueDescriptor coalesce(DataValueDescriptor[] list,
       DataValueDescriptor returnValue) throws StandardException {
@@ -477,15 +429,15 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
     throw new UnsupportedOperationException("Implement the method for DataType="+ this);
   }
   @Override
-  public Object getValueWithoutFaultInOrOffHeapEntry(LocalRegion owner) {
+  public final Object getValueWithoutFaultInOrOffHeapEntry(LocalRegion owner) {
     return this;
   }
   @Override
-  public Object getValueOrOffHeapEntry(LocalRegion owner) {
+  public final Object getValueOrOffHeapEntry(LocalRegion owner) {
     return this;
   }
   @Override
-  public Object getRawValue() {
+  public final Object getRawValue() {
     Object val = OffHeapRegionEntryHelper._getValueRetain(this, false);
     if (val != null && !Token.isInvalidOrRemoved(val)
         && val != Token.NOT_AVAILABLE) {
@@ -495,18 +447,11 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
     return null;
   }
   @Override
-  public Object prepareValueForCache(RegionEntryContext r, Object val,
+  public final Object prepareValueForCache(RegionEntryContext r, Object val,
       boolean isEntryUpdate, boolean valHasMetadataForGfxdOffHeapUpdate) {
     if (okToStoreOffHeap(val)
         && OffHeapRegionEntryUtils.isValidValueForGfxdOffHeapStorage(val)) {
-      // TODO:Asif:Check if this is a valid supposition
-      // final long address = this.getAddress();
       if (isEntryUpdate
-      /*
-       * (address == OffHeapRegionEntryHelper.REMOVED_PHASE1_ADDRESS || address
-       * == OffHeapRegionEntryHelper.NULL_ADDRESS) || r instanceof
-       * PlaceHolderDiskRegion
-       */
       ) {
         return OffHeapRegionEntryUtils.prepareValueForUpdate(this, r, val, valHasMetadataForGfxdOffHeapUpdate);
       } else {
@@ -516,7 +461,7 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
     return super.prepareValueForCache(r, val, isEntryUpdate, valHasMetadataForGfxdOffHeapUpdate);
   }
   @Override
-  public boolean destroy(LocalRegion region, EntryEventImpl event,
+  public final boolean destroy(LocalRegion region, EntryEventImpl event,
       boolean inTokenMode, boolean cacheWrite, @Unretained Object expectedOldValue,
       boolean forceDestroy, boolean removeRecoveredEntry)
       throws CacheWriterException, EntryNotFoundException, TimeoutException,
@@ -533,36 +478,34 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
         expectedOldValue, forceDestroy, removeRecoveredEntry);
   }
   @Override
-  public Version[] getSerializationVersions() {
+  public final Version[] getSerializationVersions() {
     return null;
   }
   private final int bucketId;
   @Override
-  public Object getValue(GemFireContainer baseContainer) {
+  public final Object getValue(GemFireContainer baseContainer) {
     return RegionEntryUtils.getValue(baseContainer, this.bucketId, this);
   }
   @Override
-  public Object getValueWithoutFaultIn(GemFireContainer baseContainer) {
+  public final Object getValueWithoutFaultIn(GemFireContainer baseContainer) {
     return RegionEntryUtils.getValueWithoutFaultIn(baseContainer,this.bucketId, this);
   }
   @Override
-  public ExecRow getRow(GemFireContainer baseContainer) {
+  public final ExecRow getRow(GemFireContainer baseContainer) {
     return RegionEntryUtils.getRow(baseContainer, this.bucketId, this, this.tableInfo);
   }
   @Override
-  public ExecRow getRowWithoutFaultIn(GemFireContainer baseContainer) {
+  public final ExecRow getRowWithoutFaultIn(GemFireContainer baseContainer) {
     return RegionEntryUtils.getRowWithoutFaultIn(baseContainer, this.bucketId, this,
         this.tableInfo);
   }
   @Override
-  public int getBucketID() {
+  public final int getBucketID() {
     return this.bucketId;
   }
   @Override
   protected StringBuilder appendFieldsToString(final StringBuilder sb) {
     sb.append("key=");
-    // OFFHEAP _getValue ok: the current toString on OffHeapCachedDeserializable
-    // is safe to use without incing refcount.
     final Object k = getKeyCopy();
     final Object val = OffHeapRegionEntryUtils.getHeapRowForInVMValue(this);
     RegionEntryUtils.entryKeyString(k, val, getTableInfo(null), sb);
@@ -573,7 +516,6 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
     sb.append("; bucketId=").append(this.bucketId);
     return sb;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
   private static RegionEntryFactory factory = new RegionEntryFactory() {
     public final RegionEntry createEntry(RegionEntryContext context, Object key, Object value) {
       return new VersionedBucketRowLocationThinRegionEntryOffHeap(context, key, value);
@@ -592,5 +534,4 @@ public class VersionedBucketRowLocationThinRegionEntryOffHeap extends RowLocatio
   public static RegionEntryFactory getEntryFactory() {
     return factory;
   }
-  // DO NOT modify this class. It was generated from LeafRegionEntry.cpp
 }

@@ -20,6 +20,7 @@ package com.gemstone.gemfire.internal.cache;
 import java.util.Collection;
 
 import com.gemstone.gemfire.cache.IsolationLevel;
+import com.gemstone.gemfire.cache.Region;
 import com.gemstone.gemfire.cache.TransactionException;
 import com.gemstone.gemfire.distributed.internal.DM;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
@@ -97,6 +98,13 @@ public interface TXStateInterface extends InternalDataView {
    */
   public boolean isInProgress();
 
+  /**
+   * Only check if this TX (proxy or local) is closed.
+   * Differs from "isInProgress" in that this will not check for
+   * the state of inner TXState.
+   */
+  public boolean isClosed();
+
   public void commit(Object callbackArg) throws TransactionException;
 
   public void rollback(Object callbackArg);
@@ -164,4 +172,8 @@ public interface TXStateInterface extends InternalDataView {
   public void setExecutionSequence(int execSeq);
   
   public int getExecutionSequence();
+
+  public boolean isSnapshot();
+
+  public void recordVersionForSnapshot(Object member, long version, Region region);
 }

@@ -19,7 +19,6 @@ package com.pivotal.gemfirexd;
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
-import java.net.InetAddress;
 import java.net.Socket;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -38,6 +37,7 @@ import com.gemstone.gemfire.cache.Cache;
 import com.gemstone.gemfire.cache.CacheException;
 import com.gemstone.gemfire.cache.CacheListener;
 import com.gemstone.gemfire.cache.DiskAccessException;
+import com.gemstone.gemfire.cache.PartitionAttributesFactory;
 import com.gemstone.gemfire.cache.Region;
 import com.gemstone.gemfire.cache.RegionAttributes;
 import com.gemstone.gemfire.cache.asyncqueue.AsyncEventQueue;
@@ -47,14 +47,13 @@ import com.gemstone.gemfire.cache.wan.GatewaySender;
 import com.gemstone.gemfire.distributed.DistributedMember;
 import com.gemstone.gemfire.distributed.internal.DistributionConfig;
 import com.gemstone.gemfire.internal.AvailablePort;
-import com.gemstone.gemfire.internal.SocketCreator;
 import com.gemstone.gemfire.internal.cache.CachePerfStats;
 import com.gemstone.gemfire.internal.cache.DiskStoreImpl;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
 import com.gemstone.gemfire.internal.cache.LocalRegion;
+import com.gemstone.gemfire.internal.cache.PartitionAttributesImpl;
 import com.gemstone.gemfire.internal.concurrent.ConcurrentHashSet;
 import com.pivotal.gemfirexd.NetworkInterface.ConnectionListener;
-import com.pivotal.gemfirexd.ddl.IndexPersistenceDUnit;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserverAdapter;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserverHolder;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
@@ -157,11 +156,6 @@ public class DistributedSQLTestBase extends DistributedTestBase {
 
   public static final char fileSeparator = System.getProperty("file.separator")
       .charAt(0);
-
-  /** this indicates whether beforeClass has been executed for current class */
-  protected static boolean beforeClassDone;
-  /** this stores the last test method in the current class for afterClass */
-  protected static String lastTest;
 
   private static transient DistributedSQLTestBase testInstance = null;
   
@@ -303,8 +297,19 @@ public class DistributedSQLTestBase extends DistributedTestBase {
     return "localhost[" + getDUnitLocatorPort() + ']';
   }
 
-  protected void baseSetUp() throws Exception {
-    super.setUp();
+  public static void resetConnection() throws SQLException {
+    Connection conn = TestUtil.jdbcConn;
+    if (conn != null) {
+      try {
+        conn.rollback();
+        conn.close();
+      } catch (SQLException ignored) {
+      }
+      TestUtil.jdbcConn = null;
+    }
+  }
+
+  protected void commonSetUp() throws Exception {
     GemFireXDUtils.IS_TEST_MODE = true;
 
     expectedDerbyExceptions.clear();
@@ -325,18 +330,71 @@ public class DistributedSQLTestBase extends DistributedTestBase {
     setLogFile(this.getClass().getName(), this.getName(), numVMs);
     invokeInEveryVM(this.getClass(), "setLogFile", new Object[] {
         this.getClass().getName(), this.getName(), numVMs });
+  }
 
+  protected void baseSetUp() throws Exception {
+    super.setUp();
+    commonSetUp();
     // reduce logging if test so requests
     String logLevel;
     if ((logLevel = reduceLogging()) != null) {
       reduceLogLevelForTest(logLevel);
     }
-    IndexPersistenceDUnit.deleteAllOplogFiles();
+    resetConnection();
+    invokeInEveryVM(DistributedSQLTestBase.class, "resetConnection");
   }
 
   @Override
   public void setUp() throws Exception {
     baseSetUp();
+    deleteAllOplogFiles();
+  }
+
+  public static void deleteAllOplogFiles() throws IOException {
+    try {
+      File currDir = new File(".");
+      File[] files = currDir.listFiles();
+      getGlobalLogger().info("current dir is: " + currDir.getCanonicalPath());
+
+      if (files != null) {
+        for (File f : files) {
+          if (f.getAbsolutePath().contains("BACKUPGFXD-DEFAULT-DISKSTORE")) {
+            getGlobalLogger().info("deleting file: " + f + " from dir: " + currDir);
+            f.delete();
+          }
+          if (f.isDirectory()) {
+            File newDir = new File(f.getCanonicalPath());
+            File[] newFiles = newDir.listFiles();
+            for (File nf : newFiles) {
+              if (nf.getAbsolutePath().contains("BACKUPGFXD-DEFAULT-DISKSTORE")) {
+                getGlobalLogger().info(
+                    "deleting file: " + nf + " from dir: " + newDir);
+                nf.delete();
+              }
+            }
+          }
+        }
+        for (File f : files) {
+          if (f.getAbsolutePath().contains("GFXD-DD-DISKSTORE")) {
+            getGlobalLogger().info("deleting file: " + f + " from dir: " + currDir);
+            f.delete();
+          }
+          if (f.isDirectory()) {
+            File newDir = new File(f.getCanonicalPath());
+            File[] newFiles = newDir.listFiles();
+            for (File nf : newFiles) {
+              if (nf.getAbsolutePath().contains("GFXD-DD-DISKSTORE")) {
+                getGlobalLogger().info(
+                    "deleting file: " + nf + " from dir: " + newDir);
+                nf.delete();
+              }
+            }
+          }
+        }
+      }
+    } catch (IOException e) {
+      // ignore ...
+    }
   }
 
   protected void reduceLogLevelForTest(String logLevel) {
@@ -356,6 +414,7 @@ public class DistributedSQLTestBase extends DistributedTestBase {
     // also set the client driver properties
     TestUtil.setPropertyIfAbsent(null, GfxdConstants.GFXD_CLIENT_LOG_FILE,
         logFilePrefix + "-client.log");
+    GemFireXDUtils.initFlags();
     // set preallocate to false in all the dunit
     setPreallocateSysPropsToFalse();
     vmCount = numVMs;
@@ -502,6 +561,7 @@ public class DistributedSQLTestBase extends DistributedTestBase {
         testLogPrefix + ".gfs");
     //setGFXDProperty(props, DistributionConfig.STATISTIC_SAMPLING_ENABLED_NAME,
     //    "true");
+    setGFXDProperty(props, DistributionConfig.BIND_ADDRESS_NAME, "localhost");
 
     // get the VM specific properties from DUnitEnv
     Properties dsProps = DUnitEnv.get().getDistributedSystemProperties();
@@ -513,18 +573,13 @@ public class DistributedSQLTestBase extends DistributedTestBase {
     }
 
     //setGFXDProperty(props, "enable-network-partition-detection", "true");
-    // reduce timeout properties for faster WAN dunit runs
-    if (vmCount >= 8) {
-      System.setProperty("p2p.discoveryTimeout", "1000");
-      System.setProperty("p2p.joinTimeout", "2000");
-      setGFXDProperty(props, "member-timeout", "2000");
-      System.setProperty("p2p.leaveTimeout", "1000");
-      System.setProperty("p2p.socket_timeout", "4000");
-      System.setProperty("p2p.disconnectDelay", "500");
-      System.setProperty("p2p.handshakeTimeoutMs", "2000");
-      System.setProperty("p2p.lingerTime", "500");
-      System.setProperty("p2p.listenerCloseTimeout", "4000");
-    }
+    // reduce timeout properties for faster dunit runs
+    // System.setProperty("p2p.discoveryTimeout", "2000");
+    // System.setProperty("p2p.joinTimeout", "2000");
+    System.setProperty("p2p.minJoinTries", "1");
+    // System.setProperty("p2p.disconnectDelay", "1000");
+    // System.setProperty("p2p.listenerCloseTimeout", "5000");
+
     if (extraProps != null) {
       Enumeration<?> e = extraProps.propertyNames();
       while (e.hasMoreElements()) {
@@ -583,6 +638,7 @@ public class DistributedSQLTestBase extends DistributedTestBase {
    */
   protected void setOtherCommonProperties(Properties props, int mcastPort,
       String serverGroups) {
+    System.setProperty("gemfire.DISALLOW_CLUSTER_RESTART_CHECK", "true");
   }
 
   public static DistributedMember _startNewLocator(String className,
@@ -593,7 +649,7 @@ public class DistributedSQLTestBase extends DistributedTestBase {
         .getConstructor(String.class).newInstance(name);
     if (extraProps != null && !extraProps.containsKey("locators")) {
       if (locatorBindAdress == null) {
-        locatorBindAdress = SocketCreator.getLocalHost().getHostName();
+        locatorBindAdress = "localhost";
       }
       extraProps.setProperty("locators", locatorBindAdress + '[' + locatorPort
           + ']');
@@ -1616,13 +1672,14 @@ public class DistributedSQLTestBase extends DistributedTestBase {
   }
 
   public static void _startNetworkServer(String className, String name,
-      int mcastPort, int netPort, String serverGroups, Properties extraProps, Boolean configureDefautHeap)
-      throws Exception {
+      int mcastPort, int netPort, String serverGroups, Properties extraProps,
+      Boolean configureDefautHeap) throws Exception {
     final Class<?> c = Class.forName(className);
 
     // start a DataNode first.
     if (TestUtil.getFabricService().status() != FabricService.State.RUNNING) {
-      _startNewServer(className, name, mcastPort, serverGroups, extraProps, configureDefautHeap);
+      _startNewServer(className, name, mcastPort, serverGroups, extraProps,
+          configureDefautHeap);
     }
 
     DistributedSQLTestBase test = (DistributedSQLTestBase)c.getConstructor(
@@ -1636,6 +1693,33 @@ public class DistributedSQLTestBase extends DistributedTestBase {
 
   public static void shutDownNetworkServer() {
     TestUtil.stopNetServer();
+  }
+
+  /**
+   * Start a network server on the locator.
+   */
+  public int startNetworkServerOnLocator(String serverGroups,
+      Properties extraProps) throws Exception {
+    int netPort = AvailablePort.getRandomAvailablePort(AvailablePort.SOCKET);
+    if (netPort <= 1024) {
+      throw new AssertionError("unexpected random port " + netPort);
+    }
+    startNetworkServerOnLocator(serverGroups, extraProps, netPort);
+    return netPort;
+  }
+
+  /**
+   * Start a network server on the locator.
+   */
+  public void startNetworkServerOnLocator(String serverGroups,
+      Properties extraProps, int netPort) throws Exception {
+    final VM locatorVM = Host.getLocator();
+    getLogWriter().info("Starting a network server on port=" + netPort +
+        " on locator with pid [" + locatorVM.getPid() + ']');
+    // Start a network server
+    locatorVM.invoke(DistributedSQLTestBase.class, "_startNetworkServer",
+        new Object[]{this.getClass().getName(), this.getName(), 0, netPort,
+            serverGroups, extraProps, Boolean.valueOf(this.configureDefaultOffHeap)});
   }
 
   /**
@@ -1690,14 +1774,6 @@ public class DistributedSQLTestBase extends DistributedTestBase {
     public void close() {
       // nothing by default
     }
-  }
-
-  public static final String getQualifiedInetAddress(final InetAddress addr) {
-    final String hostName = addr.getCanonicalHostName();
-    if (hostName != null) {
-      return hostName + '/' + addr.getHostAddress();
-    }
-    return "/" + addr.getHostAddress();
   }
 
   protected final static AtomicInteger numConnectionsOpened =
@@ -1802,6 +1878,13 @@ public class DistributedSQLTestBase extends DistributedTestBase {
     final VM[] serverVMs = new VM[serverNums.length];
     assertNumConnections(expectedConnectionsOpened, expectedConnectionsClosed,
         getVMs(null, serverNums).toArray(serverVMs));
+  }
+
+  public boolean stopNetworkServerOnLocator() throws Exception {
+    final VM locatorVM = Host.getLocator();
+    getLogWriter().info("Stopping gemfirexd network server on locator with pid [" +
+        locatorVM.getPid() + ']');
+    return locatorVM.invokeBoolean(TestUtil.class, "stopNetServer");
   }
 
   public boolean stopNetworkServer(int vmNum) throws Exception {
@@ -1939,7 +2022,8 @@ public class DistributedSQLTestBase extends DistributedTestBase {
         else {
           for (DiskStoreImpl ds : cache.listDiskStores()) {
             if (!GfxdConstants.GFXD_DEFAULT_DISKSTORE_NAME.equals(ds.getName())
-                && !GfxdConstants.GFXD_DD_DISKSTORE_NAME.equals(ds.getName())) {
+                && !GfxdConstants.GFXD_DD_DISKSTORE_NAME.equals(ds.getName())
+                && !GfxdConstants.SNAPPY_DEFAULT_DELTA_DISKSTORE.equals(ds.getName())) {
               requiresCleanup[2] = true;
               break;
             }
@@ -2050,9 +2134,9 @@ public class DistributedSQLTestBase extends DistributedTestBase {
                 hdfsStore.getName() + '"');
           }
           for (DiskStoreImpl ds : cache.listDiskStores()) {
-            if (!GfxdConstants.GFXD_DEFAULT_DISKSTORE_NAME.equals(ds
-                .getName()) && !GfxdConstants.GFXD_DD_DISKSTORE_NAME
-                .equals(ds.getName())) {
+            if (!GfxdConstants.GFXD_DEFAULT_DISKSTORE_NAME.equals(ds.getName())
+                && !GfxdConstants.GFXD_DD_DISKSTORE_NAME.equals(ds.getName())
+                && !GfxdConstants.SNAPPY_DEFAULT_DELTA_DISKSTORE.equals(ds.getName())) {
               executeCleanup(stmt, "drop diskstore \"" + ds.getName() + '"');
             }
           }
@@ -2213,8 +2297,8 @@ public class DistributedSQLTestBase extends DistributedTestBase {
       // create the datadictionary directory if not present since GFE shutdown
       // now requires it
       deleteOrCreateDataDictionaryDir(true);
-      System.setProperty("gemfire.OFF_HEAP_TOTAL_SIZE", "");
-      System.setProperty("gemfire."+DistributionConfig.OFF_HEAP_MEMORY_SIZE_NAME, "");
+      System.clearProperty("gemfire.OFF_HEAP_TOTAL_SIZE");
+      System.clearProperty("gemfire."+DistributionConfig.OFF_HEAP_MEMORY_SIZE_NAME);
       final Properties props = new Properties();
       setCommonProperties(props, 0, null, null);
       // shutdown the current VM
@@ -2567,8 +2651,20 @@ public class DistributedSQLTestBase extends DistributedTestBase {
     return vms;
   }
 
-  private String regionAttributesToXML(final RegionAttributes<?, ?> attrs,
-      VM vmForDiskDir) {
+  public static int getDefaultLocalMaxMemory() {
+    return PartitionAttributesFactory.LOCAL_MAX_MEMORY_DEFAULT;
+  }
+
+  private String regionAttributesToXML(RegionAttributes<?, ?> attrs, VM vm) {
+    // adjust default local-max-memory as per target VM size
+    PartitionAttributesImpl pa;
+    if (vm != null && attrs != null && (pa = (PartitionAttributesImpl)attrs
+        .getPartitionAttributes()) != null && !pa.getEnableOffHeapMemory() &&
+        !pa.hasLocalMaxMemory()) {
+      int localMaxMemory = (Integer)vm.invoke(getClass(),
+          "getDefaultLocalMaxMemory");
+      pa.setLocalMaxMemory(localMaxMemory);
+    }
     return TestUtil.regionAttributesToXML(attrs);
   }
 

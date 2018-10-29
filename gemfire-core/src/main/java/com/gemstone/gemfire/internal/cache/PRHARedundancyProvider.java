@@ -24,6 +24,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.SystemFailure;
@@ -57,10 +59,8 @@ import com.gemstone.gemfire.internal.cache.partitioned.rebalance.RebalanceDirect
 import com.gemstone.gemfire.internal.cache.persistence.MembershipFlushRequest;
 import com.gemstone.gemfire.internal.cache.persistence.PersistentMemberID;
 import com.gemstone.gemfire.internal.cache.persistence.PersistentStateListener;
-import com.gemstone.gemfire.internal.concurrent.AB;
-import com.gemstone.gemfire.internal.concurrent.AL;
-import com.gemstone.gemfire.internal.concurrent.CFactory;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
+import io.snappydata.collection.OpenHashSet;
 import com.gemstone.org.jgroups.util.StringId;
 
 /**
@@ -98,9 +98,10 @@ public class PRHARedundancyProvider
     Long.getLong(DATASTORE_DISCOVERY_TIMEOUT_PROPERTY_NAME);
 
   public final PartitionedRegion prRegion;
-  private static AL insufficientLogTimeStamp = CFactory.createAL(0);
-  private final AB firstInsufficentStoresLogged = CFactory.createAB(false);
-  
+  private static AtomicLong insufficientLogTimeStamp = new AtomicLong(0);
+  private final AtomicBoolean firstInsufficentStoresLogged =
+      new AtomicBoolean(false);
+
   /**
    * An executor to submit tasks for redundancy recovery too. It makes sure
    * that there will only be one redundancy recovery task in the queue at a time.
@@ -129,7 +130,7 @@ public class PRHARedundancyProvider
     this.prRegion = region;
     final InternalResourceManager resourceManager = region.getGemFireCache()
     .getResourceManager();
-    recoveryExecutor = new OneTaskOnlyExecutor(resourceManager.getExecutor(),
+    recoveryExecutor = new OneTaskOnlyExecutor(resourceManager.getRecoveryExecutor(),
         new OneTaskOnlyExecutor.ConflatedTaskListener() {
           public void taskDropped() {
             InternalResourceManager.getResourceObserver().recoveryConflated(region);
@@ -538,7 +539,6 @@ public class PRHARedundancyProvider
     // (very expensive) bucket lock or the (somewhat expensive) monitor on this
     earlySufficientStoresCheck(partitionName);
 
-    synchronized(this) {
       if (this.prRegion.getCache().isCacheAtShutdownAll()) {
         throw new CacheClosedException("Cache is shutting down");
       }
@@ -549,7 +549,7 @@ public class PRHARedundancyProvider
           this.prRegion.bucketStringForLogs(bucketId));
     }
     Collection<InternalDistributedMember> acceptedMembers = new ArrayList<InternalDistributedMember>(); // ArrayList<DataBucketStores>
-    Set <InternalDistributedMember> excludedMembers = new HashSet<InternalDistributedMember>();
+    OpenHashSet<InternalDistributedMember> excludedMembers = new OpenHashSet<>();
     ArrayListWithClearState<InternalDistributedMember> failedMembers = new ArrayListWithClearState<InternalDistributedMember>();
     final long timeOut = System.currentTimeMillis() + computeTimeout();
     BucketMembershipObserver observer = null;
@@ -559,7 +559,9 @@ public class PRHARedundancyProvider
       this.prRegion.checkReadiness();
 
       Bucket toCreate = this.prRegion.getRegionAdvisor().getBucket(bucketId);
-      
+      final ReentrantLock redundancyLock = toCreate.getBucketAdvisor().redundancyLock;
+      redundancyLock.lock();
+      try {
       if(!finishIncompleteCreation) {
         bucketPrimary = 
           this.prRegion.getBucketPrimary(bucketId);
@@ -715,6 +717,9 @@ public class PRHARedundancyProvider
           return bucketPrimary;
          } // almost done
       } // for
+      } finally {
+        redundancyLock.unlock();
+      }
     }
     catch (CancelException e) {
       //Fix for 43544 - We don't need to elect a primary
@@ -784,7 +789,6 @@ public class PRHARedundancyProvider
         }
       }
     }
-    } // synchronized(this)
   }
 
   /**
@@ -1391,7 +1395,7 @@ public class PRHARedundancyProvider
     
     // Convert peers to DataStoreBuckets
     ArrayList<DataStoreBuckets> stores = this.prRegion.getRegionAdvisor()
-        .adviseFilteredDataStores(new HashSet<InternalDistributedMember>(candidates));
+        .adviseFilteredDataStores(new OpenHashSet<>(candidates));
     
     final DM dm = this.prRegion.getDistributionManager();
     // Add ourself as a candidate, if appropriate
@@ -1822,7 +1826,6 @@ public class PRHARedundancyProvider
         allBucketsRecoveredFromDisk = null;
         throw e;
       }
-    
       /*
        * Spawn a separate thread for bucket that we previously hosted
        * to recover that bucket.
@@ -1930,7 +1933,7 @@ public class PRHARedundancyProvider
       Runnable task = new CreateMissingBucketsTask(this);
       final InternalResourceManager resourceManager = this.prRegion
           .getGemFireCache().getResourceManager();
-      resourceManager.getExecutor().submit(task);
+      resourceManager.getRecoveryExecutor().execute(task);
     }
   }
   

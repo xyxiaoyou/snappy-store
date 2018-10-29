@@ -14,6 +14,25 @@
  * permissions and limitations under the License. See accompanying
  * LICENSE file.
  */
+/*
+ * Changes for SnappyData distributed computational and data platform.
+ *
+ * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
 package com.gemstone.gemfire.internal.cache;
 
 import java.io.File;
@@ -28,6 +47,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.HashSet;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -39,9 +60,12 @@ import com.gemstone.gemfire.internal.cache.persistence.DiskRecoveryStore;
 import com.gemstone.gemfire.internal.cache.persistence.DiskRegionView;
 import com.gemstone.gemfire.internal.cache.persistence.DiskStoreFilter;
 import com.gemstone.gemfire.internal.cache.persistence.OplogType;
+import com.gemstone.gemfire.internal.cache.persistence.PRPersistentConfig;
+
 import com.gemstone.gemfire.internal.cache.versions.RegionVersionVector;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.sequencelog.EntryLogger;
+import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gnu.trove.TLongHashSet;
 
 public class PersistentOplogSet implements OplogSet {
@@ -176,15 +200,15 @@ public class PersistentOplogSet implements OplogSet {
   }
   
   @Override
-  public void create(LocalRegion region, DiskEntry entry, byte[] value,
-      boolean isSerializedObject, boolean async) {
-    getChild().create(region, entry, value, isSerializedObject, async);
+  public void create(LocalRegion region, DiskEntry entry,
+      DiskEntry.Helper.ValueWrapper value, boolean async) {
+    getChild().create(region, entry, value, async);
   }
   
   @Override
-  public void modify(LocalRegion region, DiskEntry entry, byte[] value,
-      boolean isSerializedObject, boolean async) {
-    getChild().modify(region, entry, value, isSerializedObject, async);
+  public void modify(LocalRegion region, DiskEntry entry,
+      DiskEntry.Helper.ValueWrapper value, boolean async) {
+    getChild().modify(region, entry, value, async);
   }
 
   @Override
@@ -341,7 +365,170 @@ public class PersistentOplogSet implements OplogSet {
       }
     }
   }
-  
+
+  private static class ValidateModeColocationChecker {
+    // Each element of the list will be one colocation map
+    // Each such map will have colocated prnames as the key and a list of bucket ids
+    private final List<Map<String, List<VdrBucketId>>> prSetsWithBuckets = new ArrayList<>();
+    private final DiskInitFile dif;
+    private boolean inconsistent = false;
+    private boolean printValidateOutput = false;
+    public ValidateModeColocationChecker(DiskInitFile dif) {
+      this.dif = dif;
+    }
+
+    private static class VdrBucketId {
+      private final ValidatingDiskRegion vdr;
+      private final int bucketId;
+      private final boolean rootPR;
+
+      VdrBucketId(ValidatingDiskRegion vdr, int bid, boolean isRootPR) {
+        this.bucketId = bid;
+        this.vdr = vdr;
+        this.rootPR = isRootPR;
+      }
+
+      public String toString() {
+        return "VdrBucketId: " + vdr.getName() + "(" + bucketId + ") rootPR - " + rootPR;
+      }
+    }
+
+    public void add(ValidatingDiskRegion vdr) {
+      assert vdr.isBucket();
+      final String prName = vdr.getPrName();
+      final PRPersistentConfig prPersistentConfig = this.dif.getPersistentPR(prName);
+      final String colocateWith = prPersistentConfig != null ? prPersistentConfig.getColocatedWith() : null;
+      final int bucketId = PartitionedRegionHelper.getBucketId(vdr.getName());
+      VdrBucketId vdb = new VdrBucketId(vdr, bucketId, ((colocateWith == null) || colocateWith.isEmpty()));
+      // System.out.println(vdb);
+      Iterator<Map<String, List<VdrBucketId>>> itr = prSetsWithBuckets.iterator();
+      boolean added = false;
+      while (itr.hasNext()) {
+        Map<String, List<VdrBucketId>> m = itr.next();
+        if (m.containsKey(prName)) {
+          List<VdrBucketId> s = m.get(prName);
+          s.add(vdb);
+          added = true;
+          break;
+        } else if (colocateWith != null && m.containsKey(colocateWith)) {
+          // add an entry for prName
+          List<VdrBucketId> s = new ArrayList<>(10);
+          m.put(prName, s);
+          s.add(vdb);
+          added = true;
+          break;
+        }
+      }
+      if (!added) {
+        Map<String, List<VdrBucketId>> m = new HashMap<>();
+        List<VdrBucketId> s = new ArrayList<>(10);
+        s.add(vdb);
+        m.put(prName, s);
+        if (colocateWith != null && colocateWith.length() > 0) {
+          List<VdrBucketId> sc = new ArrayList<>(10);
+          m.put(colocateWith, sc);
+        }
+        this.prSetsWithBuckets.add(m);
+      }
+    }
+
+    public void findInconsistencies() {
+      StringBuilder sb = new StringBuilder();
+      StringBuilder columnbufferSb = new StringBuilder();
+      sb.append("\n");
+      sb.append("--- Child buckets with no parent buckets in this data store ---\n");
+      sb.append("\n");
+      prSetsWithBuckets.forEach(x -> {
+        if (x.size() > 1) {
+          findInconsistencyInternal(x, sb, columnbufferSb);
+        }
+      });
+      if (inconsistent) {
+        this.dif.setInconsistent(sb.toString());
+      }
+      if (printValidateOutput) {
+        this.dif.setColumnBufferInfo(columnbufferSb.toString());
+      }
+    }
+
+    private void findInconsistencyInternal(Map<String, List<VdrBucketId>> oneSet,
+      final StringBuilder sb, final StringBuilder columnBufferSb) {
+      List<VdrBucketId> smallest = null;
+      String rootRegion = null;
+      boolean allSizesEqual = true;
+      Iterator<Map.Entry<String, List<VdrBucketId>>> itr = oneSet.entrySet().iterator();
+      // find root PR
+      int numbuckets_of_root = 0;
+      String rootPR = "";
+      String prn = "";
+      Set<Integer> bucketIdsOfRoot = new HashSet<>();
+      while (itr.hasNext()) {
+        Map.Entry<String, List<VdrBucketId>> e = itr.next();
+        List<VdrBucketId> currlist = e.getValue();
+        if (currlist.size() > 0) {
+          prn = currlist.get(0).vdr.getPrName();
+          String colocatedwith = this.dif.getPersistentPR(prn).getColocatedWith();
+          if (colocatedwith == null || colocatedwith.length() == 0) {
+            numbuckets_of_root = currlist.size();
+            rootPR = prn;
+            currlist.forEach(x -> bucketIdsOfRoot.add(x.bucketId));
+            break;
+          }
+          else {
+            // sb.append("\n#### Colocated PR " + prn + " ####\n");
+          }
+        }
+      }
+
+      // sb.append("\n#### Root PR " + rootPR + " ####\n");
+
+      final HashSet<VdrBucketId> badBuckets = new HashSet<>();
+      final HashSet<VdrBucketId> badBucketsColumnBuffer = new HashSet<>();
+      final Boolean printedRootPR = Boolean.FALSE;
+      itr = oneSet.entrySet().iterator();
+      while (itr.hasNext()) {
+        Map.Entry<String, List<VdrBucketId>> e = itr.next();
+        List<VdrBucketId> currlist = e.getValue();
+        if (currlist.size() > numbuckets_of_root) {
+          currlist.forEach(x -> {
+            if (!bucketIdsOfRoot.contains(x.bucketId)) {
+              String badBucketName = x.vdr.getName();
+              String[] parts = SystemProperties.SHADOW_SCHEMA_NAME_WITH_SEPARATOR.split("_");
+              if (badBucketName != null && badBucketName.indexOf(parts[0]) != -1 &&
+                  badBucketName.indexOf(parts[1]) != -1) {
+                this.printValidateOutput = true;
+                badBucketsColumnBuffer.add(x);
+              } else {
+                badBuckets.add(x);
+                if (!this.inconsistent) {
+                  this.inconsistent = true;
+                }
+              }
+            }
+          });
+        }
+      }
+
+      if (badBuckets.size() > 0) {
+        sb.append("Colocated bucket not found in this disk store for following buckets.\n");
+        sb.append("Either it is an error or you may have used a different disk store for colocated region\n");
+        badBuckets.forEach(x -> sb.append(x.vdr.getName() + "\n"));
+      }
+
+      if (badBucketsColumnBuffer.size() > 0) {
+        columnBufferSb.append("\nColumn buffer buckets need to be manually verified.\n");
+        columnBufferSb.append("\nThese have their colocated row buffer buckets in " +
+            "SNAPPY-INTERNAL-DELTA disk store\n");
+        columnBufferSb.append("Please check that disk store for corresponding row " +
+            "buffer buckets\n\n");
+        // @TODO Have a utility method to derive corresponding row buffer bucket name
+        // and ask the user to check whether that exists in the SNAPPY INTERNAL DELTA disk store
+        badBucketsColumnBuffer.forEach(x -> columnBufferSb.append(x.vdr.getName() + "\n"));
+        columnBufferSb.append("\n");
+      }
+    }
+  }
+
   public final void recoverRegionsThatAreReady(boolean initialRecovery) {
     // The following sync also prevents concurrent recoveries by multiple regions
     // which is needed currently.
@@ -351,6 +538,24 @@ public class PersistentOplogSet implements OplogSet {
         this.currentRecoveryMap.clear();
         this.currentRecoveryMap.putAll(this.pendingRecoveryMap);
         this.pendingRecoveryMap.clear();
+      }
+      if (parent.isValidating()) {
+        Iterator<Map.Entry<Long, DiskRecoveryStore>> itr = this.currentRecoveryMap.entrySet().iterator();
+        boolean listMsgPrinted = false;
+        while (itr.hasNext()) {
+          if (!listMsgPrinted) {
+            listMsgPrinted = true;
+            System.out.println("Following validating disk regions" +
+                " are present in diskstore " + this.parent.getName());
+          }
+          Map.Entry<Long, DiskRecoveryStore> e = itr.next();
+          // Print these irrespective of the sizes of the recovery map because
+          // a colocated bucket can be created but may be empty. So if just bucket
+          // existence needs to be checked this list will help. For column tables
+          // in snappydata it can be quite frequent that row buffer is empty but
+          // column table has some data.
+          System.out.println(e.getValue());
+        }
       }
       if (this.currentRecoveryMap.isEmpty() && this.alreadyRecoveredOnce.get()) {
         // no recovery needed
@@ -383,6 +588,7 @@ public class PersistentOplogSet implements OplogSet {
       } finally {
         Map<String, Integer> prSizes = null;
         Map<String, Integer> prBuckets = null;
+        ValidateModeColocationChecker vchkr = new ValidateModeColocationChecker(parent.getDiskInitFile());
         if (parent.isValidating()) {
           prSizes = new HashMap<String, Integer>();
           prBuckets = new HashMap<String, Integer>();
@@ -405,6 +611,7 @@ public class PersistentOplogSet implements OplogSet {
                 vdr.dump(System.out);
               }
               if (vdr.isBucket()) {
+                vchkr.add(vdr);
                 String prName = vdr.getPrName();
                 if (prSizes.containsKey(prName)) {
                   int oldSize = prSizes.get(prName);
@@ -430,6 +637,7 @@ public class PersistentOplogSet implements OplogSet {
             System.out.println(me.getKey() + " entryCount=" + me.getValue()
                                + " bucketCount=" + prBuckets.get(me.getKey()));
           }
+          vchkr.findInconsistencies();
         }
         parent.getStats().endRecovery(start, byteCount);
         this.alreadyRecoveredOnce.set(true);

@@ -21,7 +21,7 @@ package com.gemstone.gemfire.internal.cache;
 import com.gemstone.gemfire.cache.EntryEvent;
 import com.gemstone.gemfire.cache.EntryNotFoundException;
 import com.gemstone.gemfire.distributed.internal.DM;
-import com.gemstone.gemfire.internal.ByteArrayDataInput;
+import com.gemstone.gemfire.internal.cache.store.SerializedDiskBuffer;
 import com.gemstone.gemfire.internal.cache.versions.VersionTag;
 import com.gemstone.gemfire.internal.offheap.annotations.Retained;
 import com.gemstone.gemfire.internal.shared.Version;
@@ -53,36 +53,54 @@ public abstract class AbstractOplogDiskRegionEntry
   ////////////////////////// instance methods /////////////////////////
   /////////////////////////////////////////////////////////////////////
 
-  public abstract void setDiskId(RegionEntry oldRe);
+  protected abstract void setDiskId(RegionEntry oldRe);
+
+  @Override
+  protected final void initContextForDiskBuffer(RegionEntryContext context,
+      Object value) {
+    if (value instanceof SerializedDiskBuffer) {
+      ((SerializedDiskBuffer)value).setDiskEntry(this, context);
+    }
+  }
+
+  public final void setDiskIdForRegion(RegionEntryContext context,
+      RegionEntry oldRe) {
+    setDiskId(oldRe);
+    if (!isOffHeap()) {
+      initContextForDiskBuffer(context, getValueField());
+    }
+  }
 
   @Override
   public final void removePhase1(LocalRegion r, boolean isClear) throws RegionClearedException
   {
     synchronized (this) {
       Helper.removeFromDisk(this, r, isClear);
-      _removePhase1();
+      _removePhase1(r);
     }
   }
   @Override
-  public void removePhase2() {
+  public void removePhase2(LocalRegion r) {
     Object syncObj = getDiskId();
     if (syncObj == null) {
       syncObj = this;
     }
     synchronized (syncObj) {
-      super.removePhase2();
+      super.removePhase2(r);
     }
   }
 
   @Override
   public final boolean fillInValue(LocalRegion r,
-      InitialImageOperation.Entry entry, ByteArrayDataInput in, DM mgr, Version targetVersion) {
-    return Helper.fillInValue(this, entry, r, in, mgr, r, targetVersion);
+      InitialImageOperation.Entry entry, DM mgr, Version targetVersion) {
+    return Helper.fillInValue(this, entry, r, mgr, r, targetVersion);
   }
 
   @Override
-  public final boolean isOverflowedToDisk(LocalRegion r, DistributedRegion.DiskPosition dp) {
-    return Helper.isOverflowedToDisk(this, r.getDiskRegion(), dp, r);
+  public final boolean isOverflowedToDisk(LocalRegion r,
+      DistributedRegion.DiskPosition dp, boolean alwaysFetchPosition) {
+    return Helper.isOverflowedToDisk(this, r.getDiskRegion(),
+        dp, alwaysFetchPosition);
   }
   
   @Retained
@@ -93,16 +111,18 @@ public abstract class AbstractOplogDiskRegionEntry
   
   @Override
   public final Object getValueInVMOrDiskWithoutFaultIn(LocalRegion owner) {
-    return Helper.getValueInVMOrDiskWithoutFaultIn(this, owner);
-  }
-  @Retained
-  public final Object getHeapValueInVMOrDiskWithoutFaultIn(LocalRegion owner) {
-    return Helper.getValueHeapOrDiskWithoutFaultIn(this, owner);
+    return Helper.getValueOffHeapOrDiskWithoutFaultIn(this, owner, true);
   }
   @Retained
   @Override
   public Object getValueOffHeapOrDiskWithoutFaultIn(LocalRegion owner) {
-    return Helper.getValueOffHeapOrDiskWithoutFaultIn(this, owner);
+    return Helper.getValueOffHeapOrDiskWithoutFaultIn(this, owner, false);
+  }
+
+  @Retained
+  @Override
+  public Object getValueOffHeapOrDiskWithoutFaultIn(LocalRegion owner, DiskRegion dr) {
+    return Helper.getValueOffHeapOrDiskWithoutFaultIn(this, owner, dr, false);
   }
 
   @Override
