@@ -254,20 +254,6 @@ public class PartitionedRegion extends LocalRegion implements
    * A debug flag used for testing calculation of starting bucket id
    */
   public static boolean BEFORE_CALCULATE_STARTING_BUCKET_FLAG = false;
-  
-  /**
-   * Thread specific random number
-   */
-  private static ThreadLocal threadRandom = new ThreadLocal() {
-    @Override
-    protected Object initialValue() {
-      int i = rand.nextInt();
-      if (i < 0) {
-        i = -1 * i;
-      }
-      return Integer.valueOf(i);
-    }
-  };
 
   /**
    * Global Region for storing PR config ( PRName->PRConfig). This region would
@@ -780,13 +766,8 @@ public class PartitionedRegion extends LocalRegion implements
   
   private ParallelGatewaySenderImpl parallelGatewaySender = null;
   
-  private final ThreadLocal<Boolean> queryHDFS = new ThreadLocal<Boolean>() {
-    @Override
-    protected Boolean initialValue() {
-      return false;
-    }
-  };
-  
+  private final ThreadLocal<Boolean> queryHDFS = new ThreadLocal<>();
+
   public PartitionedRegion(String regionname, RegionAttributes ra,
       LocalRegion parentRegion, GemFireCacheImpl cache,
       InternalRegionArguments internalRegionArgs) {
@@ -948,12 +929,17 @@ public class PartitionedRegion extends LocalRegion implements
   }
 
   public final void setQueryHDFS(boolean includeHDFS) {
-    queryHDFS.set(includeHDFS);
+    if (includeHDFS) {
+      queryHDFS.set(true);
+    } else {
+      queryHDFS.remove();
+    }
   }
 
   @Override
   public final boolean includeHDFSResults() {
-    return queryHDFS.get();
+    Boolean v = queryHDFS.get();
+    return v != null && v;
   }
 
   public final boolean isShadowPR() {
@@ -8073,14 +8059,6 @@ public class PartitionedRegion extends LocalRegion implements
       throw e;
     }
     return retVal;
-  }
-
-  static int getRandom(int max) {
-    if (max <= 0) {
-      return 0;
-    }
-    int ti = ((Integer)PartitionedRegion.threadRandom.get()).intValue();
-    return ti % max;
   }
 
   /**
