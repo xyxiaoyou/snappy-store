@@ -219,7 +219,6 @@ import com.gemstone.gemfire.internal.offheap.SimpleMemoryAllocatorImpl.Chunk;
 import com.gemstone.gemfire.internal.offheap.annotations.Unretained;
 import com.gemstone.gemfire.internal.sequencelog.RegionLogger;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
-import com.gemstone.gemfire.internal.snappy.StoreCallbacks;
 import com.gemstone.gemfire.internal.util.TransformUtils;
 import com.gemstone.gemfire.internal.util.concurrent.FutureResult;
 import com.gemstone.gemfire.internal.util.concurrent.StoppableCountDownLatch;
@@ -2523,26 +2522,35 @@ public class PartitionedRegion extends LocalRegion implements
   }
 
 
-  private volatile Boolean columnBatching;
-  public boolean needsBatching() {
-    final Boolean columnBatching = this.columnBatching;
+  private volatile Boolean isRowBuffer;
+
+  @Override
+  public boolean isRowBuffer() {
+    final Boolean columnBatching = this.isRowBuffer;
     if (columnBatching != null) {
       return columnBatching;
     }
     // Find all the child region and see if they anyone of them has name ending
     // with _SHADOW_
-    if (this.getName().toUpperCase().endsWith(StoreCallbacks.SHADOW_TABLE_SUFFIX)) {
-      this.columnBatching = false;
+    if (isInternalColumnTable()) {
+      this.isRowBuffer = false;
       return false;
     } else {
-      boolean needsBatching = false;
+      boolean isRowBuffer = false;
       List<PartitionedRegion> childRegions = ColocationHelper.getColocatedChildRegions(this);
       for (PartitionedRegion pr : childRegions) {
-        needsBatching |= pr.getName().toUpperCase().endsWith(StoreCallbacks.SHADOW_TABLE_SUFFIX);
+        if (pr.isInternalColumnTable()) {
+          isRowBuffer = true;
+          break;
+        }
       }
-      this.columnBatching = needsBatching;
-      return needsBatching;
+      this.isRowBuffer = isRowBuffer;
+      return isRowBuffer;
     }
+  }
+
+  public void clearIsRowBuffer() {
+    this.isRowBuffer = null;
   }
 
   private void handleSendOrWaitException(Exception ex,
@@ -5607,6 +5615,18 @@ public class PartitionedRegion extends LocalRegion implements
       o = prIdToPR.getRegion(Integer.valueOf(prid));
     }
     return (PartitionedRegion)o;
+  }
+
+  public static List<PartitionedRegion> getAllPartitionedRegions() {
+    synchronized (prIdToPR) {
+      ArrayList<PartitionedRegion> allPRs = new ArrayList<>(prIdToPR.size());
+      for (Object pr : prIdToPR.values()) {
+        if (pr instanceof PartitionedRegion) {
+          allPRs.add((PartitionedRegion)pr);
+        }
+      }
+      return allPRs;
+    }
   }
 
   /**
