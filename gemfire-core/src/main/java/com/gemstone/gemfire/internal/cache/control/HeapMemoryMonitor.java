@@ -691,13 +691,20 @@ public void stopMonitoring() {
    *          PID of the process for which heap histogram is to be logged
    */
   public void jmapHisto(String pid) {
-    BufferedReader reader;
-    String line;
     try {
-      String[] jmapCommand = new String[] {"sh", "-c", "jmap -histo " + pid + " > " +
-          pid + '_' + PartitionedRegion.rand.nextInt() + ".jmap" };
+      List<String> inputArgs = ManagementFactory.getRuntimeMXBean().getInputArguments();
+      String[] jmapCommand;
+      if(inputArgs.contains("-XX:+HeapDumpOnOutOfMemoryError")) {
+        jmapCommand = new String[] { "sh", "-c", "jmap -dump:format=b,file=" +
+            pid + PartitionedRegion.rand.nextInt() + ".hprof "+ pid
+        };
+      }else{
+        jmapCommand = new String[] { "sh", "-c", "jmap -histo " + pid + " > " +
+            pid + PartitionedRegion.rand.nextInt() + ".jmap"
+        };
+      }
       Process jmapProcess = Runtime.getRuntime().exec(jmapCommand);
-      Thread.sleep(JMAP_HISTO_SLEEP_DURATION);
+      jmapProcess.waitFor(JMAP_HISTO_SLEEP_DURATION, TimeUnit.MILLISECONDS);
     } catch (Exception e) {
       logger.error("Failed to log heap histogram for pid: " + pid, e);
     }
