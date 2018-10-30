@@ -558,7 +558,13 @@ public class ResultSetHelper {
             if (!missingCol.equals(unexpectedCol)) {
               if (missingCol.getClass().getName().contains("BigDecimal") && unexpectedCol
                   .getClass().getName().contains("BigDecimal")) {
-                Double diff = (((BigDecimal)missingCol).subtract((BigDecimal)unexpectedCol)).doubleValue();
+                BigDecimal value1 = (BigDecimal)missingCol;
+                BigDecimal value2 = (BigDecimal)unexpectedCol;
+                Double diff;
+                if(value1.doubleValue() > value2.doubleValue())
+                  diff = value1.subtract(value2).doubleValue();
+                else
+                  diff = value2.subtract(value1).doubleValue();
                 Log.getLogWriter().info("diff is " + diff);
                 if (diff <= 0.01) {
                   isGenuineMismatch = false;
