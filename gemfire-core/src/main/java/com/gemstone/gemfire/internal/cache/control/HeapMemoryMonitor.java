@@ -745,7 +745,7 @@ public void stopMonitoring() {
     final MemoryEvent tempEvent = this.upcomingEvent.get();
     if (tempEvent != null) {
       this.mostRecentEvent = tempEvent;
-      this.upcomingEvent.set(null);
+      this.upcomingEvent.remove();
     }
     final MemoryEvent eventToPopulate = this.mostRecentEvent;
     profile.setHeapData(eventToPopulate.getBytesUsed(), eventToPopulate.getState(), eventToPopulate.getThresholds());

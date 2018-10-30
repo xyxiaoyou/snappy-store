@@ -838,7 +838,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
        synchronized (oldEntryMap) {
         for (Map<Object, BlockingQueue<RegionEntry>> regionEntryMap : oldEntryMap.values()) {
           for (Entry<Object, BlockingQueue<RegionEntry>> entry : regionEntryMap.entrySet()) {
-            if (entry.getValue().size() == 0) {
+            if (entry.getValue().isEmpty()) {
               regionEntryMap.remove(entry.getKey());
               if (getLoggerI18n().fineEnabled()) {
                 getLoggerI18n().fine(
@@ -6385,6 +6385,21 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
 
   public final DM getDistributionManager() {
     return this.dm;
+  }
+
+  /**
+   * Get a thread-pool for background execution. On normal DMs it will be the
+   * waiting thread pool which can have any size, or else in loner DMs (that
+   * don't have most execution thread pools) it will be the disk write pool
+   * that is a proper background thread pool even in loner DMs.
+   */
+  public final ThreadPoolExecutor getWaitingThreadPoolOrDiskWritePool() {
+    if (getDistributionManager().isLoner()) {
+      return getDiskDelayedWritePool();
+    } else {
+      return (ThreadPoolExecutor)getDistributionManager()
+          .getWaitingThreadPool();
+    }
   }
 
   public GatewaySenderFactory createGatewaySenderFactory(){
