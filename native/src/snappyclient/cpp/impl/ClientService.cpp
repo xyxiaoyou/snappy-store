@@ -308,7 +308,7 @@ ClientService::ClientService(const std::string& host, const int port,
   if (!props.empty()) {
     if ((propValue = props.find(ClientAttribute::LOAD_BALANCE))
         != props.end()) {
-      m_loadBalance = boost::iequals("false", propValue->second);
+      m_loadBalance = !(boost::iequals("false", propValue->second));
       props.erase(propValue);
     }
 
