@@ -691,11 +691,11 @@ public void stopMonitoring() {
       String[] jmapCommand;
       if (inputArgs.contains("-XX:+HeapDumpOnOutOfMemoryError")) {
         jmapCommand = new String[] { "/bin/sh", "-c", "jmap -dump:format=b,file=" +
-            "java_pid" + pid + '-' + PartitionedRegion.rand.nextInt() + ".hprof " + pid
+            "java_pid" + pid + "-" + PartitionedRegion.rand.nextInt() + ".hprof " + pid
         };
       } else {
         jmapCommand = new String[] { "/bin/sh", "-c", "jmap -histo " + pid + " > " +
-            "java_pid" + pid + '-' + PartitionedRegion.rand.nextInt() + ".jmap"
+            "java_pid" + pid + "-" + PartitionedRegion.rand.nextInt() + ".jmap"
         };
       }
       Process jmapProcess = Runtime.getRuntime().exec(jmapCommand);
