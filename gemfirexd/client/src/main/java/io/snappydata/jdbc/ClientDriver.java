@@ -88,7 +88,7 @@ public class ClientDriver extends ClientDRDADriver {
   /**
    * {@inheritDoc}
    */
-  public boolean acceptsURL(String url) throws java.sql.SQLException {
+  public boolean acceptsURL(String url) {
     return (url != null && matchProtocol(url).matches());
   }
 
