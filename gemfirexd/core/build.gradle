@@ -180,6 +180,7 @@ task odbcMeta {
   def metaDir = file("${buildDir}/classes/main/com/pivotal/gemfirexd/internal/impl/jdbc")
   outputs.file "${metaDir}/metadata.properties"
   inputs.dir "${projectDir}/../prebuild/src/main/resources/com/pivotal/gemfirexd/internal/impl/jdbc"
+  inputs.dir "${projectDir}/../prebuild/src/main/java/org/apache/derbyBuild"
 
   doFirst {
     metaDir.mkdirs()

@@ -919,7 +919,7 @@ public class ODBCMetadataGenerator {
 
 		if (queryName.equals("getColumns")) {
 			subqueryText.insert(insertPos,
-				getFragment(unionIndex < 2 ? "GET_COLS_HELPER_COLS" : "GET_COLS_HELPER_COLS2"));
+				getFragment("GET_COLS_HELPER_COLS" + unionIndex));
 		}
 		else if (queryName.startsWith("getBestRowIdentifier")) {
 			subqueryText.insert(insertPos,
