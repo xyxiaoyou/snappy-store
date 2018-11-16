@@ -2494,9 +2494,8 @@ throws SQLException
 		[ <IN> schema=identifier() ]
 	{
 		if(t!=null) {
-// GemStone changes: Addition of "COLUMN TABLE", "EXTERNAL TABLE" etc below
-		    types = new String[] { "ROW TABLE", "SYSTEM TABLE", "COLUMN TABLE",
-		        "EXTERNAL TABLE", "STREAM TABLE", "SAMPLE TABLE", "TOPK TABLE", "VIRTUAL TABLE" };
+// SnappyData changes: Addition of "VIRTUAL TABLE" below
+		    types = new String[] { "TABLE", "SYSTEM TABLE", "VIRTUAL TABLE" };
 		}
 		else if(v!=null)
 			types = new String[] { "VIEW" };
