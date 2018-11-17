@@ -27,6 +27,8 @@ import com.gemstone.gemfire.internal.shared.Version;
 
 public class SnappyRegionStats implements VersionedDataSerializable {
 
+  private static final long serialVersionUID = -2793473664036745905L;
+
   private boolean isColumnTable = false;
   private String tableName;
   private long rowCount = 0;
@@ -151,7 +153,6 @@ public class SnappyRegionStats implements VersionedDataSerializable {
     DataSerializer.writeString(tableName, out);
     out.writeLong(totalSize);
     out.writeLong(sizeInMemory);
-    out.writeLong(sizeSpillToDisk);
     out.writeLong(rowCount);
     out.writeBoolean(isColumnTable);
     out.writeBoolean(isReplicatedTable);
@@ -161,13 +162,13 @@ public class SnappyRegionStats implements VersionedDataSerializable {
   public void toData(final DataOutput out) throws IOException {
     toDataPre_STORE_1_6_2_0(out);
     out.writeInt(bucketCount);
+    out.writeLong(sizeSpillToDisk);
   }
 
   public void fromDataPre_STORE_1_6_2_0(DataInput in) throws IOException {
     this.tableName = DataSerializer.readString(in);
     this.totalSize = in.readLong();
     this.sizeInMemory = in.readLong();
-    this.sizeSpillToDisk = in.readLong();
     this.rowCount = in.readLong();
     this.isColumnTable = in.readBoolean();
     this.isReplicatedTable = in.readBoolean();
@@ -177,6 +178,7 @@ public class SnappyRegionStats implements VersionedDataSerializable {
   public void fromData(DataInput in) throws IOException {
     fromDataPre_STORE_1_6_2_0(in);
     this.bucketCount = in.readInt();
+    this.sizeSpillToDisk = in.readLong();
   }
 
   @Override
