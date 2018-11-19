@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -101,7 +101,7 @@ public abstract class LauncherBase {
       "The server is still starting. " +
           "{0} seconds have elapsed since the last log message: \n {1}";
   public static final String LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY =
-      "ERROR: A {0} is already running in directory \"{1}\"";
+      "WARN: A {0} is already running in directory \"{1}\"";
   private static final String LAUNCHER_EXPECTED_BOOLEAN =
       "Expected true or false for \"{0}=<value>\" but was \"{1}\"";
 
@@ -190,7 +190,7 @@ public abstract class LauncherBase {
     } catch (Exception e) {
       // ignore exception and return zero
     }
-    if (memSize != null && (memSize instanceof Number)) {
+    if (memSize instanceof Number) {
       totalMemory = ((Number)memSize).longValue();
     }
     return totalMemory;

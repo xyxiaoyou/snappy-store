@@ -17,8 +17,26 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-
+#include <stdlib.h>
 #include <jvmti.h>
+
+
+static FILE* g_logFile = NULL;
+
+void logMessage(char *format, ...) {
+   FILE* logFile = g_logFile;
+   if (logFile == NULL) {
+     char fname[100];
+     sprintf(fname, "jvmkill_pid%d.log", getpid());
+     logFile = fopen(fname, "a");
+     g_logFile = logFile;
+   }
+   va_list args;
+   va_start(args, format);
+   vfprintf(logFile, format, args);
+   va_end(args);
+   fflush(logFile);
+}
 
 static void JNICALL
 resourceExhausted(
@@ -26,22 +44,18 @@ resourceExhausted(
       JNIEnv *jni_env,
       jint flags,
       const void *reserved,
-      const char *description)
-{
-   fprintf(stderr,
-      "ResourceExhausted: %s: killing current process!\n", description);
+      const char *description) {
+   logMessage("ResourceExhausted: %s: killing current process!", description);
    kill(getpid(), SIGKILL);
 }
 
 JNIEXPORT jint JNICALL
-Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
-{
+Agent_OnLoad(JavaVM *vm, char *options, void *reserved) {
    jvmtiEnv *jvmti;
    jvmtiError err;
-
    jint rc = (*vm)->GetEnv(vm, (void **) &jvmti, JVMTI_VERSION);
    if (rc != JNI_OK) {
-      fprintf(stderr, "ERROR: GetEnv failed: %d\n", rc);
+      logMessage("ERROR: GetEnv failed: %d\n", rc);
       return JNI_ERR;
    }
 
@@ -52,14 +66,14 @@ Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 
    err = (*jvmti)->SetEventCallbacks(jvmti, &callbacks, sizeof(callbacks));
    if (err != JVMTI_ERROR_NONE) {
-      fprintf(stderr, "ERROR: SetEventCallbacks failed: %d\n", err);
+      logMessage("ERROR: SetEventCallbacks failed: %d\n", err);
       return JNI_ERR;
    }
 
    err = (*jvmti)->SetEventNotificationMode(
          jvmti, JVMTI_ENABLE, JVMTI_EVENT_RESOURCE_EXHAUSTED, NULL);
    if (err != JVMTI_ERROR_NONE) {
-      fprintf(stderr, "ERROR: SetEventNotificationMode failed: %d\n", err);
+      logMessage("ERROR: SetEventNotificationMode failed: %d\n", err);
       return JNI_ERR;
    }
 
