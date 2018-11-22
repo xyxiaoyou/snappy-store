@@ -78,17 +78,17 @@ namespace io {
         class ControlConnection {
         private:
           /**********Data members********/
-          static thrift::ServerType::type m_snappyServerType;
+          thrift::ServerType::type m_snappyServerType;
           //const SSLSocketParameters& m_sslParams;
-          static std::set<thrift::ServerType::type> m_snappyServerTypeSet;
-          static std::vector<thrift::HostAddress> m_locators;
-          static thrift::HostAddress m_controlHost;
-          static std::unique_ptr<thrift::LocatorServiceClient> m_controlLocator;
-          static std::unordered_set<thrift::HostAddress> m_controlHostSet;
+          std::set<thrift::ServerType::type> m_snappyServerTypeSet;
+          std::vector<thrift::HostAddress> m_locators;
+          thrift::HostAddress m_controlHost;
+          std::unique_ptr<thrift::LocatorServiceClient> m_controlLocator;
+          std::unordered_set<thrift::HostAddress> m_controlHostSet;
           const std::set<std::string>& m_serverGroups;
 
           boost::mutex m_lock;
-          static bool m_framedTransport;
+          bool m_framedTransport;
           /**
            * Since one DS is supposed to have one ControlConnection, so we expect the
            * total size of this static global list to be small.
@@ -101,22 +101,20 @@ namespace io {
           ControlConnection():m_serverGroups(std::set<std::string>()){};
           ControlConnection(ClientService *const &service);
 
-          static void failoverToAvailableHost(std::set<thrift::HostAddress>& failedServers,
+          void failoverToAvailableHost(std::set<thrift::HostAddress>& failedServers,
               bool checkFailedControlHosts,  std::exception* failure);
-          //
-          static void refreshAllHosts(const std::vector<thrift::HostAddress>& allHosts);
-          //
-          static const thrift::SnappyException* unexpectedError(
-              const std::exception& e, const thrift::HostAddress& host);
 
-          static thrift::SnappyException* failoverExhausted(const std::set<thrift::HostAddress>& failedServers,
-              std::exception* failure);
+          void refreshAllHosts(const std::vector<thrift::HostAddress>& allHosts);
 
-          static void getLocatorPreferredServer(thrift::HostAddress& prefHostAddr,std::set<thrift::HostAddress>& failedServers,
+          const thrift::SnappyException* unexpectedError(const std::exception& e, const thrift::HostAddress& host);
+
+          thrift::SnappyException* failoverExhausted(const std::set<thrift::HostAddress>& failedServers,std::exception* failure);
+
+          void getLocatorPreferredServer(thrift::HostAddress& prefHostAddr,std::set<thrift::HostAddress>& failedServers,
               std::set<std::string>serverGroups);
 
           void getPreferredServer(thrift::HostAddress& preferredServer,std::exception* failure,
-                        bool forFailover = false);
+              bool forFailover = false);
         public:
 
           static const boost::optional<ControlConnection&> getOrCreateControlConnection(

@@ -383,11 +383,9 @@ void ClientService::openConnection(thrift::HostAddress& hostAddr,
         m_connId, m_token, ex.get());
   }
 
-  m_currentHostAddr = hostAddr;
   while (true) {
-
+    boost::lock_guard<boost::mutex> serviceGuard(m_lock);
     if (m_loadBalance) {
-      boost::lock_guard<boost::mutex> serviceGuard(m_lock);
       boost::optional<ControlConnection&> controlService = ControlConnection::getOrCreateControlConnection(m_connHosts,this,nullptr);
       // at this point query the control service for preferred server
       controlService->getPreferredServer(hostAddr ,nullptr,failedServers,this->m_serverGroups, false);
