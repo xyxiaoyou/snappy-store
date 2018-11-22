@@ -779,6 +779,9 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
   private final static String GFXD_SYS_PROC_CLASSNAME =
     "com.pivotal.gemfirexd.internal.engine.ddl.catalog.GfxdSystemProcedures";
 
+  private final static String V2_CONNECTOR_PROC_CLASSNAME =
+      "com.pivotal.gemfirexd.internal.engine.ddl.catalog.V2ConnectorProcedures";
+
   private final static String HDFS_PROC_CLASSNAME = 
     "com.pivotal.gemfirexd.internal.engine.diag.HdfsProcedures";
 
@@ -2091,6 +2094,23 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
       super.createSystemProcedureOrFunction("COLUMN_TABLE_SCAN", sysUUID,
           arg_names, arg_types, 0, 1, RoutineAliasInfo.READS_SQL_DATA, null,
           newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
+    }
+
+    {
+      // V2_GET_TABLE_METADATA
+      String[] arg_names = new String[] { "TABLE_NAME", "SCHEMA_AS_JSON",
+          "STORAGE_TYPE", "BUCKET_COUNT", "PARTITION_COLUMNS", "BUCKET_TO_SERVER_MAPPING" };
+      TypeDescriptor[] arg_types = new TypeDescriptor[] {
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
+          DataTypeDescriptor.getCatalogType(Types.CLOB),
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
+          DataTypeDescriptor.getCatalogType(Types.INTEGER),
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
+          DataTypeDescriptor.getCatalogType(Types.CLOB)
+      };
+      super.createSystemProcedureOrFunction("V2_GET_TABLE_METADATA", sysUUID,
+          arg_names, arg_types, 5, 0, RoutineAliasInfo.READS_SQL_DATA, null,
+          newlyCreatedRoutines, tc, V2_CONNECTOR_PROC_CLASSNAME, false);
     }
   }
 

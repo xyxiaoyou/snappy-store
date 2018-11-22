@@ -1515,7 +1515,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
 
   }
 
-  private static void getPRMetaData(final PartitionedRegion region,
+  static void getPRMetaData(final PartitionedRegion region,
       final String tableName, final String[] partColumns,
       final int[] bucketCount, final Clob[] bucketToServerMapping) throws SQLException {
     bucketCount[0] = region.getTotalNumberOfBuckets();
@@ -1533,7 +1533,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
     GET_BUCKET_TO_SERVER_MAPPING2(tableName, bucketToServerMapping);
   }
 
-  private static void getRRMetaData(final DistributedRegion region,
+  static void getRRMetaData(final DistributedRegion region,
       final Clob[] replicaNodes) {
     // replica to server mapping
     Set<InternalDistributedMember> owners = new HashSet<>();

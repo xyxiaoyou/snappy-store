@@ -197,6 +197,12 @@ public abstract class CallbackFactoryProvider {
     @Override
     public void refreshPolicies(String ldapGroup) {
     }
+
+    @Override
+    public String jsonSchema(Object schema) {
+      throw new UnsupportedOperationException("unexpected invocation for "
+          + toString());
+    }
   };
 
   public static void setStoreCallbacks(StoreCallbacks cb) {

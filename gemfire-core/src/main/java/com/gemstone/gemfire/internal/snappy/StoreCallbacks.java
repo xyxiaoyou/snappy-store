@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Set;
 
+import com.gemstone.gemfire.cache.query.types.StructType;
 import com.gemstone.gemfire.internal.cache.BucketRegion;
 import com.gemstone.gemfire.internal.cache.EntryEventImpl;
 import com.gemstone.gemfire.internal.cache.lru.LRUEntry;
@@ -147,4 +148,11 @@ public interface StoreCallbacks {
    * @param ldapGroup
    */
   void refreshPolicies(String ldapGroup);
+
+  /**
+   * return a json string for StructType schema
+   * @param schema
+   * @return
+   */
+  String jsonSchema(Object schema);
 }
