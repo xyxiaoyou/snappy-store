@@ -149,9 +149,10 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
     failoverToAvailableHost(failedServers, false,failure);
     forFailover = true;
   }
+  boost::lock_guard<boost::mutex> localGuard(m_lock);
   bool firstCall = true;
   while(true){
-    boost::lock_guard<boost::mutex> localGuard(m_lock);
+
     try{
       if(forFailover){
         //TODO: SanityManager
