@@ -71,6 +71,12 @@ public class V2ConnectorProcedures extends GfxdSystemProcedures {
       final GemFireContainer container = CallbackProcedures
           .getContainerForTable(schema, table);
 
+      /*
+      * TODO: Is it okay to use ExternalTableMetaData in GFContainer just to get schema and table type
+      * Other way would be to fetch it from Hive metadata.
+      * Note: For row tables ExternalTableMetaData object in GFContainer by default is not populated
+      * Call below will populate it
+      **/
       ExternalTableMetaData externalTableMetaData = container.fetchHiveMetaData(false);
       String schemaString = CallbackFactoryProvider.getStoreCallbacks().jsonSchema(externalTableMetaData.schema);
       schemaAsJson[0] = new HarmonySerialClob(schemaString);
