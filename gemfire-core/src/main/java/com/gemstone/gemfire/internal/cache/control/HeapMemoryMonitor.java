@@ -16,14 +16,12 @@
  */
 package com.gemstone.gemfire.internal.cache.control;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryPoolMXBean;
 import java.lang.management.MemoryType;
 import java.lang.management.MemoryUsage;
-import java.util.ArrayList;
+import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -38,7 +36,6 @@ import javax.management.NotificationEmitter;
 import javax.management.NotificationListener;
 
 import com.gemstone.gemfire.CancelException;
-import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.SystemFailure;
 import com.gemstone.gemfire.cache.CacheClosedException;
 import com.gemstone.gemfire.cache.query.internal.QueryMonitor;
@@ -687,20 +684,22 @@ public void stopMonitoring() {
   /**
    * Logs heap histogram for given pid
    *
-   * @param pid
-   *          PID of the process for which heap histogram is to be logged
+   * @param pid PID of the process for which heap histogram is to be logged
    */
-  public void jmapHisto(String pid) {
+  public void jmapDump(String pid) {
     try {
       List<String> inputArgs = ManagementFactory.getRuntimeMXBean().getInputArguments();
       String[] jmapCommand;
-      if(inputArgs.contains("-XX:+HeapDumpOnOutOfMemoryError")) {
-        jmapCommand = new String[] { "sh", "-c", "jmap -dump:format=b,file=" +
-            pid + PartitionedRegion.rand.nextInt() + ".hprof "+ pid
+      SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd_HHmmss");
+      String dateSuffix = dateFormat.format(new java.util.Date(
+          System.currentTimeMillis()));
+      if (inputArgs.contains("-XX:+HeapDumpOnOutOfMemoryError")) {
+        jmapCommand = new String[] { "/bin/sh", "-c", "jmap -dump:format=b,file=" +
+            "java_pid" + pid + "-" + dateSuffix + ".hprof " + pid
         };
-      }else{
-        jmapCommand = new String[] { "sh", "-c", "jmap -histo " + pid + " > " +
-            pid + PartitionedRegion.rand.nextInt() + ".jmap"
+      } else {
+        jmapCommand = new String[] { "/bin/sh", "-c", "jmap -histo " + pid + " > " +
+            "java_pid" + pid + "-" + dateSuffix + ".jmap"
         };
       }
       Process jmapProcess = Runtime.getRuntime().exec(jmapCommand);
@@ -720,7 +719,7 @@ public void stopMonitoring() {
     if (event.isLocal()) {
       if (event.getState().isCritical() && !event.getPreviousState().isCritical()) {
         int pid = NativeCalls.getInstance().getProcessId();
-        jmapHisto(Integer.toString(pid));
+        jmapDump(Integer.toString(pid));
         this.stats.incHeapCriticalEvents();
       } else if (!event.getState().isCritical() && event.getPreviousState().isCritical()) {
         this.stats.incHeapSafeEvents();
