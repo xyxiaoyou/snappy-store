@@ -3294,6 +3294,7 @@ public class SQLTest {
       try {
         Log.getLogWriter().info("verifyResultSets-verifyResultSets-schema " + table[0] + " and table " + table[1]);
         verifyResultSets(dConn, gConn, table[0], table[1]);
+
         dumpDiagnostics(gConn, table[0], table[1]);
       }catch (TestException te) {
         if (verifyUsingOrderBy) throw te; //avoid OOME on accessor due to failure with large resultset
@@ -3326,19 +3327,19 @@ public class SQLTest {
       if (region instanceof PartitionedRegion) {  // if partition table get redundancy level
         redundantCopies = ((PartitionedRegion)region).getRedundantCopies();
         Log.getLogWriter().info("DataPolicy is partition and redundancy is :" + redundantCopies);
-
-        PreparedStatement ps1 = gConn.prepareStatement(
-            "select count(*), dsid() from sys.members m --GEMFIREXD-PROPERTIES withSecondaries=false \n ,  " +
-                fullyQualifiedTableName + " where dsid() = m.id group by dsid()");
+        String sql = "select count(*), dsid() from sys.members m --GEMFIREXD-PROPERTIES withSecondaries=false \n ,  " +
+            fullyQualifiedTableName + " where dsid() = m.id group by dsid()";
+        Log.getLogWriter().info("Executing query : " + sql);
+        PreparedStatement ps1 = gConn.prepareStatement(sql);
         ResultSet rsWithoutSecondary = ps1.executeQuery();
         while (rsWithoutSecondary.next()) {
           numRecordsInTable += rsWithoutSecondary.getInt(1);
         }
         rsWithoutSecondary.close();
-
-        ps1 = gConn.prepareStatement(
-            "select count(*), dsid() from sys.members m --GEMFIREXD-PROPERTIES withSecondaries=true \n ,  " +
-                fullyQualifiedTableName + " where dsid() = m.id group by dsid()");
+        String sql1 = "select count(*), dsid() from sys.members m --GEMFIREXD-PROPERTIES withSecondaries=true \n ,  " +
+            fullyQualifiedTableName + " where dsid() = m.id group by dsid()";
+        Log.getLogWriter().info("Executing query : " + sql1);
+        ps1 = gConn.prepareStatement(sql1);
         ResultSet rsWithSecondary = ps1.executeQuery();
         while (rsWithSecondary.next()) {
           numRecordsWithSecondary += rsWithSecondary.getInt(1);
@@ -3355,10 +3356,10 @@ public class SQLTest {
         numCopies = redundantCopies + 1;
       } else { // if replicated table
         Log.getLogWriter().info("DataPolicy is replicate and numdataStores is :" + numDataStores);
-
-        PreparedStatement ps1 = gConn.prepareStatement(
-            "select count(*), dsid() from sys.members m ,  " +
-                fullyQualifiedTableName + " where dsid() = m.id group by dsid()");
+        String sql2 = "select count(*), dsid() from sys.members m --GEMFIREXD-PROPERTIES withSecondaries=false \n , "
+            + fullyQualifiedTableName + " where dsid() = m.id group by dsid()";
+        Log.getLogWriter().info("Executing query :" + sql2);
+        PreparedStatement ps1 = gConn.prepareStatement(sql2);
         ResultSet rsWithoutSecondary = ps1.executeQuery();
         while (rsWithoutSecondary.next()) {
           numRowsInReplTable += rsWithoutSecondary.getInt(1);
@@ -3380,8 +3381,9 @@ public class SQLTest {
       }
 
       //compare number of rows in indexes
-      PreparedStatement ps2 = gConn.prepareStatement(
-          "select indexname,indextype from sys.indexes where schemaname=?  and tablename=? and indextype not in ('PRIMARY KEY','GLOBAL:HASH')");
+      String sql3 = "select indexname,indextype from sys.indexes where schemaname=?  and tablename=? and indextype not in ('PRIMARY KEY','GLOBAL:HASH')";
+      Log.getLogWriter().info("Executing query :" + sql3);
+      PreparedStatement ps2 = gConn.prepareStatement(sql3);
       ps2.setString(1, schema.toUpperCase());
       ps2.setString(2, table.toUpperCase());
       ResultSet rsIndex = ps2.executeQuery();
@@ -3390,9 +3392,10 @@ public class SQLTest {
         int numRows = 0;
         String indexName = rsIndex.getString("indexname");
         Log.getLogWriter().info("indexName :: " + indexName + "::" + rsIndex.getString("indextype"));
-        PreparedStatement ps3 = gConn.prepareStatement(
-            "select count(*), dsid() from sys.members m , " + fullyQualifiedTableName + " --GEMFIREXD-PROPERTIES index=" + indexName + " \n " +
-                "where dsid() = m.id group by dsid()");
+        String sql4 = "select count(*), dsid() from sys.members m , " + fullyQualifiedTableName + " --GEMFIREXD-PROPERTIES index=" + indexName + " \n " +
+            "where dsid() = m.id group by dsid()";
+        Log.getLogWriter().info("Executing query : " + sql4);
+        PreparedStatement ps3 = gConn.prepareStatement(sql4);
         ResultSet rs = ps3.executeQuery();
         while (rs.next()) {
           numRows += rs.getInt(1);
@@ -3417,6 +3420,7 @@ public class SQLTest {
     if (throwException) {
       if (dumpIndex) {
         try {
+          Log.getLogWriter().info("Dumping index data for " + schema + "." + table);
           ResultSet rs = gConn.createStatement().executeQuery("VALUES SYS.CHECK_TABLE_EX('" + schema + "','" + table + "')");
           rs.close();
         } catch (SQLException se) {
