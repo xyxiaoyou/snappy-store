@@ -3294,8 +3294,10 @@ public class SQLTest {
       try {
         Log.getLogWriter().info("verifyResultSets-verifyResultSets-schema " + table[0] + " and table " + table[1]);
         verifyResultSets(dConn, gConn, table[0], table[1]);
-
-        dumpDiagnostics(gConn, table[0], table[1]);
+        if(RemoteTestModule.getCurrentThread().getCurrentTask().getTaskTypeString().equals
+            ("CLOSETASK")) {
+          dumpDiagnostics(gConn, table[0], table[1]);
+        }
       }catch (TestException te) {
         if (verifyUsingOrderBy) throw te; //avoid OOME on accessor due to failure with large resultset
         Log.getLogWriter().info("verifyResultSets-do not throw Exception yet, until all tables are verified");
@@ -3327,20 +3329,23 @@ public class SQLTest {
       if (region instanceof PartitionedRegion) {  // if partition table get redundancy level
         redundantCopies = ((PartitionedRegion)region).getRedundantCopies();
         Log.getLogWriter().info("DataPolicy is partition and redundancy is :" + redundantCopies);
-        String sql = "select count(*), dsid() from sys.members m --GEMFIREXD-PROPERTIES withSecondaries=false \n ,  " +
+        String sql = "select count(*), dsid() from sys.members m --GEMFIREXD-PROPERTIES withSecondaries=true \n ,  " +
             fullyQualifiedTableName + " where dsid() = m.id group by dsid()";
         Log.getLogWriter().info("Executing query : " + sql);
         PreparedStatement ps1 = gConn.prepareStatement(sql);
+        ResultSet rsWithSecondary = ps1.executeQuery();
+
+        String sql1 = "select count(*), dsid() from sys.members m --GEMFIREXD-PROPERTIES withSecondaries=false \n ,  " +
+            fullyQualifiedTableName + " where dsid() = m.id group by dsid()";
+        Log.getLogWriter().info("Executing query : " + sql1);
+        ps1 = gConn.prepareStatement(sql1);
         ResultSet rsWithoutSecondary = ps1.executeQuery();
+
         while (rsWithoutSecondary.next()) {
           numRecordsInTable += rsWithoutSecondary.getInt(1);
         }
         rsWithoutSecondary.close();
-        String sql1 = "select count(*), dsid() from sys.members m --GEMFIREXD-PROPERTIES withSecondaries=true \n ,  " +
-            fullyQualifiedTableName + " where dsid() = m.id group by dsid()";
-        Log.getLogWriter().info("Executing query : " + sql1);
-        ps1 = gConn.prepareStatement(sql1);
-        ResultSet rsWithSecondary = ps1.executeQuery();
+
         while (rsWithSecondary.next()) {
           numRecordsWithSecondary += rsWithSecondary.getInt(1);
         }
