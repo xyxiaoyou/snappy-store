@@ -437,8 +437,8 @@ public class ResultSetHelper {
     StructTypeImpl gfxdsti = null;
     if (SQLDAPTest.cidByRange || SQLDAPTest.tidByList) gfxdsti = sti; //reuse derby structure to work around #46311 
     else gfxdsti = getStructType(gfxdResultSet);
-    Log.getLogWriter().info("[Sonal]Derby sti is : " + sti.toString());
-    Log.getLogWriter().info("[Sonal]Snappy sti is :" + gfxdsti.toString());
+    //Log.getLogWriter().info("Derby sti is : " + sti.toString());
+    //Log.getLogWriter().info("Snappy sti is :" + gfxdsti.toString());
     List<Struct> GFEList = asList(gfxdResultSet, gfxdsti, false);
     if (GFEList == null && SQLTest.isHATest) {
       //due to #41471 in HA && possible #42443 for offline exception test coverage
