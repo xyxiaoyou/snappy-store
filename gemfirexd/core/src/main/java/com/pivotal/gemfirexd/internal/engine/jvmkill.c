@@ -21,14 +21,21 @@
 #include <jvmti.h>
 
 
-static FILE * logFile = NULL;
+static FILE* g_logFile = NULL;
 
 void logMessage(char *format, ...) {
+   FILE* logFile = g_logFile;
+   if (logFile == NULL) {
+     char fname[100];
+     sprintf(fname, "jvmkill_pid%d.log", getpid());
+     logFile = fopen(fname, "a");
+     g_logFile = logFile;
+   }
    va_list args;
    va_start(args, format);
    vfprintf(logFile, format, args);
-   fflush(logFile);
    va_end(args);
+   fflush(logFile);
 }
 
 static void JNICALL
@@ -37,22 +44,20 @@ resourceExhausted(
       JNIEnv *jni_env,
       jint flags,
       const void *reserved,
-      const char *description)
-{
-   if(logFile == NULL) {
-     logFile = fopen("jvmkill.log", "a");
-   }
-   logMessage("ResourceExhausted: %s: killing current process!", description);
+      const char *description) {
+   int timeout = 30;
+   logMessage("ResourceExhausted: %s: sending SIGTERM to current process!\n", description);
+   kill(getpid(), SIGTERM);
+
+   logMessage("sleeping for %d seconds\n", timeout);
+   sleep(timeout);
+
+   logMessage("ResourceExhausted: %s: sending SIGKILL to current process!\n", description);
    kill(getpid(), SIGKILL);
 }
 
 JNIEXPORT jint JNICALL
-Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
-{
-   if(logFile == NULL) {
-        logFile = fopen("jvmkill.log", "a");
-   }
-
+Agent_OnLoad(JavaVM *vm, char *options, void *reserved) {
    jvmtiEnv *jvmti;
    jvmtiError err;
    jint rc = (*vm)->GetEnv(vm, (void **) &jvmti, JVMTI_VERSION);
