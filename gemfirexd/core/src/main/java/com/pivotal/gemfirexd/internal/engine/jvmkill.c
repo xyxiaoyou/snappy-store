@@ -45,14 +45,7 @@ resourceExhausted(
       jint flags,
       const void *reserved,
       const char *description) {
-   int timeout = 30;
-   logMessage("ResourceExhausted: %s: sending SIGTERM to current process!\n", description);
-   kill(getpid(), SIGTERM);
-
-   logMessage("sleeping for %d seconds\n", timeout);
-   sleep(timeout);
-
-   logMessage("ResourceExhausted: %s: sending SIGKILL to current process!\n", description);
+   logMessage("ResourceExhausted: %s: killing current process!", description);
    kill(getpid(), SIGKILL);
 }
 
