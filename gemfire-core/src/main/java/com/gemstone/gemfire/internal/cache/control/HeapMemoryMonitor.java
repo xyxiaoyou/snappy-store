@@ -95,9 +95,6 @@ public final class HeapMemoryMonitor implements NotificationListener,
   private static final int POLLER_INTERVAL =
        Integer.getInteger(POLLER_INTERVAL_PROP, 500);
 
-  // Duration in millis to wait for jmap -histo to finish
-  private static final int JMAP_HISTO_SLEEP_DURATION = 3 * 1000;
-
   // This holds a new event as it transitions from updateStateAndSendEvent(...) to fillInProfile()
   private ThreadLocal<MemoryEvent> upcomingEvent = new ThreadLocal<MemoryEvent>();
 
@@ -706,7 +703,7 @@ public void stopMonitoring() {
           if (filtArgs.length > 0) {
             heapDumpTimeout = Integer.parseInt(filtArgs[0].toString());
           }
-        }catch (NumberFormatException e) {
+        } catch (NumberFormatException e) {
           logger.warn("Failed to parse user provided value for " +
               "OnCriticalHeapDumpTimeoutSeconds. default value of 30 will be used");
         }
