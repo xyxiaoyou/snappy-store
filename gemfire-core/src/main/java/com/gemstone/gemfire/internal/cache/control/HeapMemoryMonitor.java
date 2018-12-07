@@ -21,7 +21,9 @@ import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryPoolMXBean;
 import java.lang.management.MemoryType;
 import java.lang.management.MemoryUsage;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -693,17 +695,34 @@ public void stopMonitoring() {
       SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd_HHmmss");
       String dateSuffix = dateFormat.format(new java.util.Date(
           System.currentTimeMillis()));
+      Integer waitTime;
+
       if (inputArgs.contains("-XX:+HeapDumpOnOutOfMemoryError")) {
+        Integer heapDumpTimeout = 30;
+        try {
+          Object[] filtArgs = inputArgs.stream()
+              .filter(e -> e.contains("snappydata.onCriticalHeapDumpTimeoutSeconds="))
+              .map(e -> e.split("=")[1]).toArray();
+          if (filtArgs.length > 0) {
+            heapDumpTimeout = Integer.parseInt(filtArgs[0].toString());
+          }
+        }catch (NumberFormatException e) {
+          logger.warn("Failed to parse user provided value for " +
+              "OnCriticalHeapDumpTimeoutSeconds. default value of 30 will be used");
+        }
+
         jmapCommand = new String[] { "/bin/sh", "-c", "jmap -dump:format=b,file=" +
             "java_pid" + pid + "-" + dateSuffix + ".hprof " + pid
         };
+        waitTime = heapDumpTimeout * 1000;
       } else {
         jmapCommand = new String[] { "/bin/sh", "-c", "jmap -histo " + pid + " > " +
             "java_pid" + pid + "-" + dateSuffix + ".jmap"
         };
+        waitTime = 3 * 1000;
       }
       Process jmapProcess = Runtime.getRuntime().exec(jmapCommand);
-      jmapProcess.waitFor(JMAP_HISTO_SLEEP_DURATION, TimeUnit.MILLISECONDS);
+      jmapProcess.waitFor(waitTime, TimeUnit.MILLISECONDS);
     } catch (Exception e) {
       logger.error("Failed to log heap histogram for pid: " + pid, e);
     }
