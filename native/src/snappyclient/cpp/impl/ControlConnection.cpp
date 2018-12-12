@@ -239,9 +239,9 @@ void ControlConnection::searchRandomServer(const std::set<thrift::HostAddress>& 
 void ControlConnection::failoverToAvailableHost(std::set<thrift::HostAddress>& failedServers,bool checkFailedControlHosts,
     std::exception* failure){
   boost::lock_guard<boost::mutex> localGuard(m_lock);
-  //for(auto iterator = m_controlHostSet.begin();iterator!= m_controlHostSet.end(); ++iterator ){
-   NEXT: for(thrift::HostAddress controlAddr : m_controlHostSet){
-    //thrift::HostAddress controlAddr = *iterator;
+  for(auto iterator = m_controlHostSet.begin();iterator!= m_controlHostSet.end(); ++iterator ){
+  // NEXT: for(thrift::HostAddress controlAddr : m_controlHostSet){
+    thrift::HostAddress controlAddr = *iterator;
     if(checkFailedControlHosts && ! failedServers.empty() && (failedServers.find(controlAddr) != failedServers.end())){
       continue;
     }
@@ -306,8 +306,8 @@ void ControlConnection::failoverToAvailableHost(std::set<thrift::HostAddress>& f
       if(outTransport != nullptr){
         outTransport->close();
       }
-      //continue;
-      goto NEXT;
+      continue;
+      //goto NEXT;
     }catch(std::exception &ex){
       throw unexpectedError(ex,controlAddr);
     }
