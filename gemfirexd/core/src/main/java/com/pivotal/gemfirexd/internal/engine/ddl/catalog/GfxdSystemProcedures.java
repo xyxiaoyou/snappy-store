@@ -3125,7 +3125,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
       byte[] batchFilters = null;
       if (filters != null) {
         batchFilters = filters.getBytes(1, (int)filters.length());
-        if(useKryoSerializer) filters.free();
+//        if(useKryoSerializer) filters.free();
       }
       Set<Integer> bucketIds = lcc.getBucketIdsForLocalExecution();
       final CloseableIterator<ColumnTableEntry> iter =
