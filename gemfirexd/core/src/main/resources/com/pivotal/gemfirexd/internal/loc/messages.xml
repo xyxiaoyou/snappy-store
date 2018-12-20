@@ -5427,6 +5427,11 @@ ln=lower-case two-letter ISO-639 language code, CO=upper-case two-letter ISO-316
                 <text>Operations on column tables are not supported when query routing is disabled or autocommit is false</text>
             </msg>
 
+            <msg>
+                <name>XJ219.S</name>
+                <text>PutInto operation on column table is not supported</text>
+            </msg>
+
         </family>
 
         <family>

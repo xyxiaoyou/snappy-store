@@ -1713,6 +1713,7 @@ public interface SQLState {
     String LOB_OBJECT_LENGTH_UNKNOWN_YET = "XJ216.S";
     String LOB_LOCATOR_INVALID = "XJ217.S";
     String SNAPPY_OP_DISALLOWED_ON_COLUMN_TABLES = "XJ218.S";
+    String PUTINTO_OP_DISALLOWED_ON_COLUMN_TABLES = "XJ219.S";
     
     //XN - Network-level messages
     String NET_CONNECTION_RESET_NOT_ALLOWED_IN_UNIT_OF_WORK         = "XN001.S";
