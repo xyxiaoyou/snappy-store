@@ -54,8 +54,8 @@ import com.gemstone.gemfire.internal.concurrent.MapResult;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
-import io.snappydata.collection.ObjectLongHashMap;
-import io.snappydata.collection.ObjectObjectHashMap;
+import org.eclipse.collections.impl.map.mutable.UnifiedMap;
+import org.eclipse.collections.impl.map.mutable.primitive.ObjectLongHashMap;
 
 /**
  * <p>
@@ -378,7 +378,7 @@ public final class TXManagerImpl implements CacheTransactionManager,
      */
     Object isTXCommitted(TXId txId) {
       TXFinished result = this.finishedMap.get(txId);
-      return result != null ? Boolean.valueOf(result.isCommit) : null;
+      return result != null ? result.isCommit : null;
     }
 
     /**
@@ -388,8 +388,7 @@ public final class TXManagerImpl implements CacheTransactionManager,
      */
     ObjectLongHashMap<TXId> getTXCommitOrders(Collection<TXId> txIds) {
       final HashMap<TXId, TXId> txIdSet = new HashMap<TXId, TXId>(txIds.size());
-      final ObjectLongHashMap<TXId> txIdOrders =
-          ObjectLongHashMap.withExpectedSize(16);
+      final ObjectLongHashMap<TXId> txIdOrders = new ObjectLongHashMap<>(16);
       for (TXId txId : txIds) {
         txIdSet.put(txId, txId);
       }
@@ -1402,8 +1401,7 @@ public final class TXManagerImpl implements CacheTransactionManager,
         final TXRegionState[] txrs = tx.getTXRegionStatesSnap();
         for (TXRegionState txr : txrs) {
           if (txr != null) {
-            ObjectObjectHashMap<Object, Object> entryMods =
-                txr.getInternalEntryMap();
+            UnifiedMap<Object, Object> entryMods = txr.getInternalEntryMap();
             for (Object obj : entryMods.values()) {
               if (obj instanceof TXEntryState) {
                 TXEntryState txe = (TXEntryState) obj;

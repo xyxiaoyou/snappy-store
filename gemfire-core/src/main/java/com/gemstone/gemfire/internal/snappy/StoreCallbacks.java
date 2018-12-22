@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -62,9 +62,7 @@ public interface StoreCallbacks {
       int[] projection, byte[] serializedFilters,
       Set<Integer> bucketIds) throws SQLException;
 
-  void registerRelationDestroyForHiveStore();
-
-  void performConnectorOp(Object ctx);
+  void registerCatalogSchemaChange();
 
   Object getSnappyTableStats();
 
@@ -152,4 +150,9 @@ public interface StoreCallbacks {
    * @param ldapGroup
    */
   void refreshPolicies(String ldapGroup);
+
+  /**
+   * Check permission for current user on given schema.
+   */
+  String checkSchemaPermission(String schema, String currentUser);
 }

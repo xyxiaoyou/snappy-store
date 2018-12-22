@@ -667,12 +667,12 @@ public abstract class AbstractRowLocation implements RowLocation {
 
   @Override
   public Object getRawValue() {
-    throw new UnsupportedOperationException(" Implement the method in concrete class");
+    throw new UnsupportedOperationException("Implement the method in concrete class");
   }
 
   @Override
   public boolean isValueNull() {
-    throw new UnsupportedOperationException(" Implement the method in concrete class");
+    throw new UnsupportedOperationException("Implement the method in concrete class");
   }
 
   @Override

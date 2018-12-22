@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -149,11 +149,10 @@ import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.HeapBufferAllocator;
 import com.gemstone.gemfire.internal.shared.LauncherBase;
 import com.gemstone.gemfire.internal.shared.NativeCalls;
-import com.gemstone.gemfire.internal.shared.unsafe.UnsafeHolder;
-import io.snappydata.collection.OpenHashSet;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.shared.Version;
 import com.gemstone.gemfire.internal.shared.unsafe.DirectBufferAllocator;
+import com.gemstone.gemfire.internal.shared.unsafe.UnsafeHolder;
 import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
 import com.gemstone.gemfire.internal.snappy.StoreCallbacks;
 import com.gemstone.gemfire.internal.snappy.memory.MemoryManagerStats;
@@ -176,7 +175,8 @@ import com.gemstone.gemfire.pdx.internal.PdxInstanceFactoryImpl;
 import com.gemstone.gemfire.pdx.internal.PdxInstanceImpl;
 import com.gemstone.gemfire.pdx.internal.TypeRegistry;
 import com.gemstone.gnu.trove.THashSet;
-import io.snappydata.collection.ObjectObjectHashMap;
+import org.eclipse.collections.impl.map.mutable.UnifiedMap;
+import org.eclipse.collections.impl.set.mutable.UnifiedSet;
 
 // @todo somebody Come up with more reasonable values for {@link #DEFAULT_LOCK_TIMEOUT}, etc.
 /**
@@ -645,9 +645,10 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
       region.acquirePoolMemory(0, oldRe.getValueSize(), oldRe.isForDelete(), null, true);
     }
 
-    if(getLoggerI18n().fineEnabled()) {
-      getLoggerI18n().fine("For " + regionPath + " adding " +
-          oldRe + " to oldEntrMap");
+    if (getLoggerI18n().fineEnabled()) {
+      getLoggerI18n().info(LocalizedStrings.DEBUG, "For " + regionPath + " adding " +
+          oldRe + " to oldEntrMap" + ". The entry in region is " + newEntry + " version in region " +
+          newEntry.getVersionStamp().getEntryVersion());
     }
 
     Map<Object, BlockingQueue<RegionEntry>> snapshot = this.oldEntryMap.get(regionPath);
@@ -669,7 +670,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
     }
 
     if (getLoggerI18n().fineEnabled()) {
-      getLoggerI18n().fine("For key  " + oldRe.getKeyCopy() + " " +
+      getLoggerI18n().info(LocalizedStrings.DEBUG, "For key  " + oldRe.getKeyCopy() + " " +
           "the entries are " + snapshot.get(oldRe.getKeyCopy()));
     }
   }
@@ -684,6 +685,47 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
     } else {
       oldEntryqueue.add(oldRe);
     }
+  }
+
+
+  // keeping this for debug purposes
+  final void printOldEntries(Region region, final Object entryKey,
+      final Map<String, Map<VersionSource, RegionVersionHolder>> snapshot, final boolean
+      checkValid, RegionEntry re, TXState txState) {
+
+
+    String regionPath = region.getFullPath();
+
+    List<RegionEntry> oldEntries = new ArrayList<>();
+    Map<Object, BlockingQueue<RegionEntry>> regionMap = oldEntryMap.get(regionPath);
+    if (regionMap == null) {
+      if (true) {
+        getLoggerI18n().info(LocalizedStrings.DEBUG, "For region  " + region + " the snapshot doesn't have any snapshot yet but there " +
+            "are entries present in the region" +
+            " the RVV " + ((LocalRegion)region).getVersionVector().fullToString() + " and snapshot RVV " +
+            ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() + "against the key " + entryKey +
+            " the entry in region is " + re + " with version " + re.getVersionStamp().asVersionTag());
+      }
+      return;
+    }
+
+    BlockingQueue<RegionEntry> entries = regionMap.get(entryKey);
+    if (entries == null) {
+      if (getLoggerI18n().fineEnabled()) {
+        getLoggerI18n().info(LocalizedStrings.DEBUG, "For region  " + region + " the snapshot doesn't have any snapshot yet but there " +
+            "are entries present in the region" +
+            " the RVV " + ((LocalRegion)region).getVersionVector().fullToString() + " and snapshot RVV " +
+            ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() + " the entries are " + entries + " against the key " + entryKey +
+            " the entry in region is " + re + " with version " + re.getVersionStamp().asVersionTag());
+      }
+      return;
+    }
+
+    getLoggerI18n().info(LocalizedStrings.DEBUG, "For region  " + region +
+        " the RVV " + ((LocalRegion)region).getVersionVector().fullToString() + " and snapshot RVV " +
+        ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() + " the entries are " + entries +
+        "against the key " + entryKey +
+        " the entry in region is " + re + " with version " + re.getVersionStamp().asVersionTag());
   }
 
   final Object readOldEntry(Region region, final Object entryKey,
@@ -702,7 +744,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
       Map<Object, BlockingQueue<RegionEntry>> regionMap = oldEntryMap.get(regionPath);
       if (regionMap == null) {
         if (getLoggerI18n().fineEnabled()) {
-          getLoggerI18n().fine("For region  " + region + " the snapshot doesn't have any snapshot yet but there " +
+          getLoggerI18n().info(LocalizedStrings.DEBUG,"For region  " + region + " the snapshot doesn't have any snapshot yet but there " +
               "are entries present in the region" +
               " the RVV " + ((LocalRegion)region).getVersionVector().fullToString() + " and snapshot RVV " +
               ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() + "against the key " + entryKey +
@@ -712,15 +754,19 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
       }
 
       BlockingQueue<RegionEntry> entries = regionMap.get(entryKey);
+      RegionEntry max = NonLocalRegionEntry.newEntry(re.getKeyCopy(), Token.TOMBSTONE,
+          (LocalRegion)region, null);
+      // returning TOMBSTONE as there could be case where an entry is inserted and
+      // modified multiple times after an snapshot is taken
       if (entries == null) {
         if (getLoggerI18n().fineEnabled()) {
-        getLoggerI18n().fine("For region  " + region + " the snapshot doesn't have any snapshot yet but there " +
+        getLoggerI18n().info(LocalizedStrings.DEBUG,"For region  " + region + " the snapshot doesn't have any snapshot yet but there " +
             "are entries present in the region" +
             " the RVV " + ((LocalRegion)region).getVersionVector().fullToString() + " and snapshot RVV " +
             ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() + " the entries are " + entries + " against the key " + entryKey +
         " the entry in region is " + re + " with version " + re.getVersionStamp().asVersionTag());
         }
-        return null;
+        return max;
       }
       for (RegionEntry value : entries) {
         if (TXState.checkEntryInSnapshot(txState, region, value)) {
@@ -728,12 +774,8 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
         }
       }
 
-      RegionEntry max = NonLocalRegionEntry.newEntry(re.getKeyCopy(), Token.TOMBSTONE,
-          (LocalRegion)region, null);
       for (RegionEntry entry : oldEntries) {
-        if (null == max) {
-          max = entry;
-        } else if (max.getVersionStamp().getEntryVersion() <= entry.getVersionStamp()
+        if (max.getVersionStamp().getEntryVersion() <= entry.getVersionStamp()
             .getEntryVersion()) {
           max = entry;
         }
@@ -792,6 +834,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
 
   class OldEntriesCleanerThread implements Runnable {
     // Keep each entry alive for at least 20 secs.
+
     public void run() {
       try {
         if (!oldEntryMap.isEmpty()) {
@@ -800,17 +843,25 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
             LocalRegion region = (LocalRegion)getRegion(entry.getKey());
             if (region == null) continue;
 
+            if (getLoggerI18n().fineEnabled()) {
+              getLoggerI18n().info(LocalizedStrings.DEBUG, "The size of map for region " +
+                  region.getFullPath() +
+                  " is " + regionEntryMap.size());
+            }
+
             for (Entry<Object, BlockingQueue<RegionEntry>> oldEntry: regionEntryMap.entrySet()) {
               Object key = oldEntry.getKey();
               BlockingQueue<RegionEntry> oldEntriesQueue = oldEntry.getValue();
 
               for (RegionEntry re : oldEntriesQueue) {
+                // update in progress guards against the race where oldEntry and
+                // entry in region have same version for brief period
                 if (re.isUpdateInProgress()) {
                   continue;
                 } else {
-                  if (notRequiredByAnyTx(oldEntriesQueue, region, re)) {
+                  if (notRequiredByAnyTx(oldEntriesQueue, (LocalRegion)region, re)) {
                     if (getLoggerI18n().fineEnabled()) {
-                      getLoggerI18n().fine(
+                      getLoggerI18n().info(LocalizedStrings.DEBUG,
                           "OldEntriesCleanerThread : Removing the entry " + re );
                     }
                     // continue if some explicit call removed the entry
@@ -829,7 +880,6 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
                     }
                   }
                 }
-
               }
             }
           }
@@ -859,10 +909,10 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
     }
 
     boolean notRequiredByAnyTx(BlockingQueue<RegionEntry> queue,
-        Region region, RegionEntry re) {
+        LocalRegion region, RegionEntry re) {
+      //getLoggerI18n().info(LocalizedStrings.DEBUG,"OldEntriesCleanerThread: Getting called for re " + re);
       int myVersion = re.getVersionStamp().getEntryVersion();
-      Set<TXId> txIds = new OpenHashSet<TXId>(4);
-
+      Set<TXId> txIds = new UnifiedSet<TXId>(4);
       for (TXStateProxy txProxy : getTxManager().getHostedTransactionsInProgress()) {
         TXState txState = txProxy.getLocalTXState();
         if ((txState != null && !txState.isClosed() && TXState.checkEntryInSnapshot
@@ -871,42 +921,55 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
         }
       }
 
-      for (RegionEntry regionEntry : queue) {
-        if (regionEntry == re)
+      for (RegionEntry otherOldEntry : queue) {
+        if (otherOldEntry == re) {
           continue;
-        Set<TXId> othersTxIds = new OpenHashSet<TXId>(4);
+        }
+
+        Set<TXId> othersTxIds = new UnifiedSet<TXId>(4);
         for (TXStateProxy txProxy : getTxManager().getHostedTransactionsInProgress()) {
           TXState txState = txProxy.getLocalTXState();
           if ((txState != null && !txState.isClosed() && TXState.checkEntryInSnapshot
-              (txState, region, regionEntry))) {
+              (txState, region, otherOldEntry))) {
             othersTxIds.add(txState.getTransactionId());
           }
         }
 
         if (txIds.equals(othersTxIds)
-            && regionEntry.getVersionStamp().getEntryVersion() > myVersion) {
+            && otherOldEntry.getVersionStamp().getEntryVersion() > myVersion) {
           return true;
         }
       }
 
       // in the end check with the entry in region
-      RegionEntry entryInRegion = ((LocalRegion)region).entries.getEntry(re.getKey());
-      if (entryInRegion != null) {
-        Set<TXId> othersTxIds = new OpenHashSet<TXId>(4);
-        for (TXStateProxy txProxy : getTxManager().getHostedTransactionsInProgress()) {
-          TXState txState = txProxy.getLocalTXState();
-          if ((txState != null && !txState.isClosed() && TXState.checkEntryInSnapshot
-              (txState, region, entryInRegion))) {
-            othersTxIds.add(txState.getTransactionId());
-          }
-        }
+      RegionEntry entryInRegion = region.entries.getEntry(re.getKey());
+      if (entryInRegion == null) {
+        VersionTag versionTag = VersionTag.create(re.getVersionStamp().
+            asVersionTag().getMemberID());
+        versionTag.setEntryVersion(re.getVersionStamp().getEntryVersion() + 1);
+        versionTag.setRegionVersion(region.getVersionVector().getCurrentVersion());
+        entryInRegion = new NonLocalRegionEntry(re.getKey(), Token.TOMBSTONE, region, versionTag);
+      }
 
-        if (txIds.equals(othersTxIds)
-            && entryInRegion.getVersionStamp().getEntryVersion() > myVersion) {
-          return true;
+      Set<TXId> othersTxIds = new UnifiedSet<TXId>(4);
+      for (TXStateProxy txProxy : getTxManager().getHostedTransactionsInProgress()) {
+        TXState txState = txProxy.getLocalTXState();
+        if ((txState != null && !txState.isClosed() && TXState.checkEntryInSnapshot
+            (txState, region, entryInRegion))) {
+          othersTxIds.add(txState.getTransactionId());
         }
       }
 
+      // if entry in region is valid for all tx, then remove the entry in oldEntryMap
+      if (txIds.equals(othersTxIds)) {
+        if(getLoggerI18n().fineEnabled()) {
+          getLoggerI18n().info(LocalizedStrings.DEBUG, "OldEntriesCleanerThread: SKSK1 " +
+              " Entry in region " + entryInRegion + " its version " +
+              entryInRegion.getVersionStamp().getEntryVersion()
+              + " myVersion " + myVersion + " myRE " + re);
+        }
+        return true;
+      }
       return false;
     }
 
@@ -1686,8 +1749,8 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
     lockForSnapshotRvv.readLock().lock();
     try {
       // Wait for all the regions to get initialized before taking snapshot.
-      final ObjectObjectHashMap<String, Map> snapshot =
-          ObjectObjectHashMap.withExpectedSize(this.pathToRegion.size());
+      final UnifiedMap<String, Map> snapshot =
+          new UnifiedMap<>(this.pathToRegion.size());
       this.pathToRegion.values().forEach(region -> {
         if (region.isInternalRegion() || (region instanceof HARegion)) return;
         PartitionedRegion pr;
@@ -3645,7 +3708,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
   }
 
   public final Set<LocalRegion> getApplicationRegions() {
-    OpenHashSet<LocalRegion> result = new OpenHashSet<>();
+    UnifiedSet<LocalRegion> result = new UnifiedSet<>();
     synchronized (this.rootRegions) {
       for (Object r : this.rootRegions.values()) {
         LocalRegion rgn = (LocalRegion) r;

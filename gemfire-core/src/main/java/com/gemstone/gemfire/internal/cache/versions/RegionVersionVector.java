@@ -49,10 +49,10 @@ import com.gemstone.gemfire.internal.cache.TXState;
 import com.gemstone.gemfire.internal.cache.TXStateInterface;
 import com.gemstone.gemfire.internal.cache.persistence.DiskStoreID;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
-import io.snappydata.collection.OpenHashSet;
 import com.gemstone.gemfire.internal.shared.Version;
 import com.gemstone.gemfire.internal.util.concurrent.CopyOnWriteHashMap;
-import io.snappydata.collection.ObjectObjectHashMap;
+import org.eclipse.collections.impl.map.mutable.UnifiedMap;
+import org.eclipse.collections.impl.set.mutable.UnifiedSet;
 
 /**
  * RegionVersionVector tracks the highest region-level version number of
@@ -190,7 +190,7 @@ public abstract class RegionVersionVector<T extends VersionSource<?>> implements
     Map<T,RegionVersionHolder<T>> liveHolders;
     // we need to take a lock? so that memberToVersion is not modifed as we copy them
     // Find out
-    liveHolders = ObjectObjectHashMap.from(this.memberToVersion);
+    liveHolders = new UnifiedMap<>(this.memberToVersion);
     ConcurrentHashMap<T, RegionVersionHolder<T>> clonedHolders = new ConcurrentHashMap<T,
         RegionVersionHolder<T>>(liveHolders.size(), LOAD_FACTOR, CONCURRENCY_LEVEL);
 
@@ -234,7 +234,7 @@ public abstract class RegionVersionVector<T extends VersionSource<?>> implements
    */
   public RegionVersionVector<T> getCloneForTransmission(T mbr) {
     Map<T,RegionVersionHolder<T>> liveHolders;
-    liveHolders = ObjectObjectHashMap.from(this.memberToVersion);
+    liveHolders = new UnifiedMap<>(this.memberToVersion);
     RegionVersionHolder<T> holder = liveHolders.get(mbr);
     if (holder == null) {
       holder = new RegionVersionHolder<T>(-1);
@@ -255,11 +255,11 @@ public abstract class RegionVersionVector<T extends VersionSource<?>> implements
    * Retrieve a collection of tombstone GC region-versions
    */
   public Map<T, Long> getTombstoneGCVector() {
-    ObjectObjectHashMap<T, Long> result;
+    UnifiedMap<T, Long> result;
     synchronized(memberToGCVersion) {
-      result = ObjectObjectHashMap.from(this.memberToGCVersion);
+      result = new UnifiedMap<>(this.memberToGCVersion);
     }
-    result.justPut(this.myId, this.localGCVersion.get());
+    result.put(this.myId, this.localGCVersion.get());
     return result;
   }
 
@@ -929,7 +929,7 @@ public abstract class RegionVersionVector<T extends VersionSource<?>> implements
    */
   public Set<T> getDepartedMembersSet() {
     synchronized(this.memberToVersion) {
-      OpenHashSet<T> result = new OpenHashSet<>(4);
+      UnifiedSet<T> result = new UnifiedSet<>(4);
       for (RegionVersionHolder<T> h: this.memberToVersion.values()) {
         if (h.isDepartedMember) {
           result.add((T)h.id);
@@ -1490,10 +1490,10 @@ public abstract class RegionVersionVector<T extends VersionSource<?>> implements
     RegionVersionHolder<T> myExceptions;
     myExceptions = this.localExceptions.clone();
 
-    ObjectObjectHashMap<T, RegionVersionHolder<T>> results =
-        ObjectObjectHashMap.from(memberToVersion);
+    UnifiedMap<T, RegionVersionHolder<T>> results =
+        new UnifiedMap<>(memberToVersion);
 
-    results.justPut(getOwnerId(), myExceptions);
+    results.put(getOwnerId(), myExceptions);
     return results;
   }
   
@@ -1502,10 +1502,10 @@ public abstract class RegionVersionVector<T extends VersionSource<?>> implements
    * the local member. 
    */
   public Map<T, Long> getMemberToGCVersion() {
-    ObjectObjectHashMap<T, Long> results =
-        ObjectObjectHashMap.from(memberToGCVersion);
+    UnifiedMap<T, Long> results =
+        new UnifiedMap<>(memberToGCVersion);
     if(localGCVersion.get() > 0) {
-      results.justPut(getOwnerId(), localGCVersion.get());
+      results.put(getOwnerId(), localGCVersion.get());
     }
     return results;
   }

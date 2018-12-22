@@ -18,6 +18,7 @@ package com.gemstone.gemfire.internal.cache;
 
 import com.gemstone.gemfire.internal.cache.Oplog.OplogEntryIdMap;
 import junit.framework.TestCase;
+import org.eclipse.collections.api.iterator.LongIterator;
 
 /**
  * Tests DiskStoreImpl.OplogEntryIdMap
@@ -82,8 +83,11 @@ public class OplogEntryIdMapJUnitTest extends TestCase
     assertEquals(new Long(Long.MIN_VALUE), m.get(Long.MIN_VALUE));
     assertEquals(777777+1+777777+1+1, m.size());
 
-    final int[] count = new int[1];
-    m.forEachWhile((id, v) -> ++count[0] > 0);
-    assertEquals(777777+1+777777+1+1, count[0]);
+    int count = 0;
+    for (LongIterator it = m.keys(); it.hasNext();) {
+      count++;
+      it.next();
+    }
+    assertEquals(777777+1+777777+1+1, count);
   }
 }

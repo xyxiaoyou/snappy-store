@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -91,11 +91,7 @@ public abstract class CallbackFactoryProvider {
     }
 
     @Override
-    public void registerRelationDestroyForHiveStore() {
-    }
-
-    @Override
-    public void performConnectorOp(Object ctx) {
+    public void registerCatalogSchemaChange() {
     }
 
     @Override
@@ -200,6 +196,11 @@ public abstract class CallbackFactoryProvider {
 
     @Override
     public void refreshPolicies(String ldapGroup) {
+    }
+
+    @Override
+    public String checkSchemaPermission(String schema, String currentUser) {
+      return null;
     }
   };
 

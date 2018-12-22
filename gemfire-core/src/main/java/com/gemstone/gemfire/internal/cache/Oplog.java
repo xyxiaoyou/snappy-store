@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -35,35 +35,13 @@
 
 package com.gemstone.gemfire.internal.cache;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.EOFException;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InterruptedIOException;
-import java.io.RandomAccessFile;
-import java.io.SyncFailedException;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -118,10 +96,6 @@ import com.gemstone.gemfire.internal.offheap.annotations.Retained;
 import com.gemstone.gemfire.internal.sequencelog.EntryLogger;
 import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.NativeCalls;
-import com.koloboke.function.LongObjPredicate;
-import io.snappydata.collection.IntObjectHashMap;
-import io.snappydata.collection.LongObjectHashMap;
-import io.snappydata.collection.OpenHashSet;
 import com.gemstone.gemfire.internal.shared.UnsupportedGFXDVersionException;
 import com.gemstone.gemfire.internal.shared.Version;
 import com.gemstone.gemfire.internal.shared.unsafe.ChannelBufferUnsafeDataInputStream;
@@ -131,7 +105,12 @@ import com.gemstone.gemfire.internal.util.IOUtils;
 import com.gemstone.gemfire.internal.util.TransformUtils;
 import com.gemstone.gemfire.pdx.internal.PdxWriterImpl;
 import com.gemstone.gnu.trove.TLongHashSet;
-import io.snappydata.collection.ObjectObjectHashMap;
+import org.eclipse.collections.api.iterator.IntIterator;
+import org.eclipse.collections.api.iterator.LongIterator;
+import org.eclipse.collections.impl.map.mutable.UnifiedMap;
+import org.eclipse.collections.impl.map.mutable.primitive.IntObjectHashMap;
+import org.eclipse.collections.impl.map.mutable.primitive.LongObjectHashMap;
+import org.eclipse.collections.impl.set.mutable.UnifiedSet;
 
 /**
  * Implements an operation log to write to disk.
@@ -1472,7 +1451,7 @@ public final class Oplog implements CompactableOplog {
     Map<String,File> baselineOplogMap = TransformUtils.transformAndMap(baselineOplogFiles,TransformUtils.fileNameTransformer);
     
     // Returned Map of baseline file to current oplog file
-    Map<File,File> baselineToOplogMap = ObjectObjectHashMap.withExpectedSize(16);
+    UnifiedMap<File, File> baselineToOplogMap = new UnifiedMap<>(16);
     for(Iterator<File> itr = allFiles.iterator(); itr.hasNext(); ) {
       File file = itr.next();
       // If the file is in the baseline, add it to the baseline map and remove
@@ -2671,10 +2650,9 @@ public final class Oplog implements CompactableOplog {
     } else {
       // For every live entry in this oplog add it to the deleted set
       // so that we will skip it when we recovery the next oplogs.
-      getRecoveryMap().forEachWhile((id, v) -> {
-        deletedIds.add(id);
-        return true;
-      });
+      for (LongIterator it = getRecoveryMap().keys(); it.hasNext(); ) {
+        deletedIds.add(it.next());
+      }
       close();
     }
   }
@@ -4960,7 +4938,7 @@ public final class Oplog implements CompactableOplog {
           try {
             krfFileCreate();
 
-            final OpenHashSet<KRFEntry> notWrittenKRFs = new OpenHashSet<>();
+            final UnifiedSet<KRFEntry> notWrittenKRFs = new UnifiedSet<>();
             // sortedLiveEntries are now sorted
             // so we can start writing them to disk.
             if (sortedLiveEntries != null) {
@@ -5039,7 +5017,7 @@ public final class Oplog implements CompactableOplog {
    */
   @SuppressWarnings("unchecked")
   public long writeIRF(List<KRFEntry> sortedLiveEntries,
-      final OpenHashSet<KRFEntry> notWrittenKRFs,
+      final UnifiedSet<KRFEntry> notWrittenKRFs,
       Set<SortedIndexContainer> dumpIndexes,
       Map<SortedIndexContainer, SortedIndexRecoveryJob> loadIndexes)
       throws IOException {
@@ -5083,7 +5061,7 @@ public final class Oplog implements CompactableOplog {
       }
       else if (!this.indexesWritten.isEmpty()) {
         // remove the indexes already written for this oplog
-        dumpIndexes = new OpenHashSet<>(dumpIndexes);
+        dumpIndexes = new UnifiedSet<>(dumpIndexes);
         dumpIndexes.removeAll(this.indexesWritten);
       }
       if (logger.fineEnabled() || traceOn) {
@@ -5140,7 +5118,7 @@ public final class Oplog implements CompactableOplog {
     if (indexes != null) {
       ArrayList<DiskRegionInfo> targetRegions = new ArrayList<DiskRegionInfo>(
           this.regionMap.size());
-      OpenHashSet<String> usedRegionIDs = new OpenHashSet<>(indexes.size());
+      UnifiedSet<String> usedRegionIDs = new UnifiedSet<>(indexes.size());
       for (SortedIndexContainer index : indexes) {
         usedRegionIDs.add(index.getBaseRegion().getRegionID());
       }
@@ -7296,8 +7274,8 @@ public final class Oplog implements CompactableOplog {
 
     List<KRFEntry> sortedLiveEntries;
 
-    ObjectObjectHashMap<Long, DiskRegionInfo> targetRegions =
-        ObjectObjectHashMap.from(this.regionMap);
+    UnifiedMap<Long, DiskRegionInfo> targetRegions =
+        new UnifiedMap<>(this.regionMap);
     synchronized (sync) {
       //Don't bother to include any stores that have reached the lru limit
       Iterator<DiskRecoveryStore> itr = diskRecoveryStores.values().iterator();
@@ -7458,8 +7436,8 @@ public final class Oplog implements CompactableOplog {
         || logger.fineEnabled();
 
     // store the affected indexes and the parent region against each disk region
-    final ObjectObjectHashMap<Long, IndexData[]> indexRecoveryMap =
-        ObjectObjectHashMap.withExpectedSize(this.regionMap.size());
+    final UnifiedMap<Long, IndexData[]> indexRecoveryMap =
+        new UnifiedMap<>(this.regionMap.size());
     ArrayList<DiskRegionInfo> targetRegions = new ArrayList<DiskRegionInfo>(
         this.regionMap.size());
     this.idxkrf.getDiskIdToIndexDataMap(null, indexes, 0, indexRecoveryMap,
@@ -8424,8 +8402,6 @@ public final class Oplog implements CompactableOplog {
      * 
      * @param liveEntries
      *          the list to fill with the live entries
-     * @param idx
-     *          the first free slot in liveEntries
      * @param drv
      *          the disk region these entries are on
      * @param pendingKrfTags 
@@ -8898,7 +8874,7 @@ public final class Oplog implements CompactableOplog {
       // both in sync and async disk write cases
       if (!krfExists
           && couldHaveKrf) {
-        pendingKrfTags = ObjectObjectHashMap.withExpectedSize(200);
+        pendingKrfTags = new UnifiedMap<>(200);
       } else {
         pendingKrfTags = null;
       }
@@ -9013,10 +8989,8 @@ public final class Oplog implements CompactableOplog {
    * Memory is optimized by using an int[] for ids in the unsigned int range.
    */
   public static class OplogEntryIdMap {
-    private final IntObjectHashMap<Object> ints =
-        IntObjectHashMap.withExpectedSize(16);
-    private final LongObjectHashMap<Object> longs =
-        LongObjectHashMap.withExpectedSize(16);
+    private final IntObjectHashMap<Object> ints = new IntObjectHashMap<>(8);
+    private final LongObjectHashMap<Object> longs = new LongObjectHashMap<>(8);
 
     public Object put(long id, Object v) {
       Object result;
@@ -9041,9 +9015,32 @@ public final class Oplog implements CompactableOplog {
       return result;
     }
 
-    public boolean forEachWhile(final LongObjPredicate<Object> predicate) {
-      return this.ints.forEachWhile(predicate::test) &&
-          this.longs.forEachWhile(predicate);
+    public LongIterator keys() {
+      return new Iterator();
+    }
+
+    public class Iterator implements LongIterator {
+
+      private boolean doingInt = true;
+      IntIterator intIt = ints.keySet().intIterator();
+      LongIterator longIt = longs.keySet().longIterator();
+
+      public boolean hasNext() {
+        if (this.intIt.hasNext()) {
+          return true;
+        } else {
+          doingInt = false;
+          return this.longIt.hasNext();
+        }
+      }
+
+      public long next() {
+        if (doingInt) {
+          return this.intIt.next();
+        } else {
+          return this.longIt.next();
+        }
+      }
     }
   }
 

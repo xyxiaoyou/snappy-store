@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -51,12 +51,12 @@ public final class HeapBufferAllocator extends BufferAllocator {
   }
 
   @Override
-  public void clearPostAllocate(ByteBuffer buffer) {
+  public void clearPostAllocate(ByteBuffer buffer, int position) {
     // JVM clears the allocated area, so only clear for DEBUG_FILL case
     if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
       // clear till the capacity and not limit since former will be a factor
       // of 8 and hence more efficient in Unsafe.setMemory
-      fill(buffer, (byte)0, 0, buffer.capacity());
+      fill(buffer, (byte)0, position, buffer.capacity() - position);
     }
   }
 

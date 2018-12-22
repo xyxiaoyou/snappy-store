@@ -67,7 +67,7 @@ import com.gemstone.gnu.trove.THash;
 import com.gemstone.gnu.trove.THashMap;
 import com.gemstone.gnu.trove.TObjectHashingStrategy;
 import com.gemstone.gnu.trove.TObjectProcedure;
-import io.snappydata.collection.ObjectObjectHashMap;
+import org.eclipse.collections.impl.map.mutable.UnifiedMap;
 
 /**
  * TXState is the entity that tracks the transaction state on a per thread
@@ -124,7 +124,8 @@ public final class TXState implements TXStateInterface {
 
   Map<String, Map<VersionSource,RegionVersionHolder>> snapshot;
 
-  private final Map<Region, Boolean> writeRegions = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<Region, Boolean> writeRegions =
+      new ConcurrentHashMap<>();
 
   /*
   private TXLockRequest locks = null;
@@ -404,7 +405,6 @@ public final class TXState implements TXStateInterface {
     }
   }
 
-  //TODO: Suranjan, FOR RC: We should set create snapshot and set it in every stmt.
   public void takeSnapshot() {
     this.snapshot = getCache().getSnapshotRVV();
     if (TXStateProxy.LOG_FINE) {
@@ -2492,8 +2492,8 @@ public final class TXState implements TXStateInterface {
     }
     txr.lock();
     try {
-      final ObjectObjectHashMap<Object, Object> entryMap =
-          checkForTXFinish ? txr.getEntryMap() : txr.getInternalEntryMap();
+      final UnifiedMap<Object, Object> entryMap = checkForTXFinish
+          ? txr.getEntryMap() : txr.getInternalEntryMap();
       if (entryMap.putIfAbsent(key, entry) != null) {
         // entry exists and must be at least read locked, so release this lock
         this.lockPolicy.releaseLock(entry, this.lockPolicy.getReadLockMode(),
@@ -3041,7 +3041,7 @@ public final class TXState implements TXStateInterface {
         // replace back the read locked entry, else remove it
         if (txEntryCreated) {
           if (lockedForRead) {
-            txr.getEntryMap().justPut(eventKey, entry);
+            txr.getEntryMap().put(eventKey, entry);
           }
           else {
             txr.getEntryMap().remove(eventKey);
@@ -4017,10 +4017,11 @@ public final class TXState implements TXStateInterface {
       oldEntry = dataRegion.getCache().readOldEntry(dataRegion, key, tx.getCurrentSnapshot(), true, re, tx);
       int numtimes = 0;
       while (oldEntry == null) {
+        LogWriterI18n logger = dataRegion.getLogWriterI18n();
         if (TXStateProxy.LOG_FINE) {
-          LogWriterI18n logger = dataRegion.getLogWriterI18n();
           logger.info(LocalizedStrings.DEBUG, " Waiting for older entry for this snapshot to arrive " +
-              "for key " + key + " re " + re + " for region " + dataRegion.getFullPath());
+              "for key " + key + " re " + re + " for region " + dataRegion.getFullPath() + " my txId is "
+              + tx.getTransactionId());
         }
         try {
           // Suranjan Should we wait indefinitely? or throw warning and return the current entry.
@@ -4037,7 +4038,6 @@ public final class TXState implements TXStateInterface {
           }
         } catch (InterruptedException e) {
           if (TXStateProxy.LOG_FINE) {
-            LogWriterI18n logger = dataRegion.getLogWriterI18n();
             logger.info(LocalizedStrings.DEBUG, " Interrupted while waiting for older entry.");
           }
         }

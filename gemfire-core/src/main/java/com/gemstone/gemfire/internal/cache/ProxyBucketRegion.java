@@ -52,7 +52,7 @@ import com.gemstone.gemfire.internal.cache.persistence.PersistentMemberID;
 import com.gemstone.gemfire.internal.cache.persistence.PersistentMemberManager;
 import com.gemstone.gemfire.internal.cache.persistence.PersistentMembershipView;
 import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
-import io.snappydata.collection.OpenHashSet;
+import org.eclipse.collections.impl.set.mutable.UnifiedSet;
 
 /**
  * Empty shell for {@link BucketRegion} which exists only to maintain metadata
@@ -370,7 +370,7 @@ public final class ProxyBucketRegion implements Bucket {
   public Set<InternalDistributedMember> getBucketOwners() {
     Set<InternalDistributedMember> s = getOtherBucketOwners();
     if (s == Collections.<InternalDistributedMember>emptySet()) {
-      s = new OpenHashSet<>(1);
+      s = new UnifiedSet<>(1);
     }
     if (isHosting()) {
       s.add(this.partitionedRegion.getDistributionManager().getId());

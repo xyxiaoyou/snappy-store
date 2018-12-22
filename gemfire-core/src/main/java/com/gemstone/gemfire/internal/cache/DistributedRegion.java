@@ -118,7 +118,7 @@ import com.gemstone.gemfire.internal.util.ArraySortedCollection;
 import com.gemstone.gemfire.internal.util.concurrent.StoppableCountDownLatch;
 import com.gemstone.gnu.trove.TObjectIntProcedure;
 import com.gemstone.org.jgroups.util.StringId;
-import io.snappydata.collection.ObjectObjectHashMap;
+import org.eclipse.collections.impl.map.mutable.UnifiedMap;
 
 /**
  * 
@@ -1276,8 +1276,8 @@ public class DistributedRegion extends LocalRegion implements
    * to constraint violations for replicated tables which should also be skipped
    * on destination
    */
-  private final ObjectObjectHashMap<InternalDistributedMember, ArrayList<EventID>>
-      failedEvents = ObjectObjectHashMap.withExpectedSize(16);
+  private final UnifiedMap<InternalDistributedMember, ArrayList<EventID>> failedEvents =
+      new UnifiedMap<>();
 
   private ConcurrentParallelGatewaySenderQueue hdfsQueue;
 
@@ -2809,12 +2809,7 @@ public class DistributedRegion extends LocalRegion implements
     // we don't care much about perf of failed events but for correctness
     // hence a sync on the entire map
     synchronized (this.failedEvents) {
-      this.failedEvents.forEachWhile((m, failures) -> {
-        synchronized (failures) {
-          failures.add(eventId);
-        }
-        return true;
-      });
+      this.failedEvents.forEachValue(failures -> failures.add(eventId));
     }
   }
 
@@ -2824,7 +2819,7 @@ public class DistributedRegion extends LocalRegion implements
       return;
     }
     synchronized (this.failedEvents) {
-      this.failedEvents.putIfAbsent(member, new ArrayList<EventID>());
+      this.failedEvents.getIfAbsentPut(member, new ArrayList<>());
     }
   }
 
@@ -2849,8 +2844,7 @@ public class DistributedRegion extends LocalRegion implements
     }
     synchronized (this.failedEvents) {
       ArrayList<EventID> events = this.failedEvents.get(member);
-      return events != null && !events.isEmpty() ? new ArrayList<EventID>(
-          events) : null;
+      return events != null && !events.isEmpty() ? new ArrayList<>(events) : null;
     }
   }
 
