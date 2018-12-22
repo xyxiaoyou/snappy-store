@@ -127,7 +127,6 @@ import com.gemstone.gemfire.internal.cache.tier.sockets.CacheClientProxy;
 import com.gemstone.gemfire.internal.cache.tier.sockets.ClientHealthMonitor;
 import com.gemstone.gemfire.internal.cache.tier.sockets.ClientProxyMembershipID;
 import com.gemstone.gemfire.internal.cache.versions.RegionVersionHolder;
-import com.gemstone.gemfire.internal.cache.versions.RegionVersionVector;
 import com.gemstone.gemfire.internal.cache.versions.VersionSource;
 import com.gemstone.gemfire.internal.cache.versions.VersionTag;
 import com.gemstone.gemfire.internal.cache.wan.AbstractGatewaySender;
@@ -1762,14 +1761,14 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
             // if null then create the rvv for that bucket!
             // For Initialization case, so that we have all the data before snapshot.
             br.waitForData();
-            snapshot.justPut(br.getFullPath(),
+            snapshot.put(br.getFullPath(),
                 br.getVersionVector().getSnapShotOfMemberVersion());
           }
         } else if (region.getVersionVector() != null) {
           // if null then create the rvv for that region!
           // For Initialization case, so that we have all the data before snapshot.
           region.waitForData();
-          snapshot.justPut(region.getFullPath(),
+          snapshot.put(region.getFullPath(),
               region.getVersionVector().getSnapShotOfMemberVersion());
         }
       });

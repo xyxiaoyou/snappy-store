@@ -114,6 +114,8 @@ import com.pivotal.gemfirexd.internal.shared.common.SharedUtils;
 import com.pivotal.gemfirexd.internal.shared.common.reference.SQLState;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.load.Import;
+import io.snappydata.execute.AcquireBucketMaintLock;
+import io.snappydata.execute.ReleaseBucketMaintLocks;
 import io.snappydata.thrift.BucketOwners;
 import io.snappydata.thrift.CatalogMetadataDetails;
 import io.snappydata.thrift.CatalogMetadataRequest;
@@ -2364,7 +2366,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
       String buckets, long catalogSchemaVersion)
       throws SQLException, StandardException {
     SET_BUCKETS_FOR_LOCAL_EXECUTION_EX(tableName, buckets,
-        relationDestroyVersion, null);
+        catalogSchemaVersion, null);
   }
 
   /**
@@ -2374,7 +2376,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
    * maintenance locks for an update operation.
    */
   public static void SET_BUCKETS_FOR_LOCAL_EXECUTION_EX(String tableName,
-      String buckets, int relationDestroyVersion, String lockOwner)
+      String buckets, long catalogSchemaVersion, String lockOwner)
       throws SQLException, StandardException {
     if (tableName == null) {
       throw Util.generateCsSQLException(SQLState.ENTITY_NAME_MISSING);
@@ -2396,6 +2398,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
     while (st.hasMoreTokens()) {
       bucketSet.add(Integer.parseInt(st.nextToken()));
     }
+    setBucketsForLocalExecution(tableName, bucketSet, true, lockOwner, lcc);
   }
 
   public static void releaseBucketMaintenanceLocks(String tableName,

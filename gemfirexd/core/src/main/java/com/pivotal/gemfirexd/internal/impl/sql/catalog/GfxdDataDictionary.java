@@ -1656,12 +1656,12 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
     {
       // void SET_BUCKETS_FOR_LOCAL_EXECUTION_EX(tableName, buckets,
       //   relDestroyVersion, lockOwner)
-      String[] argNames = new String[] { "TABLE_NAME", "BUCKETS",
-          "RELATION_DESTROY_VERSION", "LOCK_OWNER" };
+      String[] argNames = new String[] { "TABLE_NAME", "BUCKETS", "CATALOG_VERSION",
+          "LOCK_OWNER" };
       TypeDescriptor[] argTypes = new TypeDescriptor[] {
           DataTypeDescriptor.getCatalogType(Types.VARCHAR),
           DataTypeDescriptor.getCatalogType(Types.VARCHAR),
-          DataTypeDescriptor.getCatalogType(Types.INTEGER),
+          DataTypeDescriptor.getCatalogType(Types.BIGINT),
           DataTypeDescriptor.getCatalogType(Types.VARCHAR)
       };
       super.createSystemProcedureOrFunction("SET_BUCKETS_FOR_LOCAL_EXECUTION_EX",
