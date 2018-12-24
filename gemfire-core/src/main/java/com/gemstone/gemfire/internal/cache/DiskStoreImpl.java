@@ -200,6 +200,7 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
    * Flag to determine if the offline disk-store is used for data extraction
    */
   protected boolean dataExtraction = false;
+  private final boolean snappyRecoverMode;
 
   boolean RECOVER_VALUES = sysProps.getBoolean(
       RECOVER_VALUE_PROPERTY_BASE_NAME, true);
@@ -444,7 +445,12 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
       boolean ownedByRegion, InternalRegionArguments internalRegionArgs,
       boolean offline, boolean upgradeVersionOnly, boolean offlineValidating,
       boolean offlineCompacting, boolean needsOplogs, boolean dataExtraction) {
-    
+
+    if (cache != null && cache instanceof GemFireCacheImpl) {
+      this.snappyRecoverMode = ((GemFireCacheImpl)cache).isSnappyRecoveryMode();
+    } else {
+      this.snappyRecoverMode = false;
+    }
     this.dataExtraction = dataExtraction;
     this.offline = offline;
     this.upgradeVersionOnly = upgradeVersionOnly;
@@ -553,7 +559,7 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     this.sortManager = new DiskBlockSortManager();
 
     // complex init
-    if (isCompactionPossible() && !isOfflineCompacting()) {
+    if (!this.snappyRecoverMode && isCompactionPossible() && !isOfflineCompacting()) {
       this.oplogCompactor = new OplogCompactor();
       this.oplogCompactor.startCompactor();
     } else {
@@ -2281,7 +2287,7 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
   }
 
   void scheduleCompaction() {
-    if (isCompactionEnabled() && !isOfflineCompacting()) {
+    if (!this.snappyRecoverMode && isCompactionEnabled() && !isOfflineCompacting()) {
       this.oplogCompactor.scheduleIfNeeded(getOplogToBeCompacted());
     }
   }
