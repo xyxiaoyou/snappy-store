@@ -31,6 +31,9 @@ import com.gemstone.gemfire.management.RegionMXBean;
 import com.gemstone.gemfire.management.internal.SystemManagementService;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.access.index.GfxdIndexManager;
+import com.pivotal.gemfirexd.internal.engine.ddl.DDLConflatable;
+import com.pivotal.gemfirexd.internal.engine.ddl.callbacks.CallbackProcedures;
+import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.tools.sizer.GemFireXDInstrumentation;
@@ -66,39 +69,59 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
     com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().
         publishColumnTableStats();
     SnappyRegionStatsCollectorResult result = new SnappyRegionStatsCollectorResult();
-    Map<String, SnappyRegionStats> cachBatchStats = new HashMap<>();
+    Map<String, SnappyRegionStats> cachedBatchStats = new HashMap<>();
     ArrayList<SnappyRegionStats> otherStats = new ArrayList<>();
-
-
     try {
-      List<GemFireContainer> containers = Misc.getMemStore().getAllContainers();
-
       final SystemManagementService managementService =
-          (SystemManagementService)ManagementService.getManagementService(Misc.getGemFireCache());
+          (SystemManagementService) ManagementService.getManagementService(Misc.getGemFireCache());
 
-      for (GemFireContainer container : containers) {
-        if (container.isApplicationTable()) {
-          LocalRegion r = container.getRegion();
-          if (managementService != null && r != null ) {
-            RegionMXBean bean = managementService.getLocalRegionMBean(r.getFullPath());
-            if (bean != null && !(r.getFullPath().startsWith(
-                "/" + Misc.SNAPPY_HIVE_METASTORE + '/'))) {
-              SnappyRegionStats dataCollector = collectDataFromBean(r, bean);
-              if (dataCollector.isColumnTable()) {
-                cachBatchStats.put(dataCollector.getTableName(), dataCollector);
-              } else {
-                otherStats.add(dataCollector);
+      if (context.getArguments() != null && context.getArguments() instanceof HashMap
+          && ((HashMap<String, String>) context.getArguments()).containsKey("TABLE_NAME")
+          && !((HashMap<String, String>) context.getArguments()).get("TABLE_NAME").isEmpty()) {
+        String tname = ((HashMap<String, String>) context.getArguments()).get("TABLE_NAME");
+        // Make it mandatory to pass the schema name as well.
+        String[] names = tname.split("\\.");
+        if (names.length == 2) {
+
+          GemFireContainer container = CallbackProcedures.getContainerForTable(names[0], names[1]);
+          getSnappyRegionStats(otherStats, cachedBatchStats, container, managementService);
+          StoreCallbacks callback = CallbackFactoryProvider.getStoreCallbacks();
+          String columnBatchTableName = callback.columnBatchTableName(otherStats.get(0).getTableName());
+          System.out.println("AB: Looking for CB table " + columnBatchTableName);
+          try {
+            container = CallbackProcedures.getContainerForTable(names[0],
+                columnBatchTableName.substring(columnBatchTableName.indexOf(".") + 1));
+            getSnappyRegionStats(otherStats, cachedBatchStats, container, managementService);
+          } catch (StandardException se) {
+          }
+
+        }
+      } else {
+        List<GemFireContainer> containers = Misc.getMemStore().getAllContainers();
+
+        for (GemFireContainer container : containers) {
+          if (container.isApplicationTable()) {
+            LocalRegion r = container.getRegion();
+            if (managementService != null && r != null) {
+              RegionMXBean bean = managementService.getLocalRegionMBean(r.getFullPath());
+              if (bean != null && !(r.getFullPath().startsWith(
+                  "/" + Misc.SNAPPY_HIVE_METASTORE + '/'))) {
+                SnappyRegionStats dataCollector = collectDataFromBean(r, bean);
+                if (dataCollector.isColumnTable()) {
+                  cachedBatchStats.put(dataCollector.getTableName(), dataCollector);
+                } else {
+                  otherStats.add(dataCollector);
+                }
               }
             }
-          }
           /*
           if(!LocalRegion.isMetaTable(r.getFullPath())){
             result.addAllIndexStat(getIndexStatForContainer(container));
           }
           */
+          }
         }
       }
-
 
 
       if (Misc.reservoirRegionCreated) {
@@ -106,15 +129,15 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
           String tableName = tableStats.getTableName();
           StoreCallbacks callback = CallbackFactoryProvider.getStoreCallbacks();
           String columnBatchTableName = callback.columnBatchTableName(tableName);
-          if (cachBatchStats.containsKey(columnBatchTableName)) {
+          if (cachedBatchStats.containsKey(columnBatchTableName)) {
             String reservoirRegionName = Misc.getReservoirRegionNameForSampleTable("APP", tableName);
             PartitionedRegion pr = Misc.getReservoirRegionForSampleTable(reservoirRegionName);
             if (managementService != null && pr != null) {
               RegionMXBean reservoirBean = managementService.getLocalRegionMBean(pr.getFullPath());
               if (reservoirBean != null) {
                 SnappyRegionStats rStats = collectDataFromBeanImpl(pr, reservoirBean, true);
-                SnappyRegionStats cStats = cachBatchStats.get(columnBatchTableName);
-                cachBatchStats.put(columnBatchTableName, cStats.getCombinedStats(rStats));
+                SnappyRegionStats cStats = cachedBatchStats.get(columnBatchTableName);
+                cachedBatchStats.put(columnBatchTableName, cStats.getCombinedStats(rStats));
               }
             }
           }
@@ -122,20 +145,48 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
       }
 
       // Create one entry per Column Table by combining the results of row buffer and column table
+
       for (SnappyRegionStats tableStats : otherStats) {
         StoreCallbacks callback = CallbackFactoryProvider.getStoreCallbacks();
         String columnBatchTableName = callback.columnBatchTableName(tableStats.getTableName());
-        if (cachBatchStats.containsKey(columnBatchTableName)) {
-          result.addRegionStat(tableStats.getCombinedStats(cachBatchStats.get(columnBatchTableName)));
+        if (cachedBatchStats.containsKey(columnBatchTableName)) {
+          System.out.println("AB: Returning combined stats for table " + columnBatchTableName);
+          result.addRegionStat(tableStats.getCombinedStats(cachedBatchStats.get(columnBatchTableName)));
         } else {
+          System.out.println("AB: Returning stats for table " + columnBatchTableName);
           result.addRegionStat(tableStats);
         }
       }
     } catch (CacheClosedException ignored) {
+    } catch (StandardException ignored) {
+      System.out.println("AB: " + ignored);
     } finally {
       context.getResultSender().lastResult(result);
     }
 
+  }
+
+  private void getSnappyRegionStats(ArrayList<SnappyRegionStats> otherStats,
+                                    Map<String, SnappyRegionStats> cacheBatchStats,
+                                    GemFireContainer container,
+                                    SystemManagementService managementService) {
+    if (container.isApplicationTable()) {
+      LocalRegion r = container.getRegion();
+      if (managementService != null && r != null) {
+        RegionMXBean bean = managementService.getLocalRegionMBean(r.getFullPath());
+        if (bean != null && !(r.getFullPath().startsWith(
+            "/" + Misc.SNAPPY_HIVE_METASTORE + '/'))) {
+          SnappyRegionStats dataCollector = collectDataFromBean(r, bean);
+          if (dataCollector.isColumnTable()) {
+            System.out.println("AB: Adding stats for table " + dataCollector.getTableName());
+            cacheBatchStats.put(dataCollector.getTableName(), dataCollector);
+          } else {
+            System.out.println("AB: Adding stats for table " + dataCollector.getTableName());
+            otherStats.add(dataCollector);
+          }
+        }
+      }
+    }
   }
 
   private SnappyRegionStats collectDataFromBean(LocalRegion lr, RegionMXBean bean) {

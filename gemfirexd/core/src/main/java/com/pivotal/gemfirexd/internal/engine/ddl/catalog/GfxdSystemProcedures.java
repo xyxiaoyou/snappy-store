@@ -27,10 +27,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.*;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import javax.annotation.Nonnull;
 
 import com.gemstone.gemfire.DataSerializer;
@@ -41,6 +38,7 @@ import com.gemstone.gemfire.cache.Region;
 import com.gemstone.gemfire.cache.TransactionException;
 import com.gemstone.gemfire.cache.control.RebalanceOperation;
 import com.gemstone.gemfire.cache.control.ResourceManager;
+import com.gemstone.gemfire.cache.execute.FunctionException;
 import com.gemstone.gemfire.cache.execute.FunctionService;
 import com.gemstone.gemfire.distributed.DistributedMember;
 import com.gemstone.gemfire.distributed.internal.ServerLocation;
@@ -70,6 +68,7 @@ import com.pivotal.gemfirexd.internal.engine.ddl.callbacks.CallbackProcedures;
 import com.pivotal.gemfirexd.internal.engine.ddl.catalog.messages.GfxdSystemProcedureMessage;
 import com.pivotal.gemfirexd.internal.engine.ddl.resolver.GfxdPartitionByExpressionResolver;
 import com.pivotal.gemfirexd.internal.engine.ddl.wan.messages.AbstractGfxdReplayableMessage;
+import com.pivotal.gemfirexd.internal.engine.diag.SnappyTableStatsVTI;
 import com.pivotal.gemfirexd.internal.engine.distributed.AckResultCollector;
 import com.pivotal.gemfirexd.internal.engine.distributed.ByteArrayDataOutput;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdDistributionAdvisor;
@@ -86,6 +85,7 @@ import com.pivotal.gemfirexd.internal.engine.jdbc.GemFireXDRuntimeException;
 import com.pivotal.gemfirexd.internal.engine.store.CustomRowsResultSet;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireStore;
+import com.pivotal.gemfirexd.internal.engine.ui.SnappyRegionStats;
 import com.pivotal.gemfirexd.internal.iapi.db.PropertyInfo;
 import com.pivotal.gemfirexd.internal.iapi.error.PublicAPI;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
@@ -121,8 +121,12 @@ import com.pivotal.gemfirexd.internal.shared.common.reference.SQLState;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.snappy.LeadNodeSmartConnectorOpContext;
 import com.pivotal.gemfirexd.load.Import;
+import com.pivotal.gemfirexd.internal.engine.ui.SnappyRegionStatsCollectorFunction;
+import com.pivotal.gemfirexd.internal.engine.ui.SnappyRegionStatsCollectorResult;
+//import com.pivotal.gemfirexd.internal.engine.distributed;
 import io.snappydata.thrift.ServerType;
 import io.snappydata.thrift.internal.ClientBlob;
+import org.apache.commons.collections.bag.SynchronizedSortedBag;
 
 /**
  * GemFireXD built-in system procedures that will get executed on every
@@ -690,7 +694,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
 
   private static final ResultColumnDescriptor[] encryptColumnInfo = {
       EmbedResultSetMetaData.getResultColumnDescriptor("ENCRYPTED_PASSWORD", Types.VARCHAR,
-          false, Limits.DB2_VARCHAR_MAXWIDTH),
+          false, Limits.DB2_VARCHAR_MAXWIDTH)
   };
 
 
@@ -3242,4 +3246,87 @@ public class GfxdSystemProcedures extends SystemProcedures {
     }
     throw se;
   }
+
+  public static void GET_TABLE_SIZE(String tableName, ResultSet[] tableSize) throws SQLException {
+    if (GemFireXDUtils.TraceSysProcedures) {
+      SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+          "executing GET_TABLE_SIZE ");
+    }
+    // SnappyTableStats
+    List result = new java.util.ArrayList<>();
+
+    Set<DistributedMember> dataServers = GfxdMessage.getAllDataStores();
+    try {
+
+      if (dataServers != null && dataServers.size() > 0) {
+        Map args = new HashMap<String, String>();
+        args.put("TABLE_NAME", tableName);
+        result = (ArrayList<SnappyRegionStatsCollectorResult>) FunctionService.onMembers(dataServers)
+            .withArgs(args)
+            .execute(SnappyRegionStatsCollectorFunction.ID).getResult(1, TimeUnit.SECONDS);
+
+        System.out.println("AB: result set size " + result.size());
+        List<SnappyRegionStats> stats = ((SnappyRegionStatsCollectorResult) result.get(0)).getRegionStats();
+        System.out.println("AB: SnappyRegionStats list size " + stats.size());
+
+        SnappyRegionStats statsResult = stats.get(0);
+        final long totalTableSize = statsResult.getTotalSize();
+        final long inMemoryTableSize = statsResult.getSizeInMemory();
+        Boolean resultFetched = true;
+        final CustomRowsResultSet.FetchDVDRows fetchRows =
+            new CustomRowsResultSet.FetchDVDRows() {
+              Boolean resultFetched = false;
+
+              @Override
+              public boolean getNext(DataValueDescriptor[] template)
+                  throws SQLException, StandardException {
+                if (!resultFetched) {
+                  if (totalTableSize > 104857.6) {
+                    float totalTableSizeInMB = (float) totalTableSize / 1048576;
+                    template[0].setValue(tableName + " = " + totalTableSizeInMB + " MB");
+                  } else if (totalTableSize > 102.4) {
+                    float totalTableSizeInKB = (float) totalTableSize / 1024;
+                    template[0].setValue(tableName + " = " + totalTableSizeInKB + " KB");
+                  } else {
+                    template[0].setValue(tableName + " = " + totalTableSize + " Bytes");
+                  }
+
+                  if (inMemoryTableSize > 104857.6) {
+                    float inMemoryTableSizeInMB = (float) inMemoryTableSize / 1048576;
+                    template[1].setValue(tableName + " = " + inMemoryTableSizeInMB + " MB");
+                  } else if (inMemoryTableSize > 102.4) {
+                    float inMemoryTableSizeInKB = (float) inMemoryTableSize / 1024;
+                    template[1].setValue(tableName + " = " + inMemoryTableSizeInKB + " KB");
+                  } else {
+                    template[1].setValue(tableName + " = " + inMemoryTableSize + " Bytes");
+                  }
+                  resultFetched = true;
+                  return true;
+                }
+                return false;
+              }
+            };
+        if (!result.isEmpty()) {
+          tableSize[0] = new CustomRowsResultSet(fetchRows, tableSizeInfo);
+        } else {
+          tableSize[0] = null;
+        }
+      }
+    } catch (InterruptedException e) {
+      e.printStackTrace(); // todo remove printStackTrace
+    } catch (StandardException se) {
+      se.printStackTrace();
+    }
+
+  }
+
+
+  private static final ResultColumnDescriptor[] tableSizeInfo = {
+      EmbedResultSetMetaData.getResultColumnDescriptor("TOTAL_TABLE_SIZE", Types.VARCHAR,
+          false, Limits.DB2_VARCHAR_MAXWIDTH),
+      EmbedResultSetMetaData.getResultColumnDescriptor("IN_MEMORY_TABLE_SIZE", Types.VARCHAR,
+          false, Limits.DB2_VARCHAR_MAXWIDTH)
+  };
+
+
 }

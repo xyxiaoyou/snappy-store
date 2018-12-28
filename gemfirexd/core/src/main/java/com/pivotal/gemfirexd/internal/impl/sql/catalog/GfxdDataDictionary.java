@@ -2092,6 +2092,17 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
           arg_names, arg_types, 0, 1, RoutineAliasInfo.READS_SQL_DATA, null,
           newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
     }
+    {
+      // GET_TABLE_SIZE
+      String[] arg_names = new String[]{"TABLE_NAME"};
+      TypeDescriptor[] arg_types = new TypeDescriptor[]{
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR)
+      };
+      super.createSystemProcedureOrFunction("GET_TABLE_SIZE", sysUUID,
+          arg_names, arg_types, 0, 1, RoutineAliasInfo.NO_SQL, null,
+          newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
+    }
+
   }
 
   @SuppressWarnings({ "unchecked", "rawtypes" })
