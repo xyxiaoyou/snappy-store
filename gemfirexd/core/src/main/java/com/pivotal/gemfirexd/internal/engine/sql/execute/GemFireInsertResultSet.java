@@ -148,12 +148,8 @@ public final class GemFireInsertResultSet extends AbstractGemFireResultSet {
 
     final boolean isColumnTable = gfContainer.isRowBuffer();
     final LanguageConnectionContext lcc = activation.getLanguageConnectionContext();
-    if (isColumnTable) {
-        if(isPutDML) {
-            throw StandardException.newException(SQLState.PUTINTO_OP_DISALLOWED_ON_COLUMN_TABLES);
-        } else if(!Misc.routeQuery(lcc) && !lcc.isSnappyInternalConnection()) {
-            throw StandardException.newException(SQLState.SNAPPY_OP_DISALLOWED_ON_COLUMN_TABLES);
-        }
+    if (isColumnTable && !Misc.routeQuery(lcc) && !lcc.isSnappyInternalConnection()) {
+      throw StandardException.newException(SQLState.SNAPPY_OP_DISALLOWED_ON_COLUMN_TABLES);
     }
   }
 

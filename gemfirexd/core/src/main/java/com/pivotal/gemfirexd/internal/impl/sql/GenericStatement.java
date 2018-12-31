@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import com.gemstone.gemfire.cache.Region;
 import com.gemstone.gemfire.internal.cache.LocalRegion;
 import com.gemstone.gemfire.internal.cache.PartitionedRegion;
 import com.gemstone.gnu.trove.THashMap;
@@ -848,6 +849,20 @@ public class GenericStatement
                                                     statementContext, lcc, false,
                                                     checkCancellation, isUpdateOrDelete, null);
                                               }
+                                            }
+                                          }
+
+                                          if (qinfo != null && qinfo.isDML() && qinfo.isInsert() && ((InsertQueryInfo)qinfo).isPutDML()) {
+                                            InsertNode in = qt instanceof InsertNode ? ((InsertNode)qt) : null;
+                                            TableDescriptor ttd = in != null ? in.targetTableDescriptor : null;
+                                            String table = ttd.getQualifiedName();
+                                            Region region = Misc.getRegionForTable(table.replaceAll("\"", ""), true);
+                                            GemFireContainer container = (GemFireContainer)region.getUserAttribute();
+                                            boolean isColumnTable = container.isRowBuffer();
+                                            if (isColumnTable) {
+                                              return getPreparedStatementForSnappy(false, statementContext, lcc,
+                                                  cc.isMarkedAsDDLForSnappyUse(), checkCancellation,
+                                                  DML_TABLE_PATTERN.matcher(source).find(), null);
                                             }
                                           }
 
