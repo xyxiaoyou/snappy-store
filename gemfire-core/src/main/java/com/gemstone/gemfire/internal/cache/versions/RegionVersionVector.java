@@ -800,6 +800,84 @@ public abstract class RegionVersionVector<T extends VersionSource<?>> implements
     }
   }
 
+
+  public  RegionVersionHolder<T> recordMultipleVersionForSnapshot(T member, long version,
+      EntryEventImpl event, RegionVersionHolder<T> origHolder) {
+    LogWriterI18n logger = getLoggerI18n();
+    T mbr = member;
+    GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
+    if (cache != null && !cache.snapshotEnabled()) {
+      return null;
+    }
+    if (event != null) {
+      // Here we need to record the version directly if the event is being applied from GIIed txState.
+      // This breaks the atomicity?
+      TXStateInterface tx = event.getTXState();
+
+      if (tx != null) {
+        if (!tx.isSnapshot()) {
+          return null;
+        }
+        boolean committed = false;
+        if (tx instanceof TXState) {
+          committed = ((TXState)tx).isCommitted();
+        }
+        if (committed) {
+          if (logger.fineEnabled()) {
+            logger.fine("Directly recording version: " + version + " for member " + member + "in the snapshot tx " +
+                " region " + event.getRegion() + " for tx " + tx + " as it is committed.");
+          }
+        } else {
+          tx.recordVersionForSnapshot(member, version, event.getRegion());
+          if (logger.fineEnabled()) {
+            logger.fine("Recording version:" +
+                version + " for member " + member + " in the snapshot tx " +
+                " region " + event.getRegion() + " for tx:" + tx);
+          }
+          return null;
+        }
+      }
+    }
+
+    RegionVersionHolder<T> holder = null;
+    Map<T, RegionVersionHolder<T>> forPrinting = null;
+    //Find the version holder object
+    synchronized (memberToVersionSnapshot) {
+      if (origHolder == null) {
+        if (memberToVersionSnapshot.get(mbr) == null) {
+          mbr = getCanonicalId(mbr);
+          origHolder = new RegionVersionHolder<T>(mbr);
+        } else {
+          origHolder = holder.clone();
+        }
+
+        origHolder.recordVersion(version, logger);
+        //memberToVersionSnapshot.put(holder.id, holder);
+        forPrinting = memberToVersionSnapshot;
+      } else {
+        origHolder.recordVersion(version, logger);
+      }
+    }
+
+    if (logger!= null && logger.fineEnabled()) {
+      String regionpath = "";
+      if (event != null && event.getRegion() != null) {
+        regionpath = event.getRegion().getFullPath();
+      }
+      logger.fine("Recorded version: " + version + " for member " + member + " in the snapshot region : " +
+          regionpath + " the snapshot is " + forPrinting +
+          " it contains version after recording "
+          + forPrinting.get(member).contains(version));
+    }
+    return holder;
+  }
+
+  public void recordVersionHolder(RegionVersionHolder<T> holder) {
+    synchronized (memberToVersionSnapshot) {
+      memberToVersionSnapshot.put(holder.id, holder);
+    }
+  }
+
   /**
    * Records a received region-version.  These are transmitted in VersionTags
    * in messages between peers and from servers to clients.  In general you

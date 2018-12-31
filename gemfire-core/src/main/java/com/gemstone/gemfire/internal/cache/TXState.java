@@ -1141,15 +1141,18 @@ public final class TXState implements TXStateInterface {
 
         cache.acquireWriteLockOnSnapshotRvv();
         try {
+          RegionVersionHolder holder = null;
           for (VersionInformation vi : queue) {
             if (TXStateProxy.LOG_FINE) {
               logger.info(LocalizedStrings.DEBUG, "Recording version " + vi + " from snapshot to " +
                   "region.");
             }
-            ((LocalRegion)vi.region).getVersionVector().
-                recordVersionForSnapshot((VersionSource)vi.member, vi.version, null);
+            holder = ((LocalRegion)vi.region).getVersionVector().
+                recordMultipleVersionForSnapshot((VersionSource)vi.member, vi.version, null, holder);
           }
+          ((LocalRegion)vi.region).getVersionVector().recordVersionHolder(holder);
         } finally {
+
           cache.releaseWriteLockOnSnapshotRvv();
         }
       } else {
