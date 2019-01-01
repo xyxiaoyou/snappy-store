@@ -3247,36 +3247,45 @@ public class GfxdSystemProcedures extends SystemProcedures {
     throw se;
   }
 
-  public static void GET_TABLE_SIZE(String tableName, ResultSet[] tableSize) throws SQLException {
+  public static void GET_TABLE_SIZE(String tableName, Boolean isExternalTable, int samplePercentage, ResultSet[] tableSize) throws SQLException {
     if (GemFireXDUtils.TraceSysProcedures) {
       SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
           "executing GET_TABLE_SIZE ");
     }
-    // SnappyTableStats
     List result = new java.util.ArrayList<>();
-
     Set<DistributedMember> dataServers = GfxdMessage.getAllDataStores();
     try {
 
       if (dataServers != null && dataServers.size() > 0) {
         Map args = new HashMap<String, String>();
-        args.put("TABLE_NAME", tableName);
+        if(isExternalTable) {
+          //create column table with same name
+          float sample = (float)samplePercentage/100;
+          String sampleTable=tableName+"_sample";
+          Connection conn=getDefaultConn();
+          conn.createStatement().execute("create table "+sampleTable+" using column as(select * from "+tableName+" where rand() < "+sample+" );");
+          args.put("TABLE_NAME", sampleTable);
+        }
+        else {
+          args.put("TABLE_NAME", tableName);
+          samplePercentage=100;
+        }
         result = (ArrayList<SnappyRegionStatsCollectorResult>) FunctionService.onMembers(dataServers)
             .withArgs(args)
             .execute(SnappyRegionStatsCollectorFunction.ID).getResult(1, TimeUnit.SECONDS);
 
-        System.out.println("AB: result set size " + result.size());
         List<SnappyRegionStats> stats = ((SnappyRegionStatsCollectorResult) result.get(0)).getRegionStats();
-        System.out.println("AB: SnappyRegionStats list size " + stats.size());
-
         SnappyRegionStats statsResult = stats.get(0);
-        final long totalTableSize = statsResult.getTotalSize();
-        final long inMemoryTableSize = statsResult.getSizeInMemory();
+          long sampleTableSize = statsResult.getTotalSize();
+          long sampleInMemoryTableSize = statsResult.getSizeInMemory();
+
+          final long totalTableSize=(sampleTableSize*100)/samplePercentage;
+          final long inMemoryTableSize=(sampleInMemoryTableSize*100)/samplePercentage;
+
         Boolean resultFetched = true;
         final CustomRowsResultSet.FetchDVDRows fetchRows =
             new CustomRowsResultSet.FetchDVDRows() {
               Boolean resultFetched = false;
-
               @Override
               public boolean getNext(DataValueDescriptor[] template)
                   throws SQLException, StandardException {
@@ -3317,9 +3326,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
     } catch (StandardException se) {
       se.printStackTrace();
     }
-
   }
-
 
   private static final ResultColumnDescriptor[] tableSizeInfo = {
       EmbedResultSetMetaData.getResultColumnDescriptor("TOTAL_TABLE_SIZE", Types.VARCHAR,

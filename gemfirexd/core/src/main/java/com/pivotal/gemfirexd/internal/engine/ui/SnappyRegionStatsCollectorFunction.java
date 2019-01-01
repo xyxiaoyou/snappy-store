@@ -87,7 +87,6 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
           getSnappyRegionStats(otherStats, cachedBatchStats, container, managementService);
           StoreCallbacks callback = CallbackFactoryProvider.getStoreCallbacks();
           String columnBatchTableName = callback.columnBatchTableName(otherStats.get(0).getTableName());
-          System.out.println("AB: Looking for CB table " + columnBatchTableName);
           try {
             container = CallbackProcedures.getContainerForTable(names[0],
                 columnBatchTableName.substring(columnBatchTableName.indexOf(".") + 1));
@@ -150,16 +149,13 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
         StoreCallbacks callback = CallbackFactoryProvider.getStoreCallbacks();
         String columnBatchTableName = callback.columnBatchTableName(tableStats.getTableName());
         if (cachedBatchStats.containsKey(columnBatchTableName)) {
-          System.out.println("AB: Returning combined stats for table " + columnBatchTableName);
           result.addRegionStat(tableStats.getCombinedStats(cachedBatchStats.get(columnBatchTableName)));
         } else {
-          System.out.println("AB: Returning stats for table " + columnBatchTableName);
           result.addRegionStat(tableStats);
         }
       }
     } catch (CacheClosedException ignored) {
     } catch (StandardException ignored) {
-      System.out.println("AB: " + ignored);
     } finally {
       context.getResultSender().lastResult(result);
     }
@@ -178,10 +174,8 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
             "/" + Misc.SNAPPY_HIVE_METASTORE + '/'))) {
           SnappyRegionStats dataCollector = collectDataFromBean(r, bean);
           if (dataCollector.isColumnTable()) {
-            System.out.println("AB: Adding stats for table " + dataCollector.getTableName());
             cacheBatchStats.put(dataCollector.getTableName(), dataCollector);
           } else {
-            System.out.println("AB: Adding stats for table " + dataCollector.getTableName());
             otherStats.add(dataCollector);
           }
         }

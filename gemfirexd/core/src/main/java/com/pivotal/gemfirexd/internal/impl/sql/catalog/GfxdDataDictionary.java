@@ -2094,9 +2094,11 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
     }
     {
       // GET_TABLE_SIZE
-      String[] arg_names = new String[]{"TABLE_NAME"};
+      String[] arg_names = new String[]{"TABLE_NAME","IS_EXTERNAL_TABLE","SAMPLE_PERCENTAGE"};
       TypeDescriptor[] arg_types = new TypeDescriptor[]{
-          DataTypeDescriptor.getCatalogType(Types.VARCHAR)
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
+          DataTypeDescriptor.getCatalogType(Types.BOOLEAN),
+          DataTypeDescriptor.getCatalogType(Types.INTEGER)
       };
       super.createSystemProcedureOrFunction("GET_TABLE_SIZE", sysUUID,
           arg_names, arg_types, 0, 1, RoutineAliasInfo.NO_SQL, null,
