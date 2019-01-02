@@ -3247,6 +3247,26 @@ public class GfxdSystemProcedures extends SystemProcedures {
     throw se;
   }
 
+  /**
+   * given a row/column table, method returns size of table with samplePercentage=100%,
+   * if given an external table and sample percentage, method creates a column table with
+   * sample percentage amount and extrapolates memory for loading whole(100% data)
+   * external table as column table.
+   *
+   * Cases(Exceptions) not handled:
+   * Case 1: given a row/column table and isExternalTable=TRUE then it doesn't
+   * show an error instead it creates another column table with sample amount.
+   *
+   * Case 2: given an external table with isExternalTable=FALSE or
+   * given any table which is not present  then it gives error but need to show
+   * an error message as table not found.
+   *
+   * @param tableName table name with schema(fully qualified table name)
+   * @param isExternalTable true for external table else false
+   * @param samplePercentage sampling percentage (Integer :0 to 100)
+   * @param tableSize returns resultset
+   * @throws SQLException
+   */
   public static void GET_TABLE_SIZE(String tableName, Boolean isExternalTable, int samplePercentage, ResultSet[] tableSize) throws SQLException {
     if (GemFireXDUtils.TraceSysProcedures) {
       SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
@@ -3258,17 +3278,16 @@ public class GfxdSystemProcedures extends SystemProcedures {
 
       if (dataServers != null && dataServers.size() > 0) {
         Map args = new HashMap<String, String>();
-        if(isExternalTable) {
-          //create column table with same name
-          float sample = (float)samplePercentage/100;
-          String sampleTable=tableName+"_sample";
-          Connection conn=getDefaultConn();
-          conn.createStatement().execute("create table "+sampleTable+" using column as(select * from "+tableName+" where rand() < "+sample+" );");
+        if (isExternalTable) {
+          float sample = (float) samplePercentage / 100;
+          String sampleTable = tableName + "_sample";
+          Connection conn = getDefaultConn();
+          conn.createStatement().execute("drop table if exists " + sampleTable + " ;");
+          conn.createStatement().execute("create table " + sampleTable + " using column as(select * from " + tableName + " where rand() < " + sample + " );");
           args.put("TABLE_NAME", sampleTable);
-        }
-        else {
+        } else {
           args.put("TABLE_NAME", tableName);
-          samplePercentage=100;
+          samplePercentage = 100;
         }
         result = (ArrayList<SnappyRegionStatsCollectorResult>) FunctionService.onMembers(dataServers)
             .withArgs(args)
@@ -3276,16 +3295,17 @@ public class GfxdSystemProcedures extends SystemProcedures {
 
         List<SnappyRegionStats> stats = ((SnappyRegionStatsCollectorResult) result.get(0)).getRegionStats();
         SnappyRegionStats statsResult = stats.get(0);
-          long sampleTableSize = statsResult.getTotalSize();
-          long sampleInMemoryTableSize = statsResult.getSizeInMemory();
+        long sampleTableSize = statsResult.getTotalSize();
+        long sampleInMemoryTableSize = statsResult.getSizeInMemory();
 
-          final long totalTableSize=(sampleTableSize*100)/samplePercentage;
-          final long inMemoryTableSize=(sampleInMemoryTableSize*100)/samplePercentage;
+        final long totalTableSize = (sampleTableSize * 100) / samplePercentage;
+        final long inMemoryTableSize = (sampleInMemoryTableSize * 100) / samplePercentage;
 
         Boolean resultFetched = true;
         final CustomRowsResultSet.FetchDVDRows fetchRows =
             new CustomRowsResultSet.FetchDVDRows() {
               Boolean resultFetched = false;
+
               @Override
               public boolean getNext(DataValueDescriptor[] template)
                   throws SQLException, StandardException {
@@ -3322,16 +3342,16 @@ public class GfxdSystemProcedures extends SystemProcedures {
         }
       }
     } catch (InterruptedException e) {
-      e.printStackTrace(); // todo remove printStackTrace
+      e.printStackTrace();
     } catch (StandardException se) {
       se.printStackTrace();
     }
   }
 
   private static final ResultColumnDescriptor[] tableSizeInfo = {
-      EmbedResultSetMetaData.getResultColumnDescriptor("TOTAL_TABLE_SIZE", Types.VARCHAR,
+      EmbedResultSetMetaData.getResultColumnDescriptor("TOTAL TABLE SIZE", Types.VARCHAR,
           false, Limits.DB2_VARCHAR_MAXWIDTH),
-      EmbedResultSetMetaData.getResultColumnDescriptor("IN_MEMORY_TABLE_SIZE", Types.VARCHAR,
+      EmbedResultSetMetaData.getResultColumnDescriptor("IN MEMORY TABLE SIZE", Types.VARCHAR,
           false, Limits.DB2_VARCHAR_MAXWIDTH)
   };
 

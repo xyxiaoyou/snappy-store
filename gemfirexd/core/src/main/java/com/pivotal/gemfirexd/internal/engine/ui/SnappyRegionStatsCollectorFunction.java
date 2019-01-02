@@ -79,7 +79,6 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
           && ((HashMap<String, String>) context.getArguments()).containsKey("TABLE_NAME")
           && !((HashMap<String, String>) context.getArguments()).get("TABLE_NAME").isEmpty()) {
         String tname = ((HashMap<String, String>) context.getArguments()).get("TABLE_NAME");
-        // Make it mandatory to pass the schema name as well.
         String[] names = tname.split("\\.");
         if (names.length == 2) {
 
@@ -94,11 +93,12 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
           } catch (StandardException se) {
           }
 
-        }
+        } // TODO else get default or current schemaname and proceed
       } else {
         List<GemFireContainer> containers = Misc.getMemStore().getAllContainers();
 
         for (GemFireContainer container : containers) {
+          //TODO replace block with method  getSnappyRegionStats()
           if (container.isApplicationTable()) {
             LocalRegion r = container.getRegion();
             if (managementService != null && r != null) {
