@@ -14,7 +14,9 @@
  * permissions and limitations under the License. See accompanying
  * LICENSE file.
  */
-
+plugins{
+id "de.undercouch.download" version "3.4.3"
+}
 apply plugin: 'wrapper'
 apply plugin: 'de.undercouch.download'
 
