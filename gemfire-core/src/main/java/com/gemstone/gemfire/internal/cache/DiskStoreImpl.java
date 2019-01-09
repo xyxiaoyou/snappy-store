@@ -2955,6 +2955,10 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     return l.toArray(new CompactableOplog[0]);
   }
 
+  public boolean isDataRecoveryMode() {
+    return this.snappyRecoverMode;
+  }
+
   /**
    * Returns the dir name used to back up this DiskStore's directories under.
    * The name is a concatenation of the disk store name and id.
@@ -4715,7 +4719,7 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
       // wait for async recovery if required
       Set<SortedIndexContainer> indexes = null;
       final DiskStoreImpl dsi = DiskStoreImpl.this;
-      if (cb != null) {
+      if (cb != null && !dsi.isDataRecoveryMode()) {
         cb.waitForAsyncIndexRecovery(dsi);
         indexes = cb.getAllLocalIndexes(dsi);
       }

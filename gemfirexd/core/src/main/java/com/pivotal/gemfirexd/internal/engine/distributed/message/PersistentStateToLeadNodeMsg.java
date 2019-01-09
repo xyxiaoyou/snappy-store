@@ -8,12 +8,14 @@ import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedM
 import com.gemstone.gemfire.internal.cache.persistence.PersistentMemberID;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdResultCollector;
+import io.snappydata.thrift.CatalogTableObject;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class PersistentStateToLeadNodeMsg extends MemberExecutorMessage<Object> {
@@ -98,7 +100,8 @@ public class PersistentStateToLeadNodeMsg extends MemberExecutorMessage<Object> 
 
   private InternalDistributedMember member = null;
 
-  public PersistentStateToLeadNodeMsg(final ResultCollector<Object, Object> rc) {
+  public PersistentStateToLeadNodeMsg(
+      List<CatalogTableObject> allEntries, final ResultCollector<Object, Object> rc) {
     super(rc, null, false, true);
     member = Misc.getMyId();
   }

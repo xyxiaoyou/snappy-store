@@ -53,6 +53,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 
 import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.LogWriter;
@@ -133,6 +134,7 @@ import com.pivotal.gemfirexd.internal.iapi.store.access.FileResource;
 import com.pivotal.gemfirexd.internal.iapi.store.access.TransactionController;
 import com.pivotal.gemfirexd.internal.iapi.store.raw.log.LogFactory;
 import com.pivotal.gemfirexd.internal.iapi.types.DataValueFactory;
+import com.pivotal.gemfirexd.internal.iapi.types.RowLocation;
 import com.pivotal.gemfirexd.internal.iapi.util.DoubleProperties;
 import com.pivotal.gemfirexd.internal.iapi.util.IdUtil;
 import com.pivotal.gemfirexd.internal.impl.io.DirFile;
@@ -143,6 +145,7 @@ import com.pivotal.gemfirexd.internal.impl.sql.catalog.XPLAINTableDescriptor;
 import com.pivotal.gemfirexd.internal.io.StorageFile;
 import com.pivotal.gemfirexd.internal.shared.common.error.ExceptionSeverity;
 import com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider;
+import io.snappydata.thrift.CatalogTableObject;
 
 /**
  * The Database interface provides control over the physical database (that is,
@@ -509,8 +512,28 @@ public final class FabricDatabase implements ModuleControl,
         GemFireXDUtils.executeSQLScripts(embedConn, postScriptPaths, false,
             logger, null, null, false);
       }
-      if (!this.memStore.getGemFireCache().isSnappyRecoveryMode()) {
+      if (!(this.memStore.getMyVMKind().isAccessor()
+          && this.memStore.getGemFireCache().isSnappyRecoveryMode())) {
+        logger.info("Initializing catalog in recovery mode");
         initializeCatalog();
+      } else {
+        // TODO: KN: Init catalog differently
+      }
+
+      if (this.memStore.getGemFireCache().isSnappyRecoveryMode() &&
+          (this.memStore.getMyVMKind().isStore() || this.memStore.getMyVMKind().isLocator())) {
+        Misc.getMemStore().initExternalCatalog();
+        ExternalCatalog exCatalog = Misc.getMemStore().getExternalCatalog();
+        List<CatalogTableObject> allEntries = exCatalog.getAllHiveEntries();
+        if (logger.fineEnabled() || GemFireXDUtils.TraceDDLReplay) {
+          SanityManager.DEBUG_PRINT("info",
+              "Total number of catalog object retrieved " + allEntries.size());
+          for (CatalogTableObject obj : allEntries) {
+            SanityManager.DEBUG_PRINT("info", "Catalogue object " + obj);
+          }
+        }
+        // Also prepare the persistent state message
+        preparePersistentStatesMsg(allEntries, logger);
       }
     } catch (Throwable t) {
       try {
@@ -1075,155 +1098,155 @@ public final class FabricDatabase implements ModuleControl,
 
         final boolean recoveryMode = this.memStore.getGemFireCache().isSnappyRecoveryMode();
         if (recoveryMode) {
-          recoveryModeDDLReplay(preprocessedQueue, stmt,
-              embedConn, lastCurrentSchema, lcc, tc, logger);
-        } else {
-          for (GfxdDDLQueueEntry entry : preprocessedQueue) {
-            qEntry = entry;
-            Object qVal = qEntry.getValue();
-            if (logger.infoEnabled()) {
-              logger.info("FabricDatabase: starting initial replay "
-                  + "for entry: " + qEntry);
-            }
-            // clear the initializing region first (JIRA: GEMXD-1)
-            LocalRegion.clearInitializingRegion();
+          preprocessedQueue =
+            getOnlyRequiredDdlsForRecoveryMode(preprocessedQueue, logger);
+        }
+        for (GfxdDDLQueueEntry entry : preprocessedQueue) {
+          qEntry = entry;
+          Object qVal = qEntry.getValue();
+          if (logger.infoEnabled()) {
+            logger.info("FabricDatabase: starting initial replay "
+                + "for entry: " + qEntry);
+          }
+          // clear the initializing region first (JIRA: GEMXD-1)
+          LocalRegion.clearInitializingRegion();
 
-            // TODO: currently other messages are not executed on LOCATOR/AGENT
-            // but in future we will need jar procedures to be executed everywhere
-            // for user-defined authenticators
-            if (qVal instanceof GfxdSystemProcedureMessage) {
-              final GfxdSystemProcedureMessage msg =
-                  (GfxdSystemProcedureMessage) qVal;
-              if (msg.getSysProcMethod().isOffHeapMethod()
-                  && this.memStore.getGemFireCache().getOffHeapStore() == null) {
-                if (logger.severeEnabled()) {
-                  logger.severe("FabricDatabase: aborted initial replay "
-                      + "for message " + msg + " method "
-                      + msg.getSysProcMethod().name());
-                }
-                continue;
+          // TODO: currently other messages are not executed on LOCATOR/AGENT
+          // but in future we will need jar procedures to be executed everywhere
+          // for user-defined authenticators
+          if (qVal instanceof GfxdSystemProcedureMessage) {
+            final GfxdSystemProcedureMessage msg =
+                (GfxdSystemProcedureMessage) qVal;
+            if (msg.getSysProcMethod().isOffHeapMethod()
+                && this.memStore.getGemFireCache().getOffHeapStore() == null) {
+              if (logger.severeEnabled()) {
+                logger.severe("FabricDatabase: aborted initial replay "
+                    + "for message " + msg + " method "
+                    + msg.getSysProcMethod().name());
               }
-              try {
-                msg.execute();
-              } catch (Exception ex) {
-                if (logger.severeEnabled()) {
-                  logger.severe("FabricDatabase: failed initial replay "
-                      + "for message " + msg + " due to exception", ex);
-                }
-                throwBootException(ex, embedConn);
-                continue;
+              continue;
+            }
+            try {
+              msg.execute();
+            } catch (Exception ex) {
+              if (logger.severeEnabled()) {
+                logger.severe("FabricDatabase: failed initial replay "
+                    + "for message " + msg + " due to exception", ex);
               }
-            } else if (qVal instanceof AbstractGfxdReplayableMessage) {
-              if (this.memStore.restrictedDDLStmtQueue()) {
-                continue;
+              throwBootException(ex, embedConn);
+              continue;
+            }
+          } else if (qVal instanceof AbstractGfxdReplayableMessage) {
+            if (this.memStore.restrictedDDLStmtQueue()) {
+              continue;
+            }
+            final AbstractGfxdReplayableMessage msg =
+                (AbstractGfxdReplayableMessage) qVal;
+            try {
+              msg.execute();
+            } catch (Exception ex) {
+              if (logger.severeEnabled()) {
+                logger.severe("FabricDatabase: failed initial replay "
+                    + "for message " + msg + " due to exception", ex);
               }
-              final AbstractGfxdReplayableMessage msg =
-                  (AbstractGfxdReplayableMessage) qVal;
-              try {
-                msg.execute();
-              } catch (Exception ex) {
-                if (logger.severeEnabled()) {
-                  logger.severe("FabricDatabase: failed initial replay "
-                      + "for message " + msg + " due to exception", ex);
-                }
-                throwBootException(ex, embedConn);
-                continue;
-              }
-            } else {
-              final DDLConflatable conflatable = (DDLConflatable) qVal;
-              String schemaForTable = conflatable.getSchemaForTableNoThrow();
-              if (this.memStore.restrictedDDLStmtQueue() &&
-                  !(!disallowMetastoreOnLocator &&
-                      schemaForTable != null && Misc.isSnappyHiveMetaTable(schemaForTable))) {
-                continue;
-              }
-              // check for any merged DDLs
-              final String confTable = conflatable.getRegionToConflate();
-              final boolean isCreateTable = conflatable.isCreateTable();
-            /*
-            DDLConflatable dependent = null;
-            if (skipRegionInit.size() > 0) {
-              dependent = skipRegionInit.get(conflatable);
-              final String colocatedWith;
-              // also check if this region is colocated with another whose
-              // initialization has been delayed
-              if (dependent == null && isCreateTable && (colocatedWith =
-                  conflatable.getColocatedWithTable()) != null) {
-                // search in the list of regions being skipped
-                for (DDLConflatable oddl : skipRegionInit.keySet()) {
-                  if (colocatedWith.equals(oddl.getRegionToConflate())) {
-                    dependent = oddl;
-                    if (traceConflation) {
-                      SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_CONFLATION,
-                          "FabricDatabase: delaying initializing ["
-                              + conflatable + "] for: " + oddl);
-                    }
-                    break;
+              throwBootException(ex, embedConn);
+              continue;
+            }
+          } else {
+            final DDLConflatable conflatable = (DDLConflatable) qVal;
+            String schemaForTable = conflatable.getSchemaForTableNoThrow();
+            if (!this.memStore.getGemFireCache().isSnappyRecoveryMode() &&
+                this.memStore.restrictedDDLStmtQueue() &&
+                !(!disallowMetastoreOnLocator &&
+                    schemaForTable != null && Misc.isSnappyHiveMetaTable(schemaForTable))) {
+              continue;
+            }
+            // check for any merged DDLs
+            final String confTable = conflatable.getRegionToConflate();
+            final boolean isCreateTable = conflatable.isCreateTable();
+          /*
+          DDLConflatable dependent = null;
+          if (skipRegionInit.size() > 0) {
+            dependent = skipRegionInit.get(conflatable);
+            final String colocatedWith;
+            // also check if this region is colocated with another whose
+            // initialization has been delayed
+            if (dependent == null && isCreateTable && (colocatedWith =
+                conflatable.getColocatedWithTable()) != null) {
+              // search in the list of regions being skipped
+              for (DDLConflatable oddl : skipRegionInit.keySet()) {
+                if (colocatedWith.equals(oddl.getRegionToConflate())) {
+                  dependent = oddl;
+                  if (traceConflation) {
+                    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_CONFLATION,
+                        "FabricDatabase: delaying initializing ["
+                            + conflatable + "] for: " + oddl);
                   }
-                }
-                if (dependent != null) {
-                  skipRegionInit.put(conflatable, dependent);
+                  break;
                 }
               }
-              if (dependent != null && logger.infoEnabled()) {
-                logger.info("FabricDatabase: delaying initialization of "
-                    + "entry with key=" + qEntry.getKey() + " due to: "
-                    + dependent);
+              if (dependent != null) {
+                skipRegionInit.put(conflatable, dependent);
               }
             }
-            */
+            if (dependent != null && logger.infoEnabled()) {
+              logger.info("FabricDatabase: delaying initialization of "
+                  + "entry with key=" + qEntry.getKey() + " due to: "
+                  + dependent);
+            }
+          }
+          */
 
-              boolean skipInitialization = false;
-              int pre11SchemaVer = 0;
-              if (pre11TableSchemaVer.size() > 0
-                  && (isCreateTable || conflatable.isAlterTable())) {
-                pre11SchemaVer = pre11TableSchemaVer.get(confTable);
-              }
-            /*
-            if (dependent != null) {
+            boolean skipInitialization = false;
+            int pre11SchemaVer = 0;
+            if (pre11TableSchemaVer.size() > 0
+                && (isCreateTable || conflatable.isAlterTable())) {
+              pre11SchemaVer = pre11TableSchemaVer.get(confTable);
+            }
+          /*
+          if (dependent != null) {
+            skipInitialization = true;
+          }
+          */
+            if (isCreateTable || conflatable.isCreateIndex()
+                || conflatable.isAlterTable()) {
+              // always skip initialization now for the case in #47873
               skipInitialization = true;
             }
-            */
-              if (isCreateTable || conflatable.isCreateIndex()
-                  || conflatable.isAlterTable()) {
-                // always skip initialization now for the case in #47873
-                skipInitialization = true;
-              }
-              // also skip initialization of region for old product version
-              // recovery from disk so that appropriate RowFormatter can be
-              // attached when schema matches that from the last version
-              // recovered from disk
-              String schema = executeDDL(conflatable, stmt, skipInitialization,
-                  embedConn, lastCurrentSchema, lcc, tc, logger);
-              if (isCreateTable && skipInitialization) {
-                uninitializedTables.add((GemFireContainer) Misc
-                    .getRegionForTableByPath(confTable, true).getUserAttribute());
-              }
-              // set the current schema version as pre 1.1 recovery version
-              if (pre11SchemaVer > 0) {
-                final GemFireContainer container = (GemFireContainer) Misc
-                    .getRegionForTableByPath(confTable, true).getUserAttribute();
-                if (container != null
-                    && container.getCurrentSchemaVersion() == pre11SchemaVer) {
-                  if (logger.infoEnabled()) {
-                    logger.info("FabricDatabase: setting schema version for "
-                        + "pre 1.1 data to " + pre11SchemaVer + " for table "
-                        + confTable);
-                  }
-                  container.initPre11SchemaVersionOnRecovery(dd, lcc);
-                  pre11TableSchemaVer.remove(confTable);
+            // also skip initialization of region for old product version
+            // recovery from disk so that appropriate RowFormatter can be
+            // attached when schema matches that from the last version
+            // recovered from disk
+            String schema = executeDDL(conflatable, stmt, skipInitialization,
+                embedConn, lastCurrentSchema, lcc, tc, logger);
+            if (isCreateTable && skipInitialization) {
+              uninitializedTables.add((GemFireContainer) Misc
+                  .getRegionForTableByPath(confTable, true).getUserAttribute());
+            }
+            // set the current schema version as pre 1.1 recovery version
+            if (pre11SchemaVer > 0) {
+              final GemFireContainer container = (GemFireContainer) Misc
+                  .getRegionForTableByPath(confTable, true).getUserAttribute();
+              if (container != null
+                  && container.getCurrentSchemaVersion() == pre11SchemaVer) {
+                if (logger.infoEnabled()) {
+                  logger.info("FabricDatabase: setting schema version for "
+                      + "pre 1.1 data to " + pre11SchemaVer + " for table "
+                      + confTable);
                 }
-              }
-              if (schema != null) {
-                lastCurrentSchema = schema;
-              } else {
-                continue;
+                container.initPre11SchemaVersionOnRecovery(dd, lcc);
+                pre11TableSchemaVer.remove(confTable);
               }
             }
-            if (logger.infoEnabled()) {
-              logger.info("FabricDatabase: successfully replayed entry "
-                  + "having sequenceId=" + qEntry.getSequenceId());
+            if (schema != null) {
+              lastCurrentSchema = schema;
+            } else {
+              continue;
             }
+          }
+          if (logger.infoEnabled()) {
+            logger.info("FabricDatabase: successfully replayed entry "
+                + "having sequenceId=" + qEntry.getSequenceId());
           }
         }
         if (previousLevel != Integer.MAX_VALUE) {
@@ -1283,37 +1306,35 @@ public final class FabricDatabase implements ModuleControl,
         observer.setIndexRecoveryAccountingMap(accountingMap);
       }
 
-      if (!recoveryMode) {
-        this.memStore.markIndexLoadBegin();
+      this.memStore.markIndexLoadBegin();
 
-        for (DiskStoreImpl dsi : cache.listDiskStores()) {
-          long start = 0;
-          if (logger.infoEnabled()) {
-            start = System.currentTimeMillis();
-            logger.info("FabricDatabase: waiting for index loading from "
-                + dsi.getName());
-          }
-          dsi.waitForIndexRecoveryEnd(-1);
-          if (logger.infoEnabled()) {
-            long end = System.currentTimeMillis();
-            logger.info(MessageFormat.format(
-                "FabricDatabase: Index loading completed for {0} in {1} ms",
-                dsi.getName(), (end - start)));
-          }
+      for (DiskStoreImpl dsi : cache.listDiskStores()) {
+        long start = 0;
+        if (logger.infoEnabled()) {
+          start = System.currentTimeMillis();
+          logger.info("FabricDatabase: waiting for index loading from "
+              + dsi.getName());
         }
+        dsi.waitForIndexRecoveryEnd(-1);
+        if (logger.infoEnabled()) {
+          long end = System.currentTimeMillis();
+          logger.info(MessageFormat.format(
+              "FabricDatabase: Index loading completed for {0} in {1} ms",
+              dsi.getName(), (end - start)));
+        }
+      }
 
-        // By now the index recovery is done. Also the change owner is done in
-        // pre-initialize so before fully initializing the container and hence the
-        // underlying region let's do a sanity check on the index size and region size
-        // for sorted indexes.
-        if (!skipIndexCheck && this.memStore.isPersistIndexes() &&
-            this.memStore.getMyVMKind() == GemFireStore.VMKind.DATASTORE) {
-          try {
-            checkRecoveredIndex(uninitializedContainers, logger, false);
-          } catch (RuntimeException ex) {
-            logger.info("Runtime exception while doing checkRecoveredIndex ex: " + ex.getMessage(), ex);
-            throw ex;
-          }
+      // By now the index recovery is done. Also the change owner is done in
+      // pre-initialize so before fully initializing the container and hence the
+      // underlying region let's do a sanity check on the index size and region size
+      // for sorted indexes.
+      if (!skipIndexCheck && this.memStore.isPersistIndexes() &&
+          this.memStore.getMyVMKind() == GemFireStore.VMKind.DATASTORE) {
+        try {
+          checkRecoveredIndex(uninitializedContainers, logger, false);
+        } catch (RuntimeException ex) {
+          logger.info("Runtime exception while doing checkRecoveredIndex ex: " + ex.getMessage(), ex);
+          throw ex;
         }
       }
 
@@ -1468,6 +1489,11 @@ public final class FabricDatabase implements ModuleControl,
         SystemProcedures.SET_EXPLAIN_SCHEMA(lcc);
       }
 
+      // Create indexes of hive if this is the data recovery mode.
+      if (this.memStore.getMyVMKind().isStore()
+          || this.memStore.getMyVMKind().isLocator()) {
+        loadHiveIndexes(uninitializedContainers, logger, tc);
+      }
       lcc.setIsConnectionForRemote(false);
       lcc.setSkipLocks(false);
       synchronized (sync) {
@@ -1519,35 +1545,82 @@ public final class FabricDatabase implements ModuleControl,
     }
   }
 
-  private void recoveryModeDDLReplay(
-      List<GfxdDDLQueueEntry> preprocessedQueue,
-      final Statement stmt, final EmbedConnection embedConn,
-      String lastCurrentSchema, final LanguageConnectionContext lcc,
-      final GemFireTransaction tc, final LogWriter logger) throws Exception {
-    logger.info("Starting recoveryModeDDLReplay in the " +
-        "recovery mode preprocessedQueue size = " + preprocessedQueue.size());
+  private void loadHiveIndexes(final ArrayList<GemFireContainer> uninitializedContainers,
+      LogWriter logger, GemFireTransaction tran) throws StandardException, SQLException {
+    if (logger.infoEnabled() && this.memStore.getGemFireCache().isSnappyRecoveryMode()) {
+      logger.info("createHiveIndexes: Creating indexes for hive tables in recovery mode");
+    }
+    if (this.memStore.getGemFireCache().isSnappyRecoveryMode()) {
+      // load all the indexes one by one for this container.
+      for (GemFireContainer uc : uninitializedContainers) {
+        LocalRegion owner = uc.getRegion();
+        Iterator<?> entryIterator = uc.getEntrySetIterator(null,
+            false, 0, true);
+        GfxdIndexManager indexUpdater = uc.getIndexManager();
+        indexUpdater.refreshIndexList(tran);
+        List<GemFireContainer> indexes = indexUpdater.getAllIndexes();
+        if (logger.infoEnabled()) {
+          logger.info("createHiveIndexes: Creating indexes for uninitialized container: "
+              + uc + " indexes = " + indexes);
+        }
+        while (entryIterator.hasNext()) {
+          RegionEntry re = (RegionEntry) entryIterator.next();
+          EntryEventImpl event = EntryEventImpl.create(uc.getRegion(), Operation.CREATE, re.getKey(),
+              re.getValue(owner),
+              Boolean.FALSE /* indicate that GII is in progress */,
+              false, null);
+          // Now for each index container load index for each entry
+          for (GemFireContainer index : indexes) {
+            if (logger.infoEnabled()) {
+              logger.info("createHiveIndexes: updating index = " + index + " for region = "
+              + " owner and rl = " + re);
+            }
+            indexUpdater.insertIntoIndex(null, null, owner, event, false,
+                false, (RowLocation)re, ((RowLocation)re).getRow(uc), null, null, -1,
+                index, null, true, true,
+                GfxdIndexManager.Index.LOCAL, false);
+          }
+        }
+
+
+    }
+  }
+  }
+
+  private List<GfxdDDLQueueEntry> getOnlyRequiredDdlsForRecoveryMode(
+      List<GfxdDDLQueueEntry> preprocessedQueue, final LogWriter logger) {
     GfxdDDLQueueEntry qEntry = null;
+    List<GfxdDDLQueueEntry> list = new ArrayList<>();
     for (GfxdDDLQueueEntry entry : preprocessedQueue) {
       qEntry = entry;
       Object qVal = qEntry.getValue();
       if (qVal instanceof DDLConflatable) {
         final DDLConflatable conflatable = (DDLConflatable) qVal;
+        String schema = conflatable.getSchemaForTableNoThrow();
         if (conflatable.isCreateDiskStore()) {
-          logger.info("Executing create disk store statement ddl=" + conflatable);
-          executeDDL(conflatable, stmt, true,
-              embedConn, lastCurrentSchema, lcc, tc, logger);
+          logger.info("Executing create disk store statement ddl = " + conflatable);
+          list.add(qEntry);
+        } else if (Misc.SNAPPY_HIVE_METASTORE.equals(schema) ||
+            Misc.SNAPPY_HIVE_METASTORE.equals(conflatable.getCurrentSchema()) ||
+            Misc.SNAPPY_HIVE_METASTORE.equals(conflatable.getRegionToConflate())) {
+          logger.info("Adding conflatable for ddl replay = " + qEntry);
+          list.add(qEntry);
+        } else {
+          logger.info("Skipping conflatable = " + conflatable);
         }
       }
     }
-    preparePersistentStatesMsg(logger);
+    int cnt = 0;
+    return list;
   }
 
-  private void preparePersistentStatesMsg(final LogWriter logger) {
+  private void preparePersistentStatesMsg(List<CatalogTableObject> allEntries, final LogWriter logger) {
     GemFireCacheImpl c = this.memStore.getGemFireCache();
     Collection<DiskStoreImpl> diskStores = c.listDiskStores();
     logger.info("preparePersistentStatesMsg: diskstores list = " + diskStores);
     GfxdListResultCollector collector = new GfxdListResultCollector();
-    PersistentStateToLeadNodeMsg pmsg = new PersistentStateToLeadNodeMsg(collector);
+    PersistentStateToLeadNodeMsg pmsg
+        = new PersistentStateToLeadNodeMsg(allEntries, collector);
     for (DiskStoreImpl ds : diskStores) {
       Map<Long, AbstractDiskRegion> drs = ds.getAllDiskRegions();
       if (drs != null && !drs.isEmpty()) {
@@ -1571,6 +1644,11 @@ public final class FabricDatabase implements ModuleControl,
 
   private void checkRecoveredIndex(ArrayList<GemFireContainer> uninitializedContainers,
       final LogWriter logger, boolean throwErrorOnMismatch) {
+    // Just return as the indexes are not built in the recovery mode
+    // Not even for the tables used by hive metastore.
+    // Indexes will be created later after the replay is done.
+    if (this.memStore.getGemFireCache().isSnappyRecoveryMode()) return;
+
     for (GemFireContainer container : uninitializedContainers) {
       LocalRegion region = container.getRegion();
       DataPolicy dp = region.getDataPolicy();

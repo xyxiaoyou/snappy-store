@@ -70,6 +70,11 @@ public interface ExternalCatalog {
   Map<String, List<String>> getAllStoreTablesInCatalog();
 
   /**
+   * Gets all the entries in hive
+   */
+  java.util.List<CatalogTableObject> getAllHiveEntries();
+
+  /**
    * Removes a table from the external catalog if it exists.
    */
   void removeTableIfExists(String schema, String table, boolean skipLocks);
