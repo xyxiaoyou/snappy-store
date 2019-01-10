@@ -239,7 +239,6 @@ void ClientService::handleTException(const char* op, const TException& te) {
 
   handleStdException(op, te);
 }
-
 void ClientService::throwSQLExceptionForNodeFailure(const char* op,
     const std::exception& se) {
   std::ostringstream hostAddrStr;

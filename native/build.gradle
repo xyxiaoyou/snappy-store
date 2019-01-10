@@ -23,6 +23,7 @@ buildscript {
   }
 }
 apply plugin: 'wrapper'
+apply plugin: 'de.undercouch.download'
 
 if ((rootProject.name.contains('native') && !rootProject.hasProperty('skipNative'))
     || rootProject.hasProperty('native')) {
@@ -138,7 +139,6 @@ if ((rootProject.name.contains('native') && !rootProject.hasProperty('skipNative
 
     inputs.files dependencies.collect { [ "${distDir}/${it}" ] }.flatten()
     //outputs.files dependencies.collect { [ "${distDir}/${it.replaceAll('-[^-]*.tar.bz2', '')}" ] }.flatten()
-
     doLast {
       outputs.files.each { d -> delete d }
       dependencies.each { tarball ->

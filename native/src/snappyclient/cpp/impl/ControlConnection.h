@@ -126,7 +126,6 @@ namespace io {
 
           void getPreferredServer(thrift::HostAddress& preferredServer,std::exception* failure,
               bool forFailover = false);
-
           FailoverStatus getFailoverStatus(const std::string& sqlState,const int32_t& errorCode, const TException& snappyEx);
         public:
 

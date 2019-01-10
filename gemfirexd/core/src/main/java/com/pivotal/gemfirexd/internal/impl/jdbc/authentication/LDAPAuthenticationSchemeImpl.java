@@ -42,7 +42,6 @@ package com.pivotal.gemfirexd.internal.impl.jdbc.authentication;
 
 
 
-import com.gemstone.gnu.trove.THashSet;
 import com.pivotal.gemfirexd.*;
 import com.pivotal.gemfirexd.auth.callback.CredentialInitializer;
 import com.pivotal.gemfirexd.callbacks.AsyncEventHelper;
@@ -54,6 +53,7 @@ import com.pivotal.gemfirexd.internal.iapi.reference.MessageId;
 import com.pivotal.gemfirexd.internal.iapi.services.monitor.Monitor;
 import com.pivotal.gemfirexd.internal.iapi.services.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.iapi.util.StringUtil;
+import org.eclipse.collections.impl.set.mutable.UnifiedSet;
 
 import javax.naming.*;
 import javax.naming.directory.*;
@@ -501,7 +501,7 @@ implements CredentialInitializer
 		} else {
 		  this.searchGroupFilter = "(&(|(objectClass=group)"
 		      + "(objectClass=groupOfNames)"
-                      + "(objectClass=groupOfMembers)"
+		      + "(objectClass=groupOfMembers)"
 		      + "(objectClass=groupOfUniqueNames))"
 		      + "(|(cn=" + Constants.LDAP_SEARCH_FILTER_GROUP
 		      + ")(name=" + Constants.LDAP_SEARCH_FILTER_GROUP
@@ -810,7 +810,7 @@ implements CredentialInitializer
                           searchFilter = "(objectClass=*)";
                           // add attributes for both groups and users
                           int nAttrs = searchAttributes.length;
-			  int nSearchAttrs = this.searchGroupUserAttributes.length;
+                          int nSearchAttrs = this.searchGroupUserAttributes.length;
                          searchAttributes = Arrays.copyOf(searchAttributes,
                               nAttrs + nSearchAttrs);
                           System.arraycopy(this.searchGroupUserAttributes, 0,
@@ -834,8 +834,8 @@ implements CredentialInitializer
                     member = StringUtil.SQLToUpperCase(member);
                     if (GemFireXDUtils.TraceAuthentication) {
                       SanityManager.DEBUG_PRINT(
-			  AuthenticationServiceBase.AuthenticationTrace,
-			  "Found member " + member + " in LDAP group = " + group);
+                          AuthenticationServiceBase.AuthenticationTrace,
+                          "Found member " + member + " in LDAP group = " + group);
                     }
                     groupMembers.add(member);
                   }
@@ -912,9 +912,7 @@ implements CredentialInitializer
               this.searchGroupAttributes, true, ldapGroup, groupMembers);
           ctx.close();
           // Return all the unique members collected for the group
-          @SuppressWarnings("unchecked")
-          final Set<String> uniqueMembers = new THashSet(groupMembers);
-          return uniqueMembers;
+          return new UnifiedSet<>(groupMembers);
         }
 
         @Override

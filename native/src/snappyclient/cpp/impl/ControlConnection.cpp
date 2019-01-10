@@ -69,14 +69,12 @@ ControlConnection::ControlConnection(ClientService *const &service) :m_serverGro
   boost::assign::insert(m_snappyServerTypeSet)(service->getServerType(true,false,false));
   std::copy(m_locators.begin(),m_locators.end(),std::inserter(m_controlHostSet,m_controlHostSet.end()));
   m_controlLocator = nullptr;
-
   //initliaze failoverSQLStateSet
   short arrSize = sizeof(failoverSQLStateArray)/sizeof(failoverSQLStateArray[0]);
   for(short i =0; i< arrSize;++i){
     failoverSQLStateSet.insert(failoverSQLStateArray[i]);
   }
 }
-
 const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlConnection(
     const std::vector<thrift::HostAddress>& hostAddrs, ClientService *const &service, std::exception* failure){
 
@@ -111,7 +109,6 @@ const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlC
         snappyExData.__set_sqlState("08006");
         snappyExData.__set_reason(msg);
         //snappyExData.__set_errorCode(17002); //TODO:: Need to confirm with sumedh
-
         ex->__set_exceptionData(snappyExData);
         ex->__set_serverInfo(hostAddr.hostName + ":" + portStr );
         throw ex;
@@ -172,7 +169,6 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
         getLocatorPreferredServer(preferredServer,failedServers,serverGroups);
       }
       if(preferredServer.port <=0){
-
         /*For this case we don't have a locator or locator unable to
          * determine a preferred server, so choose some server randomly
          * as the "preferredServer". In case all servers have failed then
@@ -180,7 +176,6 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
          * Remove controlHost from failedServers since it is known to be
          * working at this point (e.g after a reconnect)
          * */
-
         std::set<thrift::HostAddress> skipServers = failedServers;
         if( !failedServers.empty() && std::find(failedServers.begin(),failedServers.end(),m_controlHost)!= failedServers.end()){
           //don't change the original failure list since that is proper
@@ -220,7 +215,6 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
 
 void ControlConnection::searchRandomServer(const std::set<thrift::HostAddress>& skipServers,std::exception* failure,
     thrift::HostAddress& hostAddress){
-
   std::vector<thrift::HostAddress> searchServers;
   // Note: Do not use unordered_set -- reason is http://www.cplusplus.com/forum/general/198319/
   std::copy(m_controlHostSet.begin(),m_controlHostSet.end(),std::inserter(searchServers,searchServers.end()));
@@ -369,7 +363,6 @@ void  ControlConnection::refreshAllHosts(const std::vector<thrift::HostAddress>&
   m_controlHostSet.insert(newLocators.begin(),newLocators.end());
   m_controlHostSet.insert(allHosts.begin(),allHosts.end());
 }
-
 
 thrift::SnappyException* ControlConnection::failoverExhausted(const std::set<thrift::HostAddress>& failedServers,
     std::exception* failure) {
