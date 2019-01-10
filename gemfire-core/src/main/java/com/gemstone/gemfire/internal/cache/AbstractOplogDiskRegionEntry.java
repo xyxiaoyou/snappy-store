@@ -54,9 +54,10 @@ public abstract class AbstractOplogDiskRegionEntry
 
   protected abstract void setDiskId(RegionEntry oldRe);
 
-  final void setDiskIdForRegion(RegionEntry oldRe) {
+  final void setDiskIdForRegion(RegionEntryContext context,
+      RegionEntry oldRe) {
     setDiskId(oldRe);
-    setBufferEntry(null, getValueField());
+    setBufferEntry(context, getValueField());
   }
 
   @Override

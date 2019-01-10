@@ -42,23 +42,22 @@ package com.pivotal.gemfirexd.internal.impl.jdbc.authentication;
 
 
 
-import com.gemstone.gnu.trove.THashSet;
-import com.pivotal.gemfirexd.Constants;
-import com.pivotal.gemfirexd.Property;
+import com.pivotal.gemfirexd.*;
 import com.pivotal.gemfirexd.auth.callback.CredentialInitializer;
+import com.pivotal.gemfirexd.callbacks.AsyncEventHelper;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.SecurityUtils;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
-import com.pivotal.gemfirexd.internal.iapi.jdbc.AuthenticationService;
 import com.pivotal.gemfirexd.internal.iapi.reference.MessageId;
-import com.pivotal.gemfirexd.internal.iapi.services.i18n.MessageService;
 import com.pivotal.gemfirexd.internal.iapi.services.monitor.Monitor;
 import com.pivotal.gemfirexd.internal.iapi.services.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.iapi.util.StringUtil;
+import org.eclipse.collections.impl.set.mutable.UnifiedSet;
 
 import javax.naming.*;
 import javax.naming.directory.*;
+import javax.naming.directory.Attribute;
 import javax.naming.ldap.LdapName;
 import javax.naming.ldap.Rdn;
 
@@ -138,9 +137,9 @@ implements CredentialInitializer
 	private static final String[] attrDN = {"dn"};								;
 	*/
 // GemStone changes END
+	private String auth_ldap_search_pw_attr = "AUTH_LDAP_SEARCH_PW";
 
 	public LDAPAuthenticationSchemeImpl(JNDIAuthenticationService as, Properties dbProperties) {
-
 		super(as, dbProperties);
 // GemStone changes BEGIN
 		this.traceOut = (FileOutputStream)this.initDirContextEnv.get(
@@ -166,6 +165,15 @@ implements CredentialInitializer
 								)
 								throws java.sql.SQLException
 	{
+		String encryptedPwd = getEncrypted(userPassword);
+		if (encryptedPwd != null) {
+			try {
+				userPassword = decryptPassword(userName, encryptedPwd, null, -1);
+			} catch (Exception e) {
+				throw getLoginSQLException(e);
+			}
+		}
+
 		if ( ((userName == null) || (userName.length() == 0)) ||
 			 ((userPassword == null) || (userPassword.length() == 0)) )
 		{
@@ -204,7 +212,11 @@ implements CredentialInitializer
 			}
 
 			if (userDN == (String) null) {
-				userDN = getDNFromUID(userName);
+				try {
+					userDN = getDNFromUID(userName);
+				} catch (Exception ex) {
+					throw getLoginSQLException(ex);
+				}
 			}
 		
 // GemStone changes BEGIN
@@ -281,6 +293,14 @@ implements CredentialInitializer
 // GemStone changes END
 
 		throw getLoginSQLException(e);
+	}
+
+	private String decryptPassword(String user, String secret, String transformation, int keySize) throws Exception {
+		if (GemFireXDUtils.TraceAuthentication) {
+			SanityManager.DEBUG_PRINT(AuthenticationServiceBase
+					.AuthenticationTrace, "Decrypting password for user " + user);
+		}
+		return AsyncEventHelper.decryptPassword(user, secret, null, -1);
 	}
 
 	
@@ -414,17 +434,19 @@ implements CredentialInitializer
 		//
 		String searchFilterProp =
 					authenticationService.getProperty(Property.AUTH_LDAP_SEARCH_FILTER);
-		
-		if (searchFilterProp == (String) null)
+
+		String defaultLeftSearchFilter = "(&(|(objectclass=user)(objectclass=person)" +
+				"(objectclass=inetOrgPerson)(objectclass=organizationalPerson))(uid=";
+		if (searchFilterProp == null)
 		{
 			// use our default search filter
-			this.leftSearchFilter = "(&(objectClass=inetOrgPerson)(uid=";
+			this.leftSearchFilter = defaultLeftSearchFilter;
 			this.rightSearchFilter = "))";
 
 		} else if (StringUtil.SQLEqualsIgnoreCase(searchFilterProp,Constants.LDAP_LOCAL_USER_DN)) {
 
 			// use local user DN in gemfirexd.user.<uid>
-			this.leftSearchFilter = "(&(objectClass=inetOrgPerson)(uid=";
+			this.leftSearchFilter = defaultLeftSearchFilter;
 			this.rightSearchFilter = "))";
 			this.useUserPropertyAsDN = true;
 
@@ -479,7 +501,7 @@ implements CredentialInitializer
 		} else {
 		  this.searchGroupFilter = "(&(|(objectClass=group)"
 		      + "(objectClass=groupOfNames)"
-                      + "(objectClass=groupOfMembers)"
+		      + "(objectClass=groupOfMembers)"
 		      + "(objectClass=groupOfUniqueNames))"
 		      + "(|(cn=" + Constants.LDAP_SEARCH_FILTER_GROUP
 		      + ")(name=" + Constants.LDAP_SEARCH_FILTER_GROUP
@@ -576,7 +598,7 @@ implements CredentialInitializer
 	 * @exception NamingException if could not retrieve the user DN.
 	 **/
 	private String getDNFromUID(String uid)
-		throws javax.naming.NamingException
+		throws Exception
 	{
 		//
 		// We bind to the LDAP server here
@@ -588,7 +610,7 @@ implements CredentialInitializer
 		if (this.searchAuthDN != (String) null) {
 			env = (Properties) initDirContextEnv.clone();
 			env.put(Context.SECURITY_PRINCIPAL, this.searchAuthDN);
-			env.put(Context.SECURITY_CREDENTIALS, this.searchAuthPW);
+			env.put(Context.SECURITY_CREDENTIALS, getSearchAuthPwd());
 		}
 		else
 			env = initDirContextEnv;
@@ -682,6 +704,24 @@ implements CredentialInitializer
 		// Return the full user's DN
 		return userDN.toString();
 	}
+
+	private String getEncrypted(String pwd) {
+		if (pwd != null &&
+				pwd.startsWith(AuthenticationServiceBase.ID_PATTERN_LDAP_SCHEME_V1)) {
+			return pwd.substring(AuthenticationServiceBase.ID_PATTERN_LDAP_SCHEME_V1.length());
+		} else {
+			return null;
+		}
+	}
+
+	private String getSearchAuthPwd() throws Exception {
+		String entrypedPwd = getEncrypted(this.searchAuthPW);
+		if (entrypedPwd != null) {
+			return decryptPassword(auth_ldap_search_pw_attr,
+					entrypedPwd, null, -1);
+		}
+		return this.searchAuthPW;
+	}
 // GemStone changes BEGIN
 
         /**
@@ -770,7 +810,7 @@ implements CredentialInitializer
                           searchFilter = "(objectClass=*)";
                           // add attributes for both groups and users
                           int nAttrs = searchAttributes.length;
-			  int nSearchAttrs = this.searchGroupUserAttributes.length;
+                          int nSearchAttrs = this.searchGroupUserAttributes.length;
                          searchAttributes = Arrays.copyOf(searchAttributes,
                               nAttrs + nSearchAttrs);
                           System.arraycopy(this.searchGroupUserAttributes, 0,
@@ -794,8 +834,8 @@ implements CredentialInitializer
                     member = StringUtil.SQLToUpperCase(member);
                     if (GemFireXDUtils.TraceAuthentication) {
                       SanityManager.DEBUG_PRINT(
-			  AuthenticationServiceBase.AuthenticationTrace,
-			  "Found member " + member + " in LDAP group = " + group);
+                          AuthenticationServiceBase.AuthenticationTrace,
+                          "Found member " + member + " in LDAP group = " + group);
                     }
                     groupMembers.add(member);
                   }
@@ -835,17 +875,17 @@ implements CredentialInitializer
          *              on failure to retrieve the LDAP group's base DN
          */
         public Set<String> getLDAPGroupMembers(String ldapGroup)
-            throws NamingException {
+            throws Exception {
 
           // We bind to the LDAP server here
           // Note that this bind might be anonymous (if anonymous searches
           // are allowed in the LDAP server, or authenticated if we were
           // told/configured to.
           Properties env = null;
-          if (this.searchAuthDN != (String)null) {
+          if (this.searchAuthDN != null) {
             env = (Properties)initDirContextEnv.clone();
             env.put(Context.SECURITY_PRINCIPAL, this.searchAuthDN);
-            env.put(Context.SECURITY_CREDENTIALS, this.searchAuthPW);
+            env.put(Context.SECURITY_CREDENTIALS, getSearchAuthPwd());
           } else {
             env = initDirContextEnv;
           }
@@ -872,9 +912,7 @@ implements CredentialInitializer
               this.searchGroupAttributes, true, ldapGroup, groupMembers);
           ctx.close();
           // Return all the unique members collected for the group
-          @SuppressWarnings("unchecked")
-          final Set<String> uniqueMembers = new THashSet(groupMembers);
-          return uniqueMembers;
+          return new UnifiedSet<>(groupMembers);
         }
 
         @Override

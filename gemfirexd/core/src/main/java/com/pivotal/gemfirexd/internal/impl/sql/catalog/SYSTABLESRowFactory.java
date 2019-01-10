@@ -90,7 +90,7 @@ public class SYSTABLESRowFactory extends CatalogRowFactory
 /* class SYSTABLESRowFactory extends CatalogRowFactory */
 //GemStone changes END
 {
-public static final int		SYSTABLES_COLUMN_COUNT = 20;
+public static final int		SYSTABLES_COLUMN_COUNT = 21;
 
 	/* Column #s for systables (1 based) */
 	public static final int		SYSTABLES_TABLEID = 1;
@@ -114,6 +114,7 @@ public static final int		SYSTABLES_COLUMN_COUNT = 20;
 	public static final int         SYSTABLES_GATEWAYENABLED = 18;
 	public static final int         SYSTABLES_SENDERIDS = 19;
 	public static final int         SYSTABLES_OFFHEAPENABLED = 20;
+	public static final int         SYSTABLES_ROW_LEVEL_SECURITY_ENABLED = 21;
   
 	/* (original derby code)
 	private static final String		TABLENAME_STRING = "SYSTABLES";
@@ -190,7 +191,7 @@ public static final int		SYSTABLES_COLUMN_COUNT = 20;
 		String					tableID = null;
 		String					schemaID = null;
 		String					tableName = null;
-
+    boolean rlsEnabled = false;
 
 		if (td != null)
 		{
@@ -256,6 +257,7 @@ public static final int		SYSTABLES_COLUMN_COUNT = 20;
 			char[] lockGChar = new char[1];
 			lockGChar[0] = descriptor.getLockGranularity();
 			lockGranularity = new String(lockGChar);
+			rlsEnabled = descriptor.getRowLevelSecurityEnabledFlag();
 		}
 
 		/* Insert info into systables */
@@ -313,6 +315,7 @@ public static final int		SYSTABLES_COLUMN_COUNT = 20;
     row.setColumn(SYSTABLES_GATEWAYENABLED, new SQLBoolean(false));
     row.setColumn(SYSTABLES_SENDERIDS, new SQLVarchar(null));
     row.setColumn(SYSTABLES_OFFHEAPENABLED, new SQLBoolean(false));
+		row.setColumn(SYSTABLES_ROW_LEVEL_SECURITY_ENABLED, new SQLBoolean(rlsEnabled));
 // GemStone changes END
 		return row;
 	}
@@ -395,6 +398,7 @@ public static final int		SYSTABLES_COLUMN_COUNT = 20;
 		UUID		schemaUUID;
 		SchemaDescriptor	schema;
 		TableDescriptor		tabDesc;
+		boolean rowLevelSecurityEnabled;
 
 		/* 1st column is TABLEID (UUID - char(36)) */
 		col = row.getColumn(SYSTABLES_TABLEID);
@@ -452,9 +456,10 @@ public static final int		SYSTABLES_COLUMN_COUNT = 20;
 		{
 			SanityManager.ASSERT(lockGranularity.length() == 1, "Fifth column type incorrect");
 		}
-
+    rowLevelSecurityEnabled = row.getColumn(SYSTABLES_ROW_LEVEL_SECURITY_ENABLED).getBoolean();
 		// RESOLVE - Deal with lock granularity
-		tabDesc = ddg.newTableDescriptor(tableName, schema, tableTypeEnum, lockGranularity.charAt(0));
+		tabDesc = ddg.newTableDescriptor(tableName, schema, tableTypeEnum,
+				lockGranularity.charAt(0), rowLevelSecurityEnabled);
 		tabDesc.setUUID(tableUUID);
 // GemStone changes BEGIN
     col = row.getColumn(SYSTABLES_SERVERGROUPS);
@@ -506,7 +511,7 @@ public static final int		SYSTABLES_COLUMN_COUNT = 20;
 // GemStone changes BEGIN
             SystemColumnImpl.getIdentifierColumn("TABLESCHEMANAME", false),
             SystemColumnImpl.getIndicatorColumn("LOCKGRANULARITY"),
-            SystemColumnImpl.getColumn("SERVERGROUPS", Types.VARCHAR, false),
+            SystemColumnImpl.getColumn("SERVERGROUPS", Types.LONGVARCHAR, false),
             SystemColumnImpl.getColumn("DATAPOLICY", Types.VARCHAR, false, 24),
             SystemColumnImpl.getColumn("PARTITIONATTRS", Types.LONGVARCHAR, true),
             SystemColumnImpl.getColumn("RESOLVER", Types.LONGVARCHAR, true),
@@ -517,10 +522,11 @@ public static final int		SYSTABLES_COLUMN_COUNT = 20;
             SystemColumnImpl.getIdentifierColumn("LOADER", true),
             SystemColumnImpl.getIdentifierColumn("WRITER", true),
             SystemColumnImpl.getColumn("LISTENERS", Types.LONGVARCHAR, true),
-            SystemColumnImpl.getColumn("ASYNCLISTENERS", Types.VARCHAR, true, 256),
+            SystemColumnImpl.getColumn("ASYNCLISTENERS", Types.LONGVARCHAR, true),
             SystemColumnImpl.getColumn("GATEWAYENABLED", Types.BOOLEAN, false),
-            SystemColumnImpl.getColumn("GATEWAYSENDERS", Types.VARCHAR, true, 256),
+            SystemColumnImpl.getColumn("GATEWAYSENDERS", Types.LONGVARCHAR, true),
             SystemColumnImpl.getColumn("OFFHEAPENABLED", Types.BOOLEAN, false),
+						SystemColumnImpl.getColumn("ROWLEVELSECURITYENABLED", Types.BOOLEAN, false)
             
             /* (original derby code) SystemColumnImpl.getIndicatorColumn("LOCKGRANULARITY"), */
 // GemStone changes END

@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -45,7 +45,12 @@ import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -56,6 +61,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import com.gemstone.gemfire.CancelCriterion;
 import com.gemstone.gemfire.CancelException;
+import com.gemstone.gemfire.GemFireIOException;
 import com.gemstone.gemfire.StatisticsFactory;
 import com.gemstone.gemfire.SystemFailure;
 import com.gemstone.gemfire.cache.Cache;
@@ -99,6 +105,8 @@ import com.gemstone.gemfire.internal.offheap.annotations.Retained;
 import com.gemstone.gemfire.internal.shared.Version;
 import com.gemstone.gnu.trove.THashMap;
 import com.gemstone.gnu.trove.THashSet;
+import org.eclipse.collections.impl.set.mutable.primitive.IntHashSet;
+import org.eclipse.collections.impl.set.mutable.primitive.LongHashSet;
 
 import static com.gemstone.gemfire.internal.cache.GemFireCacheImpl.sysProps;
 
@@ -1580,6 +1588,9 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     }
     while (!this.flusherThreadTerminated) {
       try {
+        // check if cache is going down and in that case also terminate the
+        // flusher thread.
+        getCache().getCancelCriterion().checkCancelInProgress(null);
         this.flusherThread.join(100);
       } catch (InterruptedException ie) {
         Thread.currentThread().interrupt();
@@ -1818,6 +1829,7 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
         logger.fine("Async writer thread started");
       }
       boolean doingFlush = false;
+      boolean terminateFlusherThread = true;
       try {
         while (waitUntilFlushIsReady()) {
           int drainCount = fillDrainList();
@@ -1909,7 +1921,12 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
         // logger.info(LocalizedStrings.DEBUG, "DEBUG", ignore);
         // the above checkCancelInProgress will throw a CancelException
         // when we are being shutdown
-      } catch(Throwable t) {
+      } catch (Throwable t) {
+        getCache().getCancelCriterion().checkCancelInProgress(t);
+        if (!(t instanceof IOException)) {
+          terminateFlusherThread = false;
+          throw new GemFireIOException("Exception encountered in flusher thread: " + t.getMessage(), t);
+        }
         logger.severe(LocalizedStrings.DiskStoreImpl_FATAL_ERROR_ON_FLUSH, t);
         fatalDae = new DiskAccessException(LocalizedStrings.DiskStoreImpl_FATAL_ERROR_ON_FLUSH.toLocalizedString(), t, DiskStoreImpl.this);
       } finally {
@@ -1919,11 +1936,13 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
           logger.fine("Async writer thread stopped. Pending opcount="
               + asyncQueue.size());
         }
-        flusherThreadTerminated = true;
-        stopFlusher = true; // set this before calling handleDiskAccessException
-        // or it will hang
-        if (fatalDae != null) {
-          handleDiskAccessException(fatalDae, true);
+        if (terminateFlusherThread) {
+          flusherThreadTerminated = true;
+          stopFlusher = true; // set this before calling handleDiskAccessException
+          // or it will hang
+          if (fatalDae != null) {
+            handleDiskAccessException(fatalDae, true);
+          }
         }
       }
     }
@@ -2201,13 +2220,8 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
       IndexRecoveryTask task = new IndexRecoveryTask(allOplogs, recreateIndexes);
       // other disk store threads wait for this task, so use a different
       // thread pool for execution if possible (not in loner VM)
-      ThreadPoolExecutor executor;
-      if (getCache().getDistributionManager().isLoner()) {
-        executor = getCache().getDiskDelayedWritePool();
-      } else {
-        executor = (ThreadPoolExecutor)getCache().getDistributionManager()
-            .getWaitingThreadPool();
-      }
+      ThreadPoolExecutor executor = getCache()
+          .getWaitingThreadPoolOrDiskWritePool();
       executeDiskStoreTask(task, executor, true);
     }
   }
@@ -3936,10 +3950,8 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
    * in the unsigned int range.
    */
   public static class OplogEntryIdSet {
-    private final TStatelessIntHashSet ints = new TStatelessIntHashSet(
-        (int) INVALID_ID);
-    private final TStatelessLongHashSet longs = new TStatelessLongHashSet(
-        INVALID_ID);
+    private final IntHashSet ints = new IntHashSet(8);
+    private final LongHashSet longs = new LongHashSet(8);
 
     public void add(long id) {
       if (id >= 0 && id <= 0x00000000FFFFFFFFL) {
@@ -4184,6 +4196,10 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     String r = getDiskInitFile().getInconsistencyReport();
     if (r != null) {
       System.out.print(r);
+    }
+    String cbinfo = getDiskInitFile().getColumnBufferInfo();
+    if (cbinfo != null) {
+      System.out.print(cbinfo);
     }
   }
 
@@ -4830,8 +4846,11 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
           DiskStoreObserver.startAsyncValueRecovery(DiskStoreImpl.this);
           // defer regions marked in first pass
           for (Oplog oplog : oplogSet) {
-            oplog.recoverValuesIfNeeded(currentAsyncValueRecoveryMap,
-                deferredRegions, currentAsyncValueRecoveryMap);
+            // If returns false further recovery is not possible due to UMM limit.
+            if (!oplog.recoverValuesIfNeeded(currentAsyncValueRecoveryMap,
+                deferredRegions, currentAsyncValueRecoveryMap)){
+              break;
+            }
           }
         } catch (CancelException ignore) {
           // do nothing
@@ -4873,8 +4892,11 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
               }
             }
             for (Oplog oplog : oplogSet) {
-              oplog.recoverValuesIfNeeded(deferredRegions, null,
-                  currentAsyncValueRecoveryMap);
+              // If returns false further recovery is not possible due to UMM limit.
+              if (!oplog.recoverValuesIfNeeded(deferredRegions, null,
+                  currentAsyncValueRecoveryMap)){
+                break;
+              }
             }
           } catch (CancelException ignore) {
             // do nothing

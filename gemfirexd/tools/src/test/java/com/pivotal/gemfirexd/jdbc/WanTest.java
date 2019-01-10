@@ -1548,7 +1548,7 @@ public class WanTest extends JdbcTestBase {
       assertEquals("OK", hubRs.getString(1));
       runningPort = hubRs.getInt(2);
       assertTrue((GatewayReceiver.DEFAULT_START_PORT <= runningPort)
-          && (GatewayReceiver.DEFAULT_END_PORT > runningPort));
+          && (GatewayReceiver.DEFAULT_END_PORT >= runningPort));
       assertEquals(GatewayReceiver.DEFAULT_START_PORT, hubRs.getInt(3));
       assertEquals(GatewayReceiver.DEFAULT_END_PORT, hubRs.getInt(4));
       assertEquals("", hubRs.getString(5));
@@ -1655,7 +1655,7 @@ public class WanTest extends JdbcTestBase {
       runningPort = hubRs.getInt(2);
       assertTrue("unexpected running port " + runningPort,
           (GatewayReceiver.DEFAULT_START_PORT <= runningPort)
-              && (GatewayReceiver.DEFAULT_END_PORT > runningPort));
+              && (GatewayReceiver.DEFAULT_END_PORT >= runningPort));
       assertEquals(GatewayReceiver.DEFAULT_START_PORT, hubRs.getInt(3));
       assertEquals(GatewayReceiver.DEFAULT_END_PORT, hubRs.getInt(4));
       assertEquals("SG1", hubRs.getString(5));
@@ -1680,7 +1680,7 @@ public class WanTest extends JdbcTestBase {
           + "SYS.GATEWAYRECEIVERS table");
     }
     int startPort = AvailablePort.getRandomAvailablePort(AvailablePort.SOCKET);
-    int endPort = startPort + 3;
+    int endPort = startPort + 10;
     String portRange = "startport " + startPort + " endport " + endPort + ' ';
     con.createStatement().execute(
         "CREATE GATEWAYRECEIVER R1 (" + portRange
@@ -1718,13 +1718,13 @@ public class WanTest extends JdbcTestBase {
           "CREATE GATEWAYRECEIVER R4 (" + portRange
               + "socketbuffersize 1000 bindaddress '0.0.0.0' "
               + "maxtimebetweenpings 10000) server groups (sg1)");
-      fail("Test was expected to throw BindException ");
+      fail("Test was expected to throw SQLException due to existing R4");
     }
     catch (Exception e) {
       if (e instanceof SQLException) {
           return;
       }
-      fail("Test was expected to throw SQLException ");
+      fail("Test was expected to throw SQLException");
     }
     con.createStatement().execute(
         "CREATE GATEWAYRECEIVER R5 (startport " + startPort + " endport "

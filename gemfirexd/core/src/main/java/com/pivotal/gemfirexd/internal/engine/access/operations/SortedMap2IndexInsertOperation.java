@@ -18,7 +18,12 @@
 package com.pivotal.gemfirexd.internal.engine.access.operations;
 
 import java.io.IOException;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
+import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.cache.ConflictException;
 import com.gemstone.gemfire.cache.query.IndexMaintenanceException;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
@@ -40,13 +45,13 @@ import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.offheap.annotations.Released;
 import com.gemstone.gemfire.internal.offheap.annotations.Retained;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
-import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserver;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserverHolder;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
+import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.access.GemFireTransaction;
-import com.pivotal.gemfirexd.internal.engine.access.index.SortedMap2Index;
 import com.pivotal.gemfirexd.internal.engine.access.index.GfxdIndexManager;
+import com.pivotal.gemfirexd.internal.engine.access.index.SortedMap2Index;
 import com.pivotal.gemfirexd.internal.engine.access.operations.SortedMap2IndexDeleteOperation.UpdateReplacementValue;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.store.CompactCompositeIndexKey;
@@ -68,8 +73,7 @@ import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
  * ConcurrentSkipListMap data structure.
  * 
  * @see SortedMap2Index
- * @see SortedMap2IndexOperation
- * 
+ *
  * @author yjing
  * @author Rahul
  * @author swale
@@ -89,13 +93,13 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
   public void doMe(Transaction tran, LogInstant instant, LimitObjectInput in)
       throws StandardException, IOException {
     this.result = doMe(null, null, this.memcontainer, this.key, this.row,
-        this.isUnique, null, false /*isPutDML*/);
+        this.isUnique, null, false /* isPutDML */, false);
   }
 
   public static boolean doMe(GemFireTransaction tran, TXStateInterface tx,
       GemFireContainer container, Object key, RowLocation value,
       boolean isUnique, WrapperRowLocationForTxn wrapperToReplaceUniqEntry,
-      boolean isPutDML) throws StandardException {
+      boolean isPutDML, boolean skipConstraintChecks) throws StandardException {
     if (tran != null && tran.needLogging()) {
       SortedMap2IndexInsertOperation op = new SortedMap2IndexInsertOperation(
           container, key, value, isUnique);
@@ -104,14 +108,15 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
     }
 
     return insertIntoSkipListMap(tx, container, key, value, isUnique,
-        wrapperToReplaceUniqEntry, isPutDML);
+        wrapperToReplaceUniqEntry, isPutDML, skipConstraintChecks);
   }
 
   private static boolean insertIntoSkipListMap(final TXStateInterface tx,
       final GemFireContainer container, Object key, final RowLocation value,
       final boolean isUnique,
       final WrapperRowLocationForTxn wrapperToReplaceUniqEntry,
-      boolean isPutDML) throws StandardException {
+      boolean isPutDML, boolean skipConstraintChecks) throws StandardException {
+    isPutDML |= skipConstraintChecks;
     final ConcurrentSkipListMap<Object, Object> skipListMap = container
         .getSkipListMap();
     long lockTimeout = -1L;
@@ -163,7 +168,7 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
               container, null);
         } catch (IndexMaintenanceException ime) {
           if (isPutDML) {
-            // indicate to higher layer that don't try the delete portion
+            // indicate to higher layer to not try the delete portion if applicable
             return false;
           }
           // this always wraps a StandardException
@@ -284,6 +289,55 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
           }
           break;
         }
+
+        // TODO: identify the cause of Bug SNAP-2627
+        // Till then this is the crude fix
+        if (oldValue instanceof AbstractRegionEntry) {
+          final AbstractRegionEntry existingRe = (AbstractRegionEntry)oldValue;
+          if (existingRe.isDestroyedOrRemoved()) {
+            Callable<Boolean> deadEntryRemover = new Callable<Boolean>() {
+              @Override
+              public Boolean call() {
+                synchronized (existingRe) {
+                  if (existingRe.isDestroyedOrRemoved()) {
+                    if (!existingRe.isRemovedPhase1()) {
+                      // create a dummy exception
+                      Throwable th = GemFireXDUtils.newDuplicateKeyViolation("unique constraint",
+                          container.getQualifiedTableName(), "key=" + key.toString()
+                              + ", row=" + value, oldValue, null, null);
+                      final GemFireCacheImpl cache = Misc.getGemFireCache();
+                      final LogWriter logger = cache.getLogger();
+                      logger.error("Unique index constraint violation caused due to " +
+                          "removed/destroyed entry. The index is corrupted. Cleaning the index", th);
+
+                      skipListMap.remove(key, oldValue);
+                    }
+                    return true;
+                  }
+
+                }
+                return false;
+              }
+
+            };
+
+            ThreadPoolExecutor executor = Misc.getGemFireCache()
+                .getWaitingThreadPoolOrDiskWritePool();
+            try {
+              Future<Boolean> outcome = executor.submit(deadEntryRemover);
+              if (outcome.get(2000, TimeUnit.MILLISECONDS)) {
+                // either the entry was token removed or token destroyed, try again
+                continue;
+              }
+            } catch (Exception e) {
+              // not much can be done? let this thread throw duplicate key exception
+            }
+          }
+        }
+        if (skipConstraintChecks) {
+          // indicate to higher layer to not try the delete portion if applicable
+          return false;
+        }
         throw GemFireXDUtils.newDuplicateKeyViolation("unique constraint",
             container.getQualifiedTableName(), "key=" + key.toString()
                 + ", row=" + value, oldValue, null, null);
@@ -367,7 +421,7 @@ public final class SortedMap2IndexInsertOperation extends MemIndexOperation {
       }
     } catch (IndexMaintenanceException ime) {
       if (isPutDML) {
-        // indicate to higher layer that don't try the delete portion
+        // indicate to higher layer to not try the delete portion if applicable
         return false;
       }
       // this always wraps a StandardException

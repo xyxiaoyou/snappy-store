@@ -33,6 +33,7 @@ import com.gemstone.gemfire.distributed.DistributedMember;
 import com.gemstone.gemfire.distributed.internal.DistributionManager;
 import com.gemstone.gemfire.distributed.internal.DistributionStats;
 import com.gemstone.gemfire.distributed.internal.ReplyException;
+import com.gemstone.gemfire.internal.Assert;
 import com.gemstone.gemfire.internal.GFToSlf4jBridge;
 import com.gemstone.gemfire.internal.InternalDataSerializer;
 import com.gemstone.gemfire.internal.NanoTimer;
@@ -43,6 +44,8 @@ import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
 import com.gemstone.gemfire.internal.cache.LocalRegion;
 import com.gemstone.gemfire.internal.shared.unsafe.UnsafeHolder;
 import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
+import com.gemstone.gemfire.internal.cache.PartitionedRegion;
+import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.pivotal.gemfirexd.Constants;
 import com.pivotal.gemfirexd.internal.catalog.SystemProcedures;
@@ -56,6 +59,7 @@ import com.pivotal.gemfirexd.internal.engine.ddl.GfxdDDLPreprocess;
 import com.pivotal.gemfirexd.internal.engine.ddl.callbacks.CallbackProcedures;
 import com.pivotal.gemfirexd.internal.engine.ddl.catalog.GfxdSystemProcedures;
 import com.pivotal.gemfirexd.internal.engine.ddl.wan.messages.AbstractGfxdReplayableMessage;
+import com.pivotal.gemfirexd.internal.engine.distributed.GfxdDistributionAdvisor;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.sql.catalog.ExtraTableInfo;
 import com.pivotal.gemfirexd.internal.engine.stats.ConnectionStats;
@@ -1108,7 +1112,7 @@ public final class GfxdSystemProcedureMessage extends
           throws StandardException {
         try {
           String logClass = (String) params[0];
-          Level level = org.apache.log4j.Level.toLevel((String) params[1]);
+          Level level = ClientSharedUtils.convertToLog4LogLevel((String)params[1]);
           SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
                   "GfxdSystemProcedureMessage: setting log level for class '" + logClass
                           + "' to " + level);
@@ -1465,45 +1469,6 @@ public final class GfxdSystemProcedureMessage extends
       }
     },
 
-    repairCatalog {
-      @Override
-      boolean allowExecution(Object[] params) {
-        // allow execution only on lead node
-        final boolean isLead = GemFireXDUtils.getGfxdAdvisor().getMyProfile().hasSparkURL();
-        return isLead;
-      }
-
-      @Override
-      public void processMessage(Object[] params, DistributedMember sender) throws
-          StandardException {
-        Object repair = params[0];
-        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
-            "GfxdSystemProcedureMessage: invoking REPAIR_CATALOG() procedure");
-        try {
-          GfxdSystemProcedures.runCatalogConsistencyChecks();
-        } catch (SQLException sq) {
-          throw StandardException.unexpectedUserException(sq);
-        }
-      }
-
-      @Override
-      public Object[] readParams(DataInput in, short flags) throws IOException,
-          ClassNotFoundException {
-        return new Object[] { DataSerializer.readInteger(in) };
-      }
-
-      @Override
-      public void writeParams(Object[] params, DataOutput out)
-          throws IOException {
-        DataSerializer.writeInteger((Integer)params[0], out);
-      }
-
-      @Override
-      String getSQLStatement(Object[] params) throws StandardException {
-        return "CALL SYS.REPAIR_CATALOG()";
-      }
-    },
-    
     forceHDFSWriteonlyFileRollover {
 
       @Override
@@ -1597,6 +1562,68 @@ public final class GfxdSystemProcedureMessage extends
         final StringBuilder sb = new StringBuilder();
         return sb.append("CALL SYS.SET_NANOTIMER_TYPE('").append(params[0])
             .append("','").append(params[1]).append("')").toString();
+      }
+    },
+
+    createOrDropReservoirRegion {
+      @Override
+      public void processMessage(Object[] params, DistributedMember sender) {
+        String reservoirRegionName = (String)params[0];
+        String resolvedBaseName = (String)params[1];
+        Boolean isDrop = (Boolean)params[2];
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+            "GfxdSystemProcedureMessage:CREATE_OR_DROP_RESERVOIR_REGION " +
+                "reservoirRegionName=" + reservoirRegionName +
+                " resolvedBaseName=" + resolvedBaseName + " isDrop=" + isDrop);
+        if (isDrop) {
+          PartitionedRegion region = Misc.getReservoirRegionForSampleTable(
+              reservoirRegionName);
+          Misc.dropReservoirRegionForSampleTable(region);
+        } else {
+          PartitionedRegion region = Misc.createReservoirRegionForSampleTable(
+              reservoirRegionName, resolvedBaseName);
+          if (Misc.initialDDLReplayDone()) {
+            Assert.assertTrue(region != null);
+          }
+        }
+      }
+
+      @Override
+      public Object[] readParams(DataInput in, short flags) throws IOException {
+        Object[] inParams = new Object[3];
+        inParams[0] = in.readUTF();
+        inParams[1] = in.readUTF();
+        inParams[2] = in.readBoolean();
+        return inParams;
+      }
+
+      @Override
+      public void writeParams(Object[] params, DataOutput out)
+          throws IOException {
+        out.writeUTF((String)params[0]);
+        out.writeUTF((String)params[1]);
+        out.writeBoolean((Boolean)params[2]);
+      }
+
+      @Override
+      boolean shouldBeConflated(Object[] params) {
+        return (Boolean)params[2];
+      }
+
+      @Override
+      String getRegionToConflate(Object[] params) {
+        return "SYS.__SNAPPY_INTERNAL_RESERVOIR";
+      }
+
+      @Override
+      Object getKeyToConflate(Object[] params) {
+        return params[0];
+      }
+
+      @Override
+      String getSQLStatement(Object[] params) {
+        return "CALL SYS.CREATE_OR_DROP_RESERVOIR_REGION('" + params[0] +
+            "','" + params[1] + "'," + params[2] + ')';
       }
     },
 
@@ -1842,6 +1869,12 @@ public final class GfxdSystemProcedureMessage extends
           // only this one if user has for multiple groups
         } finally {
           tc.commit();
+          // clear the plan cache on lead node
+          GfxdDistributionAdvisor.GfxdProfile profile = GemFireXDUtils.getGfxdProfile(Misc.getMyId());
+          if (profile != null && profile.hasSparkURL()) {
+            CallbackFactoryProvider.getStoreCallbacks().clearSessionCache(true);
+            CallbackFactoryProvider.getStoreCallbacks().refreshPolicies(ldapGroup);
+          }
           if (disableLogging) {
             tc.disableLogging();
           }
@@ -1941,7 +1974,7 @@ public final class GfxdSystemProcedureMessage extends
      * if it is a {@link VMKind#LOCATOR}, for example.
      */
     boolean allowExecution(Object[] params) throws StandardException {
-      return GemFireXDUtils.getMyVMKind().isAccessorOrStore();
+      return Misc.getMemStoreBooting().getMyVMKind().isAccessorOrStore();
     }
 
     public abstract void processMessage(Object[] params,

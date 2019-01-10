@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -297,19 +297,9 @@ public abstract class UnsafeHolder {
   }
 
   /**
-   * Release explicitly if the passed ByteBuffer is a direct one. Avoid using
+   * Release explicitly assuming passed ByteBuffer is a direct one. Avoid using
    * this directly rather use BufferAllocator.allocate/release where possible.
    */
-  public static void releaseIfDirectBuffer(ByteBuffer buffer) {
-    if (buffer != null) {
-      if (buffer.isDirect()) {
-        releaseDirectBuffer(buffer);
-      } else {
-        buffer.rewind().limit(0);
-      }
-    }
-  }
-
   public static void releaseDirectBuffer(ByteBuffer buffer) {
     sun.misc.Cleaner cleaner = ((sun.nio.ch.DirectBuffer)buffer).cleaner();
     if (cleaner != null) {

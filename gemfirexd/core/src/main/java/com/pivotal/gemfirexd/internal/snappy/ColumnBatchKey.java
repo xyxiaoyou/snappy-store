@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -17,6 +17,7 @@
 package com.pivotal.gemfirexd.internal.snappy;
 
 import com.gemstone.gemfire.internal.cache.AbstractRegionEntry;
+import com.gemstone.gemfire.internal.cache.BucketRegion;
 import com.gemstone.gemfire.internal.cache.lru.Sizeable;
 import com.gemstone.gemfire.internal.cache.partitioned.PREntriesIterator;
 
@@ -34,6 +35,6 @@ public interface ColumnBatchKey extends Sizeable {
   /**
    * Get the number of rows in this column batch.
    */
-  int getColumnBatchRowCount(PREntriesIterator<?> itr, AbstractRegionEntry re,
+  int getColumnBatchRowCount(BucketRegion bucketRegion, AbstractRegionEntry re,
       int numColumnsInTable);
 }

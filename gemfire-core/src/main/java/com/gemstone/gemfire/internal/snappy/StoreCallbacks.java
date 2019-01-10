@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -17,6 +17,7 @@
 
 package com.gemstone.gemfire.internal.snappy;
 
+import java.net.URLClassLoader;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Set;
@@ -61,9 +62,7 @@ public interface StoreCallbacks {
       int[] projection, byte[] serializedFilters,
       Set<Integer> bucketIds) throws SQLException;
 
-  void registerRelationDestroyForHiveStore();
-
-  void performConnectorOp(Object ctx);
+  void registerCatalogSchemaChange();
 
   Object getSnappyTableStats();
 
@@ -129,4 +128,26 @@ public interface StoreCallbacks {
    * authentication service changes, for example).
    */
   void clearConnectionPools();
+
+  /**
+   * Get the class loader of the lead
+   */
+  URLClassLoader getLeadClassLoader();
+
+  /**
+   * Clear SnappySession cache
+   * @param onlyQueryPlanCache
+   */
+  void clearSessionCache(boolean onlyQueryPlanCache);
+
+  /**
+   * drop and recreate those policies who are affected by this ldap group
+   * @param ldapGroup
+   */
+  void refreshPolicies(String ldapGroup);
+
+  /**
+   * Check permission for current user on given schema.
+   */
+  String checkSchemaPermission(String schema, String currentUser);
 }

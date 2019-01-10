@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -14,12 +14,20 @@
  * permissions and limitations under the License. See accompanying
  * LICENSE file.
  */
+//plugins{
+//id "de.undercouch.download" version "3.4.3"
+//}
 
-plugins {
-  id 'de.undercouch.download' version '3.3.0'
+buildscript {
+  repositories {
+    maven { url 'https://plugins.gradle.org/m2' }
+  }
+  dependencies {
+    classpath 'de.undercouch:gradle-download-task:3.4.3'
+  }
 }
-
 apply plugin: 'wrapper'
+apply plugin: 'de.undercouch.download'
 
 if ((rootProject.name.contains('native') && !rootProject.hasProperty('skipNative'))
     || rootProject.hasProperty('native')) {
@@ -73,12 +81,15 @@ if ((rootProject.name.contains('native') && !rootProject.hasProperty('skipNative
       getLinuxFlavour(out)
       flavour = out.toString().replaceAll('[ \r\n\f]', '').toLowerCase()
     }
-    if (flavour.startsWith('ubuntu14') || flavour.startsWith('linuxmint17')) {
+    if (flavour.startsWith('ubuntu14') || flavour.startsWith('linuxmint17') ||
+        flavour.startsWith('elementary0.3')) {
       dependencies += [ "thrift-${thriftVersion}-ubuntu14.04.tar.bz2",
                         "boost-${boostVersion}-ubuntu14.04.tar.bz2",
                         "unixODBC-${unixodbcVersion}-ubuntu14.04.tar.bz2",
                         "googletest-${googletestVersion}-ubuntu14.04.tar.bz2" ]
-    } else if (flavour.startsWith('ubuntu16') || flavour.startsWith('linuxmint18')) {
+    } else if (flavour.startsWith('ubuntu16') || flavour.startsWith('ubuntu17') || flavour.startsWith('ubuntu18') ||
+        flavour.startsWith('linuxmint18') || flavour.startsWith('linuxmint19') ||
+        flavour.startsWith('elementary0.4') || flavour.startsWith('elementary5')) {
       thriftVersion = newThriftVersion
       boostVersion = newBoostVersion
       unixodbcVersion = newUnixodbcVersion
@@ -89,6 +100,7 @@ if ((rootProject.name.contains('native') && !rootProject.hasProperty('skipNative
                         "unixODBC-${unixodbcVersion}-ubuntu16.04.tar.bz2",
                         "googletest-${googletestVersion}-ubuntu16.04.tar.bz2" ]
     } else if (flavour.startsWith('redhat6') || flavour.startsWith('redhat7') ||
+        flavour.startsWith('fedora') ||
         flavour.startsWith('centos6') || flavour.startsWith('centos7')) {
       thriftVersion = newThriftVersion
       boostVersion = newBoostVersion
@@ -130,7 +142,7 @@ if ((rootProject.name.contains('native') && !rootProject.hasProperty('skipNative
     dependsOn downloadDependencies
 
     inputs.files dependencies.collect { [ "${distDir}/${it}" ] }.flatten()
-    outputs.files dependencies.collect { [ "${distDir}/${it.replaceAll('-[^-]*.tar.bz2', '')}" ] }.flatten()
+   // outputs.files dependencies.collect { [ "${distDir}/${it.replaceAll('-[^-]*.tar.bz2', '')}" ] }.flatten()
 
     doLast {
       outputs.files.each { d -> delete d }

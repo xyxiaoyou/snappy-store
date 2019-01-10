@@ -51,8 +51,8 @@ import com.gemstone.gemfire.internal.process.StartupStatus;
 import com.gemstone.gemfire.internal.process.StartupStatusListener;
 import com.gemstone.gemfire.internal.shared.LauncherBase;
 import com.gemstone.gemfire.internal.shared.NativeCalls;
-import io.snappydata.collection.OpenHashSet;
 import com.gemstone.gemfire.internal.util.JavaCommandBuilder;
+import org.eclipse.collections.impl.set.mutable.UnifiedSet;
 
 import static com.gemstone.gemfire.internal.cache.Status.*;
 
@@ -86,19 +86,23 @@ public class CacheServerLauncher extends LauncherBase {
   protected LogWriterI18n logger = null;
   protected String offHeapSize;
   protected volatile String serverStartupMessage;
-  protected final OpenHashSet<String> knownOptions;
+  protected final UnifiedSet<String> knownOptions;
 
   protected static CacheServerLauncher instance;
 
   public CacheServerLauncher(final String baseName) {
     super(baseName, null);
     assert baseName != null : "The base name used for the cache server launcher files cannot be null!";
-    knownOptions = new OpenHashSet<>();
+    knownOptions = new UnifiedSet<>();
     initKnownOptions();
   }
 
   protected Path getWorkingDirPath() {
     return this.workingDir.toPath().toAbsolutePath(); // see bug 32548
+  }
+
+  public boolean hostData() {
+    return false;
   }
 
   /**
@@ -858,6 +862,9 @@ public class CacheServerLauncher extends LauncherBase {
             this.disconnect(cache);
             status.state = SHUTDOWN;
             writeStatus(status);
+            // No point reconnecting if explicit stop has been called
+            system.stopReconnecting();
+            waitTillReconnectStopped(system);
             externalShutDown = false;
         } else {
           Thread.sleep(150);
@@ -869,20 +876,47 @@ public class CacheServerLauncher extends LauncherBase {
 //        System.out.println("System is disconnected.  isReconnecting = " + system.isReconnecting());
         boolean reconnected = false;
         if (system.isReconnecting()) {
-          reconnected = system.waitUntilReconnected(-1, TimeUnit.SECONDS);
-          if (reconnected) {
-            system = (InternalDistributedSystem)system.getReconnectedSystem();
-            cache = GemFireCacheImpl.getInstance();
+          while (true) {
+            // Timed check is there so that if explicit stop has been called then
+            // we stop faster rather waiting for the entire reconnect attempt to get over
+            reconnected = system.waitUntilReconnected(150, TimeUnit.MILLISECONDS);
+            status = readStatus();
+            if (status.state == SHUTDOWN_PENDING) {
+              // No point reconnecting if explicit stop has been called
+              system.stopReconnecting();
+              waitTillReconnectStopped(system);
+              externalShutDown = false;
+            }
+
+            if (reconnected) {
+              system = (InternalDistributedSystem) system.getReconnectedSystem();
+              cache = GemFireCacheImpl.getInstance();
+              break;
+            }
+            if (status.state == SHUTDOWN_PENDING) {
+              break;
+            }
           }
         }
         if (!reconnected) {
           // shutdown-all disconnected the DS
-          if( externalShutDown) {
+          if (externalShutDown) {
             //delete the status file
             deleteStatus();
           }
           System.exit(0);
         }
+      }
+    }
+  }
+
+  private void waitTillReconnectStopped(InternalDistributedSystem system) throws Exception {
+    while (true) {
+      if (system.isReconnecting()) {
+        Thread.sleep(150);
+      }
+      else {
+        break;
       }
     }
   }

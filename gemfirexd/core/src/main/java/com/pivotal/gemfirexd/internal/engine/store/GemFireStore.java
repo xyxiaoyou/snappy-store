@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -112,6 +112,7 @@ import com.pivotal.gemfirexd.internal.engine.ddl.GfxdDDLMessage;
 import com.pivotal.gemfirexd.internal.engine.ddl.GfxdDDLRegionQueue;
 import com.pivotal.gemfirexd.internal.engine.ddl.callbacks.CallbackProcedures;
 import com.pivotal.gemfirexd.internal.engine.ddl.resolver.GfxdPartitionResolver;
+import com.pivotal.gemfirexd.internal.engine.diag.DiskStoreIDs;
 import com.pivotal.gemfirexd.internal.engine.distributed.DistributedConnectionCloseExecutorFunction;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdConnectionHolder;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdDistributionAdvisor;
@@ -173,6 +174,8 @@ import com.pivotal.gemfirexd.internal.shared.common.ResolverUtils;
 import com.pivotal.gemfirexd.internal.shared.common.SharedUtils;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider;
+
+import static com.gemstone.gemfire.distributed.internal.InternalLocator.FORCE_LOCATOR_DM_TYPE;
 
 /**
  * The underlying store implementation that provides methods to create container
@@ -375,6 +378,8 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
   
   private final IndexPersistenceStats indexPersistenceStats;
 
+  private final long createTime;
+
   /**
    * Not keeping as volatile as the expectation is that this field
    * should be set as soon as the first embedded connection is created
@@ -414,6 +419,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
     this.indexLoadSync = new Object();
     this.indexLoadBegin = false;
     this.indexPersistenceStats = new IndexPersistenceStats();
+    this.createTime = System.currentTimeMillis();
   }
 
   /**
@@ -423,6 +429,10 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
    *              standard Derby error policy
    */
   public void createFinished() throws StandardException {
+  }
+
+  public long getCreateTime() {
+    return this.createTime;
   }
 
   /**
@@ -1097,6 +1107,10 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
           c.setPdxDiskStore(GfxdConstants.GFXD_DD_DISKSTORE_NAME);
         }
 
+        if (isLocator) {
+          System.setProperty(FORCE_LOCATOR_DM_TYPE, "true");
+        }
+
         this.gemFireCache = (GemFireCacheImpl)c.create();
         this.gemFireCache.getLogger().info(
             "GemFire Cache successfully created.");
@@ -1178,6 +1192,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
       FunctionService.registerFunction(new GfxdCacheLoader.GetRowFunction());
       FunctionService.registerFunction(new QueryCancelFunction());
       FunctionService.registerFunction(new SnappyRegionStatsCollectorFunction());
+      FunctionService.registerFunction(new DiskStoreIDs.DiskStoreIDFunction());
 
       final ConnectionSignaller signaller = ConnectionSignaller.getInstance();
       if (logger.fineEnabled()) {
@@ -1530,7 +1545,8 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
       // set then that can be used for overflow/gateway
 
       String serverGroup = this.getBootProperty("server-groups");
-      Boolean isLeadMember = serverGroup != null ? serverGroup.contains("IMPLICIT_LEADER_SERVERGROUP") : false;
+      boolean isLeadMember = serverGroup != null &&
+          serverGroup.contains(ServerGroupUtils.LEADER_SERVERGROUP);
 
       if (this.persistingDD || this.persistenceDir != null || isLeadMember) {
         try {
@@ -2148,14 +2164,6 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
         else {
           if (!cache.forcedDisconnect()) {
             cache.close();
-            InternalDistributedSystem sys = InternalDistributedSystem
-                .getAnyInstance();
-                //getConnectedInstance();
-            if (sys != null) {
-              sys.getLogWriter()
-                  .info("Disconnecting GemFire distributed system.");
-              sys.disconnect();
-            }
           }
         }
       }
@@ -2173,6 +2181,15 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
         else {
           cache.close();
         }
+      }
+    }
+    if (cache == null || !cache.forcedDisconnect()) {
+      InternalDistributedSystem sys = InternalDistributedSystem
+          .getAnyInstance(); // getConnectedInstance();
+      if (sys != null && sys.isConnected()) {
+        sys.getLogWriter()
+            .info("Disconnecting GemFire distributed system.");
+        sys.disconnect();
       }
     }
 
@@ -2282,6 +2299,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
       selfMemId = null;
       GlobalIndexCacheWithLocalRegion.setCacheToNull();
       this.externalCatalog = null;
+      System.clearProperty(FORCE_LOCATOR_DM_TYPE);
     }
   }
 
@@ -2414,7 +2432,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
           // Instantiate using reflection
           try {
             this.externalCatalog = (ExternalCatalog)ClassPathLoader
-                .getLatest().forName("io.snappydata.impl.SnappyHiveCatalog")
+                .getLatest().forName("io.snappydata.sql.catalog.impl.StoreHiveCatalog")
                 .newInstance();
           } catch (InstantiationException | IllegalAccessException
               | ClassNotFoundException e) {
@@ -2478,6 +2496,7 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
     return getExternalCatalog(true);
   }
 
+  /** fullInit = true is to wait for any catalog inconsistencies to be cleared */
   public ExternalCatalog getExternalCatalog(boolean fullInit) {
     final ExternalCatalog externalCatalog;
     if ((externalCatalog = this.externalCatalog) != null &&
@@ -3059,5 +3078,24 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
 
   public Region<String, String> getGlobalCmdRgn() {
     return this.snappyGlobalCmdRgn;
+  }
+
+  private boolean restrictTableCreation = Boolean.getBoolean(
+      Property.SNAPPY_RESTRICT_TABLE_CREATE);
+
+  private boolean rlsEnabled = Boolean.getBoolean(
+      Property.SNAPPY_ENABLE_RLS);
+
+  // TODO: this internal property is only for some unit tests and should be removed
+  // by updating the tests to use LDAP server (see PolictyTestBase in SnappyData)
+  public static boolean ALLOW_RLS_WITHOUT_SECURITY = false;
+
+  public boolean tableCreationAllowed() {
+    return !this.restrictTableCreation;
+  }
+
+  /** returns true if row-level security is enabled on the system */
+  public boolean isRLSEnabled() {
+    return rlsEnabled;
   }
 }

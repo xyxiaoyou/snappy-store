@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -19,7 +19,6 @@ package com.pivotal.gemfirexd.internal.engine.sql.execute;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Vector;
 
@@ -72,32 +71,44 @@ public class SnappyActivation extends BaseActivation {
   }
 
   public void initialize_pvs() throws StandardException {
-    // Also see ParamConstants.getSQLType()
-    // Index 0: Number of parameter
-    // Index 1 - 1st parameter: DataTYpe
-    // Index 2 - 1st parameter: precision
-    // Index 3 - 1st parameter: scale
-    // Index 4 - 1st parameter: nullable
-    // ...and so on
-    int[] preparedResult = prepare();
-    assert preparedResult != null;
-    assert preparedResult.length > 0;
+    SnappyPrepareResultSet preparedResult = prepare();
 
-    int numberOfParameters = preparedResult[0];
-    DataTypeDescriptor[] types = new DataTypeDescriptor[numberOfParameters];
-    for (int i = 0; i < numberOfParameters; i++) {
-      int index = i * 4 + 1;
-      SnappyResultHolder.getNewNullDVD(preparedResult[index], i, types,
-          preparedResult[index + 1], preparedResult[index + 2], preparedResult[index + 2] == 1);
-    }
+    try {
+      // Also see ParamConstants.getSQLType()
+      // Index 0: Number of parameter
+      // Index 1 - 1st parameter: DataTYpe
+      // Index 2 - 1st parameter: precision
+      // Index 3 - 1st parameter: scale
+      // Index 4 - 1st parameter: nullable
+      // ...and so on
+      int[] typeNames = preparedResult.makePrepareResult();
+      assert typeNames != null;
+      assert typeNames.length > 0;
+      int numberOfParameters = typeNames[0];
+      DataTypeDescriptor[] types = new DataTypeDescriptor[numberOfParameters];
+      for (int i = 0; i < numberOfParameters; i++) {
+        int index = i * 4 + 1;
+        SnappyResultHolder.getNewNullDVD(typeNames[index], i, types,
+            typeNames[index + 1], typeNames[index + 2], typeNames[index + 2] == 1);
+      }
 
-    pvs = lcc.getLanguageFactory().newParameterValueSet(
-            lcc.getLanguageConnectionFactory().getClassFactory().getClassInspector(),
-        numberOfParameters, false);
-    pvs.initialize(types);
-    if (preStmt instanceof GenericPreparedStatement) {
-      GenericPreparedStatement gps = (GenericPreparedStatement)preStmt;
-      gps.setParameterTypes(types);
+      pvs = lcc.getLanguageFactory().newParameterValueSet(
+          lcc.getLanguageConnectionFactory().getClassFactory().getClassInspector(),
+          numberOfParameters, false);
+      pvs.initialize(types);
+      if (preStmt instanceof GenericPreparedStatement) {
+        GenericPreparedStatement gps = (GenericPreparedStatement)preStmt;
+        gps.setParameterTypes(types);
+        final String statementType;
+        if (isUpdateOrDelete) {
+          statementType = "INSERT"; // Default
+        } else {
+          statementType = "SELECT";
+        }
+        gps.setResultDescription(preparedResult.makeResultDescription(statementType));
+      }
+    }  catch (IOException ioex) {
+      throw StandardException.newException(ioex.getMessage(), ioex);
     }
   }
 
@@ -112,7 +123,7 @@ public class SnappyActivation extends BaseActivation {
 
   }
 
-  public final int[] prepare() throws StandardException {
+  public final SnappyPrepareResultSet prepare() throws StandardException {
     try {
       SnappyPrepareResultSet rs = createPrepareResultSet();
       if (GemFireXDUtils.TraceQuery) {
@@ -120,21 +131,17 @@ public class SnappyActivation extends BaseActivation {
             "SnappyActivation.prepare: Created SnappySelectResultSet: " + rs);
       }
       prepareWithResultSet(rs);
-      int[] typeNames = rs.makePrepareResult();
       if (GemFireXDUtils.TraceQuery) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
-            "SnappyActivation.prepare: Done." +
-                " Prepared-result: " + Arrays.toString(typeNames));
+            "SnappyActivation.prepare: Done.");
       }
-      return typeNames;
+      return rs;
     } catch (GemFireXDRuntimeException gfxdrtex) {
       StandardException cause = getCause(gfxdrtex);
       if (cause != null) {
         throw cause;
       }
       throw gfxdrtex;
-    } catch (IOException ioex) {
-      throw StandardException.newException(ioex.getMessage(), ioex);
     }
   }
 
@@ -329,7 +336,7 @@ public class SnappyActivation extends BaseActivation {
     try {
       msg.executeFunction(enableStreaming, false, rs, true);
     } catch (RuntimeException | SQLException ex) {
-      Exception e = LeadNodeExecutorMsg.handleLeadNodeException(ex);
+      Exception e = LeadNodeExecutorMsg.handleLeadNodeException(ex, sql);
       throw Misc.processFunctionException(
           "SnappyActivation::executeOnLeadNode", e, null, null);
     }
@@ -349,7 +356,7 @@ public class SnappyActivation extends BaseActivation {
     try {
       msg.executeFunction(false, false, rs, true);
     } catch (RuntimeException | SQLException ex) {
-      Exception e = LeadNodeExecutorMsg.handleLeadNodeException(ex);
+      Exception e = LeadNodeExecutorMsg.handleLeadNodeException(ex, sql);
       throw Misc.processFunctionException(
           "SnappyActivation::prepareOnLeadNode", e, null, null);
     }

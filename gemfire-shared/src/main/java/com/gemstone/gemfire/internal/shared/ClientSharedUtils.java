@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -72,6 +72,8 @@ import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
 
 import com.gemstone.gemfire.internal.shared.unsafe.DirectBufferAllocator;
+import org.apache.log4j.Appender;
+import org.apache.log4j.FileAppender;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.PropertyConfigurator;
 import org.apache.spark.unsafe.Platform;
@@ -342,6 +344,18 @@ public abstract class ClientSharedUtils {
           "mega|kilobytes. No unit or with 'b' specifies in bytes. " +
           "Each of these units can be followed optionally by 'b' i.e. " +
           "pb|tb|gb|mb|kb.", nfe);
+    }
+  }
+
+  public static boolean parseBoolean(String s) {
+    if (s != null) {
+      if (s.length() == 1) {
+        return Integer.parseInt(s) != 0;
+      } else {
+        return Boolean.parseBoolean(s);
+      }
+    } else {
+      return false;
     }
   }
 
@@ -716,7 +730,7 @@ public abstract class ClientSharedUtils {
               if (ex instanceof UnsupportedOperationException) {
                 if (!socketKeepAliveIdleWarningLogged) {
                   socketKeepAliveIdleWarningLogged = true;
-                  // KEEPIDLE is the minumum required for this, so
+                  // KEEPIDLE is the minimum required for this, so
                   // log as a warning
                   doLogWarning = 1;
                 }
@@ -734,6 +748,10 @@ public abstract class ClientSharedUtils {
               } else {
                 doLogWarning = 2;
               }
+              // skip logging for default setting
+              if (keepInterval == SystemProperties.DEFAULT_KEEPALIVE_INTVL) {
+                doLogWarning = 0;
+              }
               break;
             case OPT_KEEPCNT:
               if (ex instanceof UnsupportedOperationException) {
@@ -744,6 +762,10 @@ public abstract class ClientSharedUtils {
                 }
               } else {
                 doLogWarning = 2;
+              }
+              // skip logging for default setting
+              if (keepCount == SystemProperties.DEFAULT_KEEPALIVE_CNT) {
+                doLogWarning = 0;
               }
               break;
           }
@@ -1378,17 +1400,20 @@ public abstract class ClientSharedUtils {
 
   // Convert log4j.Level to java.util.logging.Level
   public static Level convertToJavaLogLevel(org.apache.log4j.Level log4jLevel) {
-    Level javaLevel = Level.INFO;
+    Level javaLevel = Level.CONFIG;
     if (log4jLevel != null) {
-      if (log4jLevel == org.apache.log4j.Level.ERROR) {
+      if (log4jLevel == org.apache.log4j.Level.ERROR ||
+          log4jLevel == org.apache.log4j.Level.FATAL) {
         javaLevel = Level.SEVERE;
       } else if (log4jLevel == org.apache.log4j.Level.WARN) {
         javaLevel = Level.WARNING;
       } else if (log4jLevel == org.apache.log4j.Level.INFO) {
         javaLevel = Level.INFO;
-      } else if (log4jLevel == org.apache.log4j.Level.TRACE) {
-        javaLevel = Level.FINE;
       } else if (log4jLevel == org.apache.log4j.Level.DEBUG) {
+        javaLevel = Level.FINE;
+      } else if (log4jLevel == org.apache.log4j.Level.TRACE) {
+        javaLevel = Level.FINEST;
+      } else if (log4jLevel == org.apache.log4j.Level.ALL) {
         javaLevel = Level.ALL;
       } else if (log4jLevel == org.apache.log4j.Level.OFF) {
         javaLevel = Level.OFF;
@@ -1397,29 +1422,63 @@ public abstract class ClientSharedUtils {
     return javaLevel;
   }
 
-  public static String convertToLog4LogLevel(Level level) {
-    String levelStr = "INFO";
-    // convert to log4j level
-    if (level == Level.SEVERE) {
-      levelStr = "ERROR";
-    } else if (level == Level.WARNING) {
-      levelStr = "WARN";
-    } else if (level == Level.INFO || level == Level.CONFIG) {
-      levelStr = "INFO";
-    } else if (level == Level.FINE || level == Level.FINER ||
-        level == Level.FINEST) {
-      levelStr = "TRACE";
-    } else if (level == Level.ALL) {
-      levelStr = "DEBUG";
-    } else if (level == Level.OFF) {
-      levelStr = "OFF";
+  public static org.apache.log4j.Level convertToLog4LogLevel(String level)
+      throws IllegalArgumentException {
+    org.apache.log4j.Level logLevel = null;
+    if (level != null && !level.isEmpty()) {
+      level = level.trim().toUpperCase(Locale.ENGLISH);
+      // try log4j level first
+      logLevel = org.apache.log4j.Level.toLevel(level, null);
+      // try java util Logger next
+      if (logLevel == null) {
+        logLevel = convertToLog4LogLevel(Level.parse(level));
+      }
     }
-    return levelStr;
+    return logLevel;
   }
 
-  public static void initLog4J(String logFile,
-      Level level) throws IOException {
-    initLog4J(logFile, null, level);
+  public static org.apache.log4j.Level convertToLog4LogLevel(Level level) {
+    org.apache.log4j.Level log4Level = org.apache.log4j.Level.INFO;
+    // convert to log4j level
+    if (level == Level.SEVERE) {
+      log4Level = org.apache.log4j.Level.FATAL;
+    } else if (level == Level.WARNING) {
+      log4Level = org.apache.log4j.Level.WARN;
+    } else if (level == Level.INFO || level == Level.CONFIG) {
+      log4Level = org.apache.log4j.Level.INFO;
+    } else if (level == Level.FINE) {
+      log4Level = org.apache.log4j.Level.DEBUG;
+    } else if (level == Level.FINER || level == Level.FINEST) {
+      log4Level = org.apache.log4j.Level.TRACE;
+    } else if (level == Level.ALL) {
+      log4Level = org.apache.log4j.Level.ALL;
+    } else if (level == Level.OFF) {
+      log4Level = org.apache.log4j.Level.OFF;
+    } else if ("ERROR".equalsIgnoreCase(level.getName())) { // GemFireLevel.ERROR
+      log4Level = org.apache.log4j.Level.ERROR;
+    }
+    return log4Level;
+  }
+
+  public static void initLog4j(String logFile,
+      org.apache.log4j.Level level) throws IOException {
+    initLog4j(logFile, null, level);
+  }
+
+  /**
+   * Return currently configured log4j log-file or null if file logging is not set.
+   */
+  public static String getLog4jLogFile(org.apache.log4j.Logger rootLogger) {
+    if (rootLogger != null) {
+      Enumeration<?> e = rootLogger.getAllAppenders();
+      while (e.hasMoreElements()) {
+        Appender appender = (Appender)e.nextElement();
+        if (appender instanceof FileAppender) {
+          return ((FileAppender)appender).getFile();
+        }
+      }
+    }
+    return null;
   }
 
   public static Properties getLog4jConfProperties(
@@ -1435,8 +1494,8 @@ public abstract class ClientSharedUtils {
     return null;
   }
 
-  private static Properties getLog4JProperties(String logFile,
-      Level level) throws IOException {
+  private static Properties getLog4jProperties(String logFile,
+      org.apache.log4j.Level level) throws IOException {
     // check for user provided properties file in "conf/"
     String snappyHome = NativeCalls.getInstance().getEnvironment("SNAPPY_HOME");
     if (snappyHome != null) {
@@ -1455,11 +1514,23 @@ public abstract class ClientSharedUtils {
 
     // override file location and level
     if (level != null) {
-      final String levelStr = convertToLog4LogLevel(level);
       if (logFile != null) {
-        props.setProperty("log4j.rootCategory", levelStr + ", file");
+        props.setProperty("log4j.rootCategory", level + ", file");
       } else {
-        props.setProperty("log4j.rootCategory", levelStr + ", console");
+        props.setProperty("log4j.rootCategory", level + ", console");
+        // remove all "code" appenders that dump generatedcode.log
+        final String[] codegenerationClasses = new String[] {
+            "org.apache.spark.sql.execution.WholeStageCodegenExec",
+            "org.apache.spark.sql.execution.WholeStageCodegenRDD",
+            "org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator",
+            "org.apache.spark.sql.store.CodeGeneration"
+        };
+        for (String className : codegenerationClasses) {
+          String loggerKey = "log4j.logger." + className;
+          String additivityKey = "log4j.additivity." + className;
+          props.remove(loggerKey);
+          props.remove(additivityKey);
+        }
       }
     }
     if (logFile != null) {
@@ -1477,11 +1548,11 @@ public abstract class ClientSharedUtils {
     return props;
   }
 
-  public static synchronized void initLog4J(String logFile,
-      Properties userProps, Level level) throws IOException {
+  public static synchronized void initLog4j(String logFile,
+      Properties userProps, org.apache.log4j.Level level) throws IOException {
     Properties props;
     if (baseLoggerProperties.isEmpty() || logFile != null) {
-      props = getLog4JProperties(logFile, level);
+      props = getLog4jProperties(logFile, level);
       baseLoggerProperties.clear();
       baseLoggerProperties.putAll(props);
     } else {
@@ -1492,6 +1563,17 @@ public abstract class ClientSharedUtils {
     }
     LogManager.resetConfiguration();
     PropertyConfigurator.configure(props);
+
+    // explicitly set the root log-level
+    String rootLogLevel = props.getProperty("log4j.rootCategory");
+    if (rootLogLevel != null) {
+      int idx = rootLogLevel.indexOf(',');
+      if (idx != -1) {
+        rootLogLevel = rootLogLevel.substring(0, idx).trim();
+      }
+      LogManager.getRootLogger().setLevel(
+          org.apache.log4j.Level.toLevel(rootLogLevel));
+    }
   }
 
   public static synchronized void initLogger(String loggerName, String logFile,
@@ -1504,7 +1586,7 @@ public abstract class ClientSharedUtils {
     clearLogger();
     if (initLog4j) {
       try {
-        initLog4J(logFile, level);
+        initLog4j(logFile, convertToLog4LogLevel(level));
       } catch (IOException ioe) {
         throw newRuntimeException(ioe.getMessage(), ioe);
       }

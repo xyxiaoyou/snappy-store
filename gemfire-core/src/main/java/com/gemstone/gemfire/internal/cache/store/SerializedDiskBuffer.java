@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -92,6 +92,7 @@ public abstract class SerializedDiskBuffer extends ByteBufferReference {
     return incrementReference();
   }
 
+  @GuardedBy("this")
   protected final boolean incrementReference() {
     if (this.refCount > 0) {
       this.refCount++;
@@ -116,6 +117,7 @@ public abstract class SerializedDiskBuffer extends ByteBufferReference {
     decrementReference();
   }
 
+  @GuardedBy("this")
   protected final boolean decrementReference() {
     if (this.refCount > 0) {
       if (--this.refCount == 0) {
@@ -130,8 +132,14 @@ public abstract class SerializedDiskBuffer extends ByteBufferReference {
 
   /**
    * Copy any off-heap data to heap. Not thread-safe and should
-   * be invoked before handing out to other threads.
+   * be invoked before handing out to other threads. This does
+   * not do any region size accounting so should be invoked ONLY for buffers
+   * that are not going to be stored in the region else region byte size
+   * accounting will go wrong. It also does no accounting in any
+   * SnappyData memory manager so the returned value should be temporary
+   * and forms part of runtime overhead ("reserved system memory" in SD).
    */
+  @SuppressWarnings("SameParameterValue")
   public void copyToHeap(String owner) {
   }
 
@@ -140,6 +148,7 @@ public abstract class SerializedDiskBuffer extends ByteBufferReference {
     return retain() ? this : null;
   }
 
+  @GuardedBy("this")
   protected abstract void releaseBuffer();
 
   /**

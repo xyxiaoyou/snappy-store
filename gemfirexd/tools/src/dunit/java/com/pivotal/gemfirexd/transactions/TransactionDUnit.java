@@ -54,6 +54,7 @@ import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserverHolder;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdConnectionHolder;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdConnectionWrapper;
+import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedConnection;
@@ -79,19 +80,29 @@ public class TransactionDUnit extends DistributedSQLTestBase {
 
   protected final static String DISKSTORE = "TestPersistenceDiskStore";
 
+  protected static String currentUserName;
+
   public TransactionDUnit(String name) {
     super(name);
   }
 
+  // static lists to transfer clientVMs/serverVMs between tests since each test
+  // creates a new test object
   private static List<VM> globalClientVMs;
   private static List<VM> globalServerVMs;
 
   @Override
   public void beforeClass() throws Exception {
+    globalClientVMs = null;
+    globalServerVMs = null;
     super.beforeClass();
     super.baseShutDownAll();
     deleteAllOplogFiles();
+    getLogWriter().info(getClass() + ".beforeClass: starting 1+3 VMs");
     startVMs(1, 3);
+    getLogWriter().info(getClass() + ".beforeClass: started 1+3 VMs: " +
+        clientVMs + " ; " + serverVMs);
+    currentUserName = GemFireXDUtils.getRandomString(true);
   }
 
   @Override
@@ -106,10 +117,12 @@ public class TransactionDUnit extends DistributedSQLTestBase {
     }
     resetObservers();
     invokeInEveryVM(TransactionDUnit.class, "resetObservers");
-    String userName = TestUtil.currentUserName;
+    String userName = currentUserName;
     setupConnection(userName);
     invokeInEveryVM(TransactionDUnit.class, "setupConnection",
         new Object[]{userName});
+    getLogWriter().info(getClass() + "." + getTestName() + ".setUp VMs: " +
+        clientVMs + " ; " + serverVMs);
   }
 
   public static void setupConnection(String userName) throws SQLException {
@@ -131,6 +144,8 @@ public class TransactionDUnit extends DistributedSQLTestBase {
 
   @Override
   public void afterClass() throws Exception {
+    globalClientVMs = null;
+    globalServerVMs = null;
     super.baseShutDownAll();
     super.afterClass();
   }

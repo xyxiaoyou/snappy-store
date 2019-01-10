@@ -102,6 +102,7 @@ import com.pivotal.gemfirexd.internal.shared.common.ResolverUtils;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.AssertFailure;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import com.pivotal.gemfirexd.internal.impl.sql.rules.ExecutionEngineRule.ExecutionEngine;
+import org.apache.log4j.Logger;
 
 //GemStone changes BEGIN
 
@@ -119,6 +120,7 @@ public class GenericStatement
        // protected boolean        createQueryInfo;
         //final private boolean  needGfxdSubactivation;
         //protected final boolean isPreparedStatement;
+        static final Logger LOGGER = Logger.getLogger(GenericStatement.class);
         protected int hash;
         protected int stmtHash;
         protected short execFlags;
@@ -134,36 +136,41 @@ public class GenericStatement
         public final static short IS_CALLABLE_STATEMENT = 0x200;
         public final static short ROUTE_QUERY = 0x400;
 
-        public static final Pattern SKIP_CANCEL_STMTS = Pattern.compile(
-            "^\\s*\\{?\\s*(DROP|TRUNCATE)\\s+(TABLE|INDEX)\\s+",
+        private static final Pattern SKIP_CANCEL_STMTS = Pattern.compile(
+            "^\\s*\\{?\\s*(((DROP|TRUNCATE)\\s+(TABLE|INDEX))|(DELETE\\s+FROM))\\s+",
             Pattern.CASE_INSENSITIVE);
-	public static final Pattern DELETE_STMT = Pattern.compile(
-            "^\\s*\\{?\\s*DELETE\\s+FROM\\s+", Pattern.CASE_INSENSITIVE);
         private static final Pattern ignoreStmts = Pattern.compile(
             ("\\s.*(\"SYSSTAT\"|SYS.\")"), Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
         //private ProcedureProxy procProxy;
         private final GfxdHeapThresholdListener thresholdListener;
         private THashMap ncjMetaData = null;
-        private static final Pattern STREAMING_DDL_PREFIX =
-            Pattern.compile("^\\s*STREAMING\\s+",
+        private static final String MISC_DDL_PREFIX =
+            "(STREAMING|DEPLOY|UNDEPLOY|CACHE|UNCACHE|REFRESH|RESET)";
+        private static final String TABLE_DML_SELECT_PATTERN =
+            "((((INSERT|PUT)\\s+INTO)|(DELETE\\s+FROM))\\s+(TABLE)?.*\\s+SELECT)";
+	      private static final String CREATE_OR_DROP_PATTERN = "(FUNCTION|POLICY)";
+	      private static final String ALTER_TABLE_PREFIX = "ALTER\\s+(TABLE)?\\s+.*\\s+";
+	      private static final String ALTER_TABLE_COMMANDS = "(ADD|DROP|ENABLE|DISABLE)";
+
+	      // final patterns combining the above patterns and also adding EXPLAIN
+	      private static final String ROUTED_QUERY_BASE_PATTERN =
+            MISC_DDL_PREFIX + '|' + TABLE_DML_SELECT_PATTERN +
+                "|((CREATE|DROP)\\s+" + CREATE_OR_DROP_PATTERN +
+                ")|(" + ALTER_TABLE_PREFIX + ALTER_TABLE_COMMANDS + ')';
+	      private static final String ROUTED_QUERY_PREFIX = "^\\s*(EXPLAIN\\s+)?";
+	      private static final Pattern ROUTED_QUERY_PATTERN =
+            Pattern.compile(ROUTED_QUERY_PREFIX + '(' + ROUTED_QUERY_BASE_PATTERN + ")\\s+",
                 Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-        private static final Pattern INSERT_OR_PUT_INTO_TABLE_SELECT_PATTERN =
-            Pattern.compile("^\\s*(INSERT|PUT)\\s+INTO\\s+(TABLE)?.*\\s+SELECT\\s+",
-                Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
+	      // the pattern below is to be excluded from routing
+	      private static final Pattern ALTER_TABLE_CONSTRAINTS =
+            Pattern.compile(ROUTED_QUERY_PREFIX + ALTER_TABLE_PREFIX +
+                "(ADD|DROP)\\s+CONSTRAINT\\s+", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
         private static final Pattern DML_TABLE_PATTERN =
             Pattern.compile("^\\s*(INSERT|UPDATE|DELETE|PUT)\\s+",
                 Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
         private static final Pattern NON_ROUTED_QUERY =
-            Pattern.compile("^\\s*\\{?\\s*(CALL|EXECUTE)\\s+",
-                Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-        private static final Pattern FUNCTION_DDL_PREFIX =
-            Pattern.compile("^\\s*(CREATE|DROP)\\s+FUNCTION\\s+",
-               Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-        private static final Pattern ALTER_TABLE_COLUMN =
-            Pattern.compile("^\\s*ALTER\\s+TABLE?.*\\s+(ADD|DROP)\\s+",
-                Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-        private static final Pattern ALTER_TABLE_CONSTRAINTS =
-            Pattern.compile("^\\s*ALTER\\s+TABLE?.*\\s+ADD\\s+CONSTRAINT\\s+",
+            Pattern.compile(ROUTED_QUERY_PREFIX + "\\{?\\s*(CALL|EXECUTE)\\s+",
                 Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
 	      private static ExecutionEngineArbiter engineArbiter = new ExecutionEngineArbiter();
@@ -231,7 +238,7 @@ public class GenericStatement
 	// GemStone changes BEGIN
 	private GenericPreparedStatement getPreparedStatementForSnappy(boolean commitNestedTransaction,
 			StatementContext statementContext, LanguageConnectionContext lcc, boolean isDDL,
-			boolean checkCancellation, boolean isUpdateOrDelete) throws StandardException {
+			boolean checkCancellation, boolean isUpdateOrDelete, Throwable cause) throws StandardException {
       GenericPreparedStatement gps = preparedStmt;
       GeneratedClass ac = new SnappyActivationClass(lcc, !isDDL, isPreparedStatement() && !isDDL,
           isUpdateOrDelete);
@@ -249,7 +256,11 @@ public class GenericStatement
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
           "GenericStatement.getPreparedStatementForSnappy: Created SnappyActivation for sql: " +
               this.getSource() + " ,isDDL=" + isDDL + " ,isUpdateOrDelete=" + isUpdateOrDelete);
-	 }
+     }
+     if (LOGGER.isDebugEnabled()) {
+        LOGGER.debug("GenericStatement.getPreparedStatementForSnappy: routing sql: " +
+            this.getSource() + " ,isDDL=" + isDDL + " ,isUpdateOrDelete=" + isUpdateOrDelete, cause);
+     }
      if (checkCancellation) {
        Misc.checkMemory(thresholdListener, statementText, -1);
      }
@@ -384,8 +395,9 @@ public class GenericStatement
     // don't cancel DROP/TRUNCATE TABLE/INDEX /DELETE statements
     // before querytree is available set the flag based on pattern matching
     // later when qt is available set it using nodetype
-    boolean checkCancellation = !(SKIP_CANCEL_STMTS
-        .matcher(statementText).find() || DELETE_STMT.matcher(statementText).find());
+    // also don't cancel meta-data queries (if OOME happens node will stop)
+    boolean checkCancellation = !(Misc.SNAPPY_HIVE_METASTORE.equals(
+        lcc.getCurrentSchemaName()) || SKIP_CANCEL_STMTS.matcher(statementText).find());
     try {
      outer: while(true) {
       ddMode = (dataDictionary != null ? dataDictionary.startReading(lcc) : 0);
@@ -598,33 +610,27 @@ public class GenericStatement
 				try {
 					//Route all "insert/put into tab select .. " queries to spark
 
-					boolean isInsertOrPut;
 					if (routeQuery && prepareIsolationLevel == Connection.TRANSACTION_NONE && (
-						(isInsertOrPut = INSERT_OR_PUT_INTO_TABLE_SELECT_PATTERN.matcher(source).find()) ||
-						FUNCTION_DDL_PREFIX.matcher(source).find() ||
-						(ALTER_TABLE_COLUMN.matcher(source).find() &&
-						!ALTER_TABLE_CONSTRAINTS.matcher(source).find()))) {
+						ROUTED_QUERY_PATTERN.matcher(source).find() &&
+						!ALTER_TABLE_CONSTRAINTS.matcher(source).find())) {
 							cc.markAsDDLForSnappyUse(true);
 							return getPreparedStatementForSnappy(false, statementContext, lcc,
-								cc.isMarkedAsDDLForSnappyUse(), checkCancellation, isInsertOrPut);
+								cc.isMarkedAsDDLForSnappyUse(), checkCancellation,
+								DML_TABLE_PATTERN.matcher(source).find(), null);
 					}
 					qt = p.parseStatement(getQueryStringForParse(lcc), paramDefaults);
 				}
 				catch (StandardException | AssertFailure ex) {
           //wait till the query hint is examined before throwing exceptions or
-          if (routeQuery && !NON_ROUTED_QUERY.matcher(source).find()) {
-            if (STREAMING_DDL_PREFIX.matcher(source).find()) {
-              cc.markAsDDLForSnappyUse(true);
-            }
-            boolean isDDL = cc.isMarkedAsDDLForSnappyUse()
-              || source.toLowerCase().startsWith("deploy") || source.toLowerCase().startsWith("undeploy");
+          if (routeQuery && prepareIsolationLevel == Connection.TRANSACTION_NONE &&
+              !NON_ROUTED_QUERY.matcher(source).find()) {
             return getPreparedStatementForSnappy(false, statementContext, lcc,
-                isDDL, checkCancellation,
-                DML_TABLE_PATTERN.matcher(source).find());
+                cc.isMarkedAsDDLForSnappyUse(), checkCancellation,
+                DML_TABLE_PATTERN.matcher(source).find(), ex);
           }
           throw ex;
 				}
-				checkCancellation = !shouldSkipMemoryChecks(qt);
+				checkCancellation = checkCancellation && !shouldSkipMemoryChecks(qt);
 				// DDL Route, even if no exception
 				if (routeQuery && cc.isForcedDDLrouting() && !NON_ROUTED_QUERY.matcher(source).find())
 				{
@@ -633,7 +639,7 @@ public class GenericStatement
 				      observer.testExecutionEngineDecision(qinfo, ExecutionEngine.SPARK, this.statementText);
 				    }
 				    return getPreparedStatementForSnappy(false, statementContext, lcc, true,
-				        checkCancellation, DML_TABLE_PATTERN.matcher(source).find());
+				        checkCancellation, DML_TABLE_PATTERN.matcher(source).find(), null);
 				}
 				//GemStone changes END
 				parseTime = getCurrentTimeMillis(lcc);
@@ -700,12 +706,16 @@ public class GenericStatement
 						qt.bindStatement();
 					}
 					catch(StandardException | AssertFailure ex) {
-					  if (routeQuery && !NON_ROUTED_QUERY.matcher(source).find()) {
+				      boolean routeToSnappy = (ex instanceof StandardException && ((StandardException)ex).
+									getMessageId().equals(SQLState.ROW_LEVEL_SECURITY_ENABLED)) ||
+									(routeQuery && !NON_ROUTED_QUERY.matcher(source).find());
+
+					  if (routeToSnappy) {
 					    if (observer != null) {
 					      observer.testExecutionEngineDecision(qinfo, ExecutionEngine.SPARK, this.statementText);
 					    }
 							return getPreparedStatementForSnappy(true, statementContext, lcc, false,
-							  checkCancellation, DML_TABLE_PATTERN.matcher(source).find());
+							  checkCancellation, DML_TABLE_PATTERN.matcher(source).find(), ex);
 					  }
 					  throw ex;
 					}
@@ -774,7 +784,7 @@ public class GenericStatement
 								observer.testExecutionEngineDecision(qinfo, ExecutionEngine.SPARK, this.statementText);
 							}
 							return getPreparedStatementForSnappy(true, statementContext, lcc, false,
-								checkCancellation, DML_TABLE_PATTERN.matcher(source).find());
+								checkCancellation, DML_TABLE_PATTERN.matcher(source).find(), ex);
 						}
 						throw ex;
 					}
@@ -800,6 +810,15 @@ public class GenericStatement
 				              this.statementText, qt, lcc);
 				        }
 
+                                        if (routeQuery && qt instanceof ExplainNode &&
+                                            ((ExplainNode)qt).isRouted()) {
+                                          if (observer != null) {
+                                            observer.testExecutionEngineDecision(qinfo,
+                                                ExecutionEngine.SPARK, this.statementText);
+                                          }
+                                          return getPreparedStatementForSnappy(true,
+                                              statementContext, lcc, false, checkCancellation, false, null);
+                                        }
                                         if(this.createQueryInfo() && !forceSkipQueryInfoCreation) {
                                           final DataTypeDescriptor paramDTDS[] = qt.getParameterTypes();
                                           final QueryInfoContext qic = new QueryInfoContext(
@@ -827,7 +846,7 @@ public class GenericStatement
                                                 }
                                                 return getPreparedStatementForSnappy(true,
                                                     statementContext, lcc, false,
-                                                    checkCancellation, isUpdateOrDelete);
+                                                    checkCancellation, isUpdateOrDelete, null);
                                               }
                                             }
                                           }
@@ -943,7 +962,7 @@ public class GenericStatement
               observer.testExecutionEngineDecision(qinfo, ExecutionEngine.SPARK, this.statementText);
             }
             return getPreparedStatementForSnappy(true, statementContext, lcc, false,
-                checkCancellation, DML_TABLE_PATTERN.matcher(source).find());
+                checkCancellation, DML_TABLE_PATTERN.matcher(source).find(), se);
           }
 // GemStone changes END
 					lcc.commitNestedTransaction();
@@ -1593,7 +1612,7 @@ public class GenericStatement
           return  GemFireXDUtils.isSet(this.execFlags, QUERY_HDFS);
         }
 
-        protected boolean getRouteQuery() {
+        public boolean getRouteQuery() {
         	return  GemFireXDUtils.isSet(this.execFlags, ROUTE_QUERY);
         }
 

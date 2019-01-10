@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -99,8 +99,11 @@ abstract class ClientLobBase {
     final int len = this.length;
     if (len >= 0) {
       return len;
-    } else {
+    } else if (this.streamedInput) {
       return (this.length = streamLength(forceMaterialize));
+    } else {
+      // LOB has been freed
+      return 0;
     }
   }
 

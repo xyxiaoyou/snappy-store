@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -755,7 +755,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
   public final boolean checkForColumnBatchCreation(TXStateInterface tx) {
     final PartitionedRegion pr = getPartitionedRegion();
-    return pr.needsBatching()
+    return pr.isRowBuffer()
         && (tx == null || !tx.getProxy().isColumnRolloverDisabled())
         && (getRegionSize() >= pr.getColumnMaxDeltaRows()
         || getTotalBytes() >= pr.getColumnBatchSize());
@@ -1132,7 +1132,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
     boolean lockedForPrimary = false;
     try {
-      doLockForPrimary(false);
+      doLockForPrimary(false, false);
       return (lockedForPrimary = true);
     } finally {
       if (!lockedForPrimary) {
@@ -1143,15 +1143,20 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
   /**
    * lock this bucket and, if present, its colocated "parent"
-   * @param tryLock - whether to use tryLock (true) or a blocking lock (false)
+   *
+   * @param tryLock       whether to use tryLock (true) or a blocking lock (false)
+   * @param moveWriteLock whether to acquire write lock to block bucket move (true),
+   *                      or read lock (true); only bucket maintenance operations
+   *                      should acquire write lock
+   *
    * @return true if locks were obtained and are still held
    */
-  public boolean doLockForPrimary(boolean tryLock) {
-    boolean locked = lockPrimaryStateReadLock(tryLock);
-    if(!locked) {
+  public boolean doLockForPrimary(boolean tryLock, boolean moveWriteLock) {
+    boolean locked = moveWriteLock ? lockPrimaryStateWriteLock()
+        : lockPrimaryStateReadLock(tryLock);
+    if (!locked) {
       return false;
     }
-    
     boolean isPrimary = false;
     try {
       // Throw a PrimaryBucketException if this VM is assumed to be the
@@ -1164,11 +1169,11 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
       isPrimary = true;
     } finally {
-      if(!isPrimary) {
-        doUnlockForPrimary();
+      if (!isPrimary) {
+        if (moveWriteLock) doUnlockForPrimaryMove();
+        else doUnlockForPrimary();
       }
     }
-    
     return true;
   }
 
@@ -1235,11 +1240,15 @@ public class BucketRegion extends DistributedRegion implements Bucket {
     }
   }
 
+  void doUnlockForPrimaryMove() {
+    getBucketAdvisor().getActivePrimaryMoveLock().unlock();
+  }
+
   private boolean readLockEnabled() {
     if (lockGIIForSnapshot) { // test hook
       return true;
     }
-    if ((this.getPartitionedRegion().needsBatching() ||
+    if ((this.getPartitionedRegion().isRowBuffer() ||
         this.getPartitionedRegion().isInternalColumnTable()) &&
         cache.snapshotEnabled()) {
       return true;
@@ -1260,27 +1269,29 @@ public class BucketRegion extends DistributedRegion implements Bucket {
     }
   }
 
-  private volatile Boolean rowBuffer = false;
-
-  public boolean isRowBuffer() {
-    final Boolean rowBuffer = this.rowBuffer;
-    if (rowBuffer || this.getName().toUpperCase().endsWith(StoreCallbacks.SHADOW_TABLE_SUFFIX)) {
-      return rowBuffer;
+  private boolean lockPrimaryStateWriteLock() {
+    Lock activeMoveLock = this.getBucketAdvisor().getActivePrimaryMoveLock();
+    for (;;) {
+      boolean interrupted = Thread.interrupted();
+      try {
+        activeMoveLock.lockInterruptibly();
+        break; // success
+      } catch (InterruptedException e) {
+        interrupted = true;
+        cache.getCancelCriterion().checkCancelInProgress(null);
+        // don't throw InternalGemFireError to fix bug 40102
+      } finally {
+        if (interrupted) {
+          Thread.currentThread().interrupt();
+        }
+      }
     }
-    boolean isRowBuffer = false;
-    List<PartitionedRegion> childRegions = ColocationHelper.getColocatedChildRegions(this.getPartitionedRegion());
-    for (PartitionedRegion pr : childRegions) {
-      isRowBuffer |= pr.getName().toUpperCase().endsWith(StoreCallbacks.SHADOW_TABLE_SUFFIX);
-    }
-    this.rowBuffer = isRowBuffer;
-    return isRowBuffer;
+    return true;
   }
-
 
   public void takeSnapshotGIIReadLock() {
     if (readLockEnabled()) {
-      if (this.getPartitionedRegion().
-          getName().toUpperCase().endsWith(StoreCallbacks.SHADOW_TABLE_SUFFIX)) {
+      if (this.getPartitionedRegion().isInternalColumnTable()) {
         BucketRegion bufferRegion = getBufferRegion();
         bufferRegion.takeSnapshotGIIReadLock();
       } else {
@@ -1296,8 +1307,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
   public void releaseSnapshotGIIReadLock() {
     if (readLockEnabled()) {
-      if (this.getPartitionedRegion().
-          getName().toUpperCase().endsWith(StoreCallbacks.SHADOW_TABLE_SUFFIX)) {
+      if (this.getPartitionedRegion().isInternalColumnTable()) {
         BucketRegion bufferRegion = getBufferRegion();
         bufferRegion.releaseSnapshotGIIReadLock();
       } else {
@@ -1316,8 +1326,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
   public boolean takeSnapshotGIIWriteLock(MembershipListener listener) {
     if (writeLockEnabled()) {
-      if (this.getPartitionedRegion().
-          getName().toUpperCase().endsWith(StoreCallbacks.SHADOW_TABLE_SUFFIX)) {
+      if (this.getPartitionedRegion().isInternalColumnTable()) {
         BucketRegion bufferRegion = getBufferRegion();
         return bufferRegion.takeSnapshotGIIWriteLock(listener);
       } else {
@@ -1342,8 +1351,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
   public void releaseSnapshotGIIWriteLock() {
     if (writeLockEnabled()) {
-      if (this.getPartitionedRegion().
-          getName().toUpperCase().endsWith(StoreCallbacks.SHADOW_TABLE_SUFFIX)) {
+      if (this.getPartitionedRegion().isInternalColumnTable()) {
         BucketRegion bufferRegion = getBufferRegion();
         bufferRegion.releaseSnapshotGIIWriteLock();
       } else {
@@ -2711,7 +2719,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
     // concurrent operations that are also updating these stats. For example,
     //a destroy could have already been applied to the map, and then updates
     //the stat after we reset it, making the state negative.
-    
+
     final PartitionedRegionDataStore prDs = this.partitionedRegion.getDataStore();
 //     this.debugMap.clear();
 //     this.createCount.set(0);
@@ -3000,9 +3008,9 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   }
 
   @Override
-  protected boolean clearIndexes(IndexUpdater indexUpdater, boolean lockForGII,
-      boolean setIsDestroyed) {
-      BucketRegionIndexCleaner cleaner = new BucketRegionIndexCleaner(lockForGII, !setIsDestroyed, this);
+  protected boolean clearIndexes(IndexUpdater indexUpdater, boolean setIsDestroyed) {
+      BucketRegionIndexCleaner cleaner = new BucketRegionIndexCleaner(
+          !setIsDestroyed, this);
       bucketRegionIndexCleaner.set(cleaner);
       return false;
   }
@@ -3095,7 +3103,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
     }
   }
 
-  void updateBucketMemoryStats(final int memoryDelta) {
+  private void updateBucketMemoryStats(final int memoryDelta) {
     if (memoryDelta != 0) {
 
       final long bSize = bytesInMemory.compareAddAndGet(BUCKET_DESTROYED, memoryDelta);
@@ -3374,6 +3382,11 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   }
 
   @Override
+  public boolean isRowBuffer() {
+    return getPartitionedRegion().isRowBuffer();
+  }
+
+  @Override
   public boolean isInternalColumnTable() {
     return getPartitionedRegion().isInternalColumnTable();
   }
@@ -3381,8 +3394,6 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   @Override
   public boolean isSnapshotEnabledRegion() {
     // concurrency checks is by default true in column table
-    return getPartitionedRegion().isInternalColumnTable() ||
-        getPartitionedRegion().needsBatching() || super.isSnapshotEnabledRegion();
+    return isInternalColumnTable() || isRowBuffer() || super.isSnapshotEnabledRegion();
   }
-
 }

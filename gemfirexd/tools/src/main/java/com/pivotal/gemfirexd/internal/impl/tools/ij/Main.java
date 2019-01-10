@@ -223,13 +223,16 @@ public class Main {
 		  File histFile = new File(historyFileName);
 		  if (historyFileName.length() > 0) {
 		    final FileHistory hist;
+		    // skip doInit in FileHistory to enable setting max-size before load
 		    if (histFile.isAbsolute()) {
-		      hist = new FileHistory(new File(historyFileName));
+		      hist = new FileHistory(new File(historyFileName), false);
 		    }
 		    else {
 		      hist = new FileHistory(new File((System
-		          .getProperty("user.home")), historyFileName));
+		          .getProperty("user.home")), historyFileName), false);
 		    }
+		    hist.setMaxSize(50000);
+		    hist.load();
 		    reader.setHistory(hist);
 		  }
 			Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -253,16 +256,16 @@ public class Main {
 		      "autocommit on;", "autocommit off;",
 		      "DISCONNECT", "DISCONNECT CURRENT;", "DISCONNECT ALL;",
 		      "disconnect", "disconnect current;", "disconnect all;",
-		      "SHOW SCHEMAS;", "show schemas;",
-		      "SHOW TABLES IN", "show tables in",
-		      "SHOW VIEWS IN", "show views in",
+		      "SHOW SCHEMAS", "show schemas",
+		      "SHOW TABLES", "show tables",
+		      "SHOW VIEWS", "show views",
 		      "SHOW PROCEDURES IN", "show procedures in",
-		      "SHOW SYNONYMS IN", "show synonyms in",
+		      "SHOW FUNCTIONS", "show functions",
 		      "SHOW INDEXES IN", "SHOW INDEXES FROM",
 		      "show indexes in", "show indexes from",
                       "SHOW IMPORTEDKEYS IN", "SHOW IMPORTEDKEYS FROM",
                       "show importedkeys in", "show importedkeys from",
-		      "SHOW MEMBERS", "show members",
+		      "SHOW MEMBERS;", "show members;",
 		      "DESCRIBE", "describe", "COMMIT;", "commit;",
 		      "ROLLBACK;", "rollback;", "PREPARE", "prepare",
 		      "EXECUTE", "execute", "REMOVE", "remove", "RUN", "run",

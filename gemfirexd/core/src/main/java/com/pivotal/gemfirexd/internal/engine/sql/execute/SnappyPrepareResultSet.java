@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -18,6 +18,7 @@
 package com.pivotal.gemfirexd.internal.engine.sql.execute;
 
 import java.io.IOException;
+import java.sql.SQLWarning;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -34,11 +35,16 @@ import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.internal.iapi.reference.SQLState;
 import com.pivotal.gemfirexd.internal.iapi.services.io.FormatableBitSet;
 import com.pivotal.gemfirexd.internal.iapi.sql.Activation;
+import com.pivotal.gemfirexd.internal.iapi.sql.ResultColumnDescriptor;
+import com.pivotal.gemfirexd.internal.iapi.sql.ResultDescription;
 import com.pivotal.gemfirexd.internal.iapi.sql.execute.ExecRow;
 import com.pivotal.gemfirexd.internal.iapi.sql.execute.NoPutResultSet;
 import com.pivotal.gemfirexd.internal.iapi.sql.execute.TargetResultSet;
+import com.pivotal.gemfirexd.internal.iapi.types.DataTypeDescriptor;
 import com.pivotal.gemfirexd.internal.iapi.types.DataValueDescriptor;
 import com.pivotal.gemfirexd.internal.iapi.types.RowLocation;
+import com.pivotal.gemfirexd.internal.impl.sql.GenericColumnDescriptor;
+import com.pivotal.gemfirexd.internal.impl.sql.GenericResultDescription;
 import com.pivotal.gemfirexd.internal.impl.sql.execute.ResultSetStatisticsVisitor;
 
 /**
@@ -266,5 +272,37 @@ public final class SnappyPrepareResultSet
 
   @Override
   public void closeRowSource() {
+  }
+
+  public ResultDescription makeResultDescription(String statementType) {
+    String[] colNames = firstResultHolder.getColumnNames();
+    int[] colTypes = firstResultHolder.getColumnTypes();
+    String[] tableNames = firstResultHolder.getTableNames();
+    DataTypeDescriptor[] dtds = firstResultHolder.getDtds();
+    if (colNames == null || colTypes == null || !(colNames.length > 0) || !(colTypes.length > 0)) {
+      throw new IllegalStateException("colnames and colTypes are required");
+    }
+
+    GenericResultDescription resultDescription = new GenericResultDescription(
+        new ResultColumnDescriptor[colTypes.length], statementType);
+
+    for (int i = 0; i < colNames.length; i++) {
+      String tableName = tableNames[i];
+      String schema = "";
+      String table = "";
+      if (!tableName.isEmpty()) {
+        int dotIndex = tableName.indexOf('.');
+        schema = tableName.substring(0, dotIndex);
+        table = tableName.substring(dotIndex + 1);
+      }
+      ResultColumnDescriptor rcd = new GenericColumnDescriptor(
+          colNames[i], schema, table, i + 1, dtds[i], false, false);
+      resultDescription.setColumnDescriptor(i, rcd);
+    }
+    final SQLWarning warnings = firstResultHolder.getWarnings();
+    if (warnings != null) {
+      addWarning(warnings);
+    }
+    return resultDescription;
   }
 }

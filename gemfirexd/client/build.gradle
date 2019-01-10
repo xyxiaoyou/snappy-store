@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -15,21 +15,19 @@
  * LICENSE file.
  */
 
-plugins {
-  id 'com.github.johnrengelman.shadow' version '2.0.1'
-}
-
 dependencies {
   compile "org.apache.thrift:libthrift:${thriftVersion}"
   compile "net.java.dev.jna:jna:${jnaVersion}"
 
   compile project(subprojectBase + 'snappydata-store-shared')
+  compile "org.apache.tomcat:tomcat-juli:${tomcatJdbcVersion}"
+  compile "org.apache.tomcat:tomcat-jdbc:${tomcatJdbcVersion}"
 }
 
 task generatePropertiesFiles(dependsOn: 'processResources') {
-  def infoDir = file("${buildDir}/resources/main/com/pivotal/gemfirexd/internal/info")
+  def infoDir = file("${sourceSets.main.java.outputDir}/com/pivotal/gemfirexd/internal/info")
   outputs.files "${infoDir}/dnc.properties", "${infoDir}/thrift.properties"
-  inputs.dir compileJava.destinationDir
+  inputs.dir "${projectDir}/../core/src/main/resources/com/pivotal/gemfirexd/internal/info"
 
   doLast {
     println('Creating DRDA client properties')

@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -103,7 +103,7 @@ public abstract class LauncherBase {
       "The server is still starting. " +
           "{0} seconds have elapsed since the last log message: \n {1}";
   public static final String LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY =
-      "ERROR: A {0} is already running in directory \"{1}\"";
+      "WARN: A {0} is already running in directory \"{1}\"";
   private static final String LAUNCHER_EXPECTED_BOOLEAN =
       "Expected true or false for \"{0}=<value>\" but was \"{1}\"";
 
@@ -125,7 +125,9 @@ public abstract class LauncherBase {
   private static final long SHUTDOWN_WAIT_TIME = SystemProperties.getServerInstance()
       .getLong("launcher.SHUTDOWN_WAIT_TIME_MS", 15000L);
 
-  private static final double twoGB = 2.0 * 1024.0 * 1024.0 * 1024.0;
+  public static final long LARGE_RAM_LIMIT = 14L << 30L;
+  public static final double oneGB = 1024.0 * 1024.0 * 1024.0;
+  private static final double twoGB = 2.0 * oneGB;
 
   protected final String baseName;
   protected final String defaultLogFileName;
@@ -143,6 +145,7 @@ public abstract class LauncherBase {
   protected final String jvmVendor;
   protected String maxHeapSize;
   protected String initialHeapSize;
+  @SuppressWarnings("WeakerAccess")
   protected boolean useThriftServerDefault =
       ClientSharedUtils.isThriftDefault();
 
@@ -158,10 +161,10 @@ public abstract class LauncherBase {
 
     InetAddress host = null;
     try {
-      host = ClientSharedUtils.getLocalHost();
+      host = InetAddress.getLocalHost();
     } catch (Exception ex) {
       try {
-        host = InetAddress.getLocalHost();
+        host = ClientSharedUtils.getLocalHost();
       } catch (Exception ignored) {
       }
     }
@@ -176,8 +179,43 @@ public abstract class LauncherBase {
     return name != null ? name.toLowerCase().replace(" ", "") : null;
   }
 
+  /** determine the total physical RAM in bytes */
+  public static long getPhysicalRAMSize() {
+    long totalMemory = 0L;
+    OperatingSystemMXBean bean = ManagementFactory
+        .getOperatingSystemMXBean();
+    Object memSize = null;
+    try {
+      Method m = bean.getClass().getMethod("getTotalPhysicalMemorySize");
+      m.setAccessible(true);
+      memSize = m.invoke(bean);
+    } catch (Exception e) {
+      // ignore exception and return zero
+    }
+    if (memSize instanceof Number) {
+      totalMemory = ((Number)memSize).longValue();
+    }
+    return totalMemory;
+  }
+
   protected long getDefaultHeapSizeMB(boolean hostData) {
-    return hostData ? 4096L : 2048L;
+    return getDefaultHeapSizeMB(getPhysicalRAMSize(), hostData);
+  }
+
+  public static long getDefaultHeapSizeMB(long ramSize, boolean hostData) {
+    int numProcs = Runtime.getRuntime().availableProcessors();
+    if (hostData) {
+      // use 6GB or 8GB for hosts having large number of cores and sufficient RAM else 4GB
+      if (numProcs > 12 && ramSize > LARGE_RAM_LIMIT + (2L << 30L)) return 8192L;
+      else if (numProcs > 8 && ramSize > LARGE_RAM_LIMIT) return 6144L;
+      return 4096L;
+    } else {
+      // use 8GB or 6GB or 4GB or 2GB as per available RAM and number of cores
+      if (numProcs > 16 && ramSize > LARGE_RAM_LIMIT + (4L << 30L)) return 8192L;
+      else if (numProcs > 12 && ramSize > LARGE_RAM_LIMIT + (2L << 30L)) return 6144L;
+      else if (numProcs > 2) return 4096L;
+      else return 2048L;
+    }
   }
 
   protected long getDefaultSmallHeapSizeMB(boolean hostData) {
@@ -226,21 +264,7 @@ public abstract class LauncherBase {
       List<String> vmArgs) {
 
     // determine the total physical RAM
-    long totalMemory = 0L;
-    OperatingSystemMXBean bean = ManagementFactory
-        .getOperatingSystemMXBean();
-    Object memSize = null;
-    try {
-      Method m = bean.getClass().getMethod("getTotalPhysicalMemorySize");
-      m.setAccessible(true);
-      memSize = m.invoke(bean);
-    } catch (Exception e) {
-      // ignore and move with JVM defaults
-    }
-    if (memSize != null && (memSize instanceof Number)) {
-      totalMemory = ((Number)memSize).longValue();
-    }
-
+    long totalMemory = getPhysicalRAMSize();
     float evictPercent = 0.0f;
     float criticalPercent = 0.0f;
     // If either the max heap or initial heap is null, set the one that is null

@@ -35,29 +35,16 @@ import java.util.Calendar;
 import com.gemstone.gemfire.cache.CacheWriterException;
 import com.gemstone.gemfire.cache.EntryEvent;
 import com.gemstone.gemfire.cache.EntryNotFoundException;
+import com.gemstone.gemfire.cache.IllegalTransactionStateException;
 import com.gemstone.gemfire.cache.Operation;
 import com.gemstone.gemfire.cache.TimeoutException;
 import com.gemstone.gemfire.cache.query.internal.IndexUpdater;
 import com.gemstone.gemfire.distributed.internal.DM;
 import com.gemstone.gemfire.internal.Assert;
 import com.gemstone.gemfire.internal.InternalStatisticsDisabledException;
-import com.gemstone.gemfire.internal.cache.AbstractOperationMessage;
+import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.cache.DistributedRegion.DiskPosition;
-import com.gemstone.gemfire.internal.cache.EntryEventImpl;
 import com.gemstone.gemfire.internal.cache.InitialImageOperation.Entry;
-import com.gemstone.gemfire.internal.cache.KeyInfo;
-import com.gemstone.gemfire.internal.cache.KeyWithRegionContext;
-import com.gemstone.gemfire.internal.cache.LocalRegion;
-import com.gemstone.gemfire.internal.cache.ObjectEqualsHashingStrategy;
-import com.gemstone.gemfire.internal.cache.RegionClearedException;
-import com.gemstone.gemfire.internal.cache.RegionEntry;
-import com.gemstone.gemfire.internal.cache.RegionEntryContext;
-import com.gemstone.gemfire.internal.cache.THashMapWithKeyPair;
-import com.gemstone.gemfire.internal.cache.TXEntryState;
-import com.gemstone.gemfire.internal.cache.TXEntryStateFactory;
-import com.gemstone.gemfire.internal.cache.TXRegionState;
-import com.gemstone.gemfire.internal.cache.TXState;
-import com.gemstone.gemfire.internal.cache.Token;
 import com.gemstone.gemfire.internal.cache.locks.LockMode;
 import com.gemstone.gemfire.internal.cache.locks.LockingPolicy;
 import com.gemstone.gemfire.internal.cache.versions.VersionSource;
@@ -133,8 +120,10 @@ public final class GfxdTXEntryState extends TXEntryState implements
 
     // should never happen on a client/locator VM
     final VMKind myKind;
-    assert (myKind = GemFireXDUtils.getMyVMKind()) == VMKind.DATASTORE:
-      "unexpected creation of GfxdTXEntryState on VM of kind " + myKind;
+    if (!GemFireCacheImpl.getInternalProductCallbacks().isSnappyStore()) {
+      assert (myKind = GemFireXDUtils.getMyVMKind()) == VMKind.DATASTORE :
+          "unexpected creation of GfxdTXEntryState on VM of kind " + myKind;
+    }
   }
 
   @Override
@@ -702,23 +691,23 @@ public final class GfxdTXEntryState extends TXEntryState implements
   }
 
   public WrapperRowLocationForTxn wrapperForRollback(
-      GemFireContainer indexContainer, Object oldKey) {
+      GemFireContainer indexContainer, Object oldKey, EntryEventImpl event) {
     // in case of op = INSERT/CREATE we need not reinstate the old index
     // during rollback.
     if (wasCreatedByTX()) {
       return null;
     }
+    final boolean isOpPut = isOpPut() || event.isPutDML();
+    final boolean isOpDestroy = isOpDestroy();
     // in case of op = destroy or op = update/put of an existing entry
     // we need to reinstate the old index during rollback
-    if (!isOpPut() && !isOpDestroy()) {
-      if (GemFireXDUtils.TraceTran | GemFireXDUtils.TraceQuery) {
-        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_TRAN, "op is: " + this.op
-            + " and opToString returns: " + this.opToString());
-      }
+    if (!isOpPut && !isOpDestroy) {
+      SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_TRAN, "ERROR: Unexpected op = " +
+          this.op + ", opToString returns: " + this.opToString() + " for " + toString() +
+          ", event: " + event);
+      throw new IllegalTransactionStateException("TXEntryState.wrapperForRollback: unexpected " +
+          "operation " + opToString() + " for event: " + event + ", on entry: " + toString());
     }
-    boolean isOpDestroy = isOpDestroy();
-
-    assert isOpPut() || isOpDestroy;
 
     final TXRegionState txrs = this.txRegionState;
     txrs.lock();

@@ -119,6 +119,7 @@ import com.gemstone.gemfire.internal.util.concurrent.StoppableCountDownLatch;
 import com.gemstone.gnu.trove.TObjectIntProcedure;
 import com.gemstone.gnu.trove.TObjectObjectProcedure;
 import com.gemstone.org.jgroups.util.StringId;
+import org.eclipse.collections.impl.map.mutable.UnifiedMap;
 
 /**
  * 
@@ -1276,7 +1277,8 @@ public class DistributedRegion extends LocalRegion implements
    * to constraint violations for replicated tables which should also be skipped
    * on destination
    */
-  private final THashMapWithCreate failedEvents = new THashMapWithCreate();
+  private final UnifiedMap<InternalDistributedMember, ArrayList<EventID>> failedEvents =
+      new UnifiedMap<>();
 
   private ConcurrentParallelGatewaySenderQueue hdfsQueue;
 
@@ -2512,6 +2514,7 @@ public class DistributedRegion extends LocalRegion implements
     profile.isPersistent = getDataPolicy().withPersistence();
     profile.setSubscriptionAttributes(getSubscriptionAttributes());
     profile.isGatewayEnabled = getEnableGateway();
+    GemFireCacheImpl.StaticSystemCallbacks sysCb = getCache().getInternalProductCallbacks();
     profile.serialNumber = getSerialNumber();
     profile.regionInitialized = this.isInitialized();
     // need to set the memberUnInitialized flag only for user created regions
@@ -2807,17 +2810,7 @@ public class DistributedRegion extends LocalRegion implements
     // we don't care much about perf of failed events but for correctness
     // hence a sync on the entire map
     synchronized (this.failedEvents) {
-      this.failedEvents.forEachEntry(new TObjectObjectProcedure() {
-        @Override
-        public boolean execute(Object a, Object b) {
-          @SuppressWarnings("unchecked")
-          ArrayList<EventID> failures = (ArrayList<EventID>)b;
-          synchronized (failures) {
-            failures.add(eventId);
-          }
-          return true;
-        }
-      });
+      this.failedEvents.forEachValue(failures -> failures.add(eventId));
     }
   }
 
@@ -2827,7 +2820,7 @@ public class DistributedRegion extends LocalRegion implements
       return;
     }
     synchronized (this.failedEvents) {
-      this.failedEvents.putIfAbsent(member, new ArrayList<EventID>());
+      this.failedEvents.getIfAbsentPut(member, new ArrayList<>());
     }
   }
 
@@ -2851,11 +2844,8 @@ public class DistributedRegion extends LocalRegion implements
       return null;
     }
     synchronized (this.failedEvents) {
-      @SuppressWarnings("unchecked")
-      ArrayList<EventID> events = (ArrayList<EventID>)this.failedEvents
-          .get(member);
-      return events != null && !events.isEmpty() ? new ArrayList<EventID>(
-          events) : null;
+      ArrayList<EventID> events = this.failedEvents.get(member);
+      return events != null && !events.isEmpty() ? new ArrayList<>(events) : null;
     }
   }
 
@@ -3792,7 +3782,7 @@ public class DistributedRegion extends LocalRegion implements
   }
 
   public static class DiskEntryPage extends DiskPosition {
-    protected RegionEntry entry;
+    protected final RegionEntry entry;
     protected final LocalRegion region;
     final int readerId;
 

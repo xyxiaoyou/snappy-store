@@ -33,7 +33,6 @@ import com.gemstone.gemfire.internal.shared.Version;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.GfxdDataSerializable;
 import com.pivotal.gemfirexd.internal.engine.GfxdSerializable;
-import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireStore;
 import com.pivotal.gemfirexd.internal.iapi.services.sanity.SanityManager;
@@ -446,14 +445,24 @@ public final class DDLConflatable extends GfxdDataSerializable implements
    */
   public String getSchemaForTable() {
     assert isCreateTable() || isAlterTable();
-    
-    final int dotIndex = this.fullTableName.indexOf('.');
-    if (dotIndex == -1) {
-      return null;
-    }
-    return this.fullTableName.substring(0, dotIndex);
+    return getSchemaForTable_internal();
   }
-  
+
+  private String getSchemaForTable_internal() {
+    if (this.fullTableName != null) {
+      final int dotIndex = this.fullTableName.indexOf('.');
+      if (dotIndex == -1) {
+        return null;
+      }
+      return this.fullTableName.substring(0, dotIndex);
+    }
+    return null;
+  }
+
+  public String getSchemaForTableNoThrow() {
+    return getSchemaForTable_internal();
+  }
+
   public final String getColocatedWithTable() {
     return this.colocatedWithTable;
   }
@@ -577,7 +586,8 @@ public final class DDLConflatable extends GfxdDataSerializable implements
   @Override
   public void appendFields(StringBuilder sb) {
     sb.append(" [").append(this.ddlId).append(']');
-    sb.append(" SQLText [").append(this.sqlText);
+    sb.append(" SQLText [");
+    sb.append(GemFireXDUtils.maskGenericPasswordFromSQLString(this.sqlText));
     sb.append("] fullTableName=").append(this.fullTableName);
     sb.append(";defaultSchema=").append(this.defaultSchema);
     sb.append(";objectName=").append(this.objectName);

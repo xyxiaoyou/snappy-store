@@ -1064,11 +1064,16 @@ class ij {
 	   Outputs the names of all fields of given table. Outputs field
 	   names and data type.
 	 */
-	public ijResult describeTable(String schema, String table) throws SQLException {
+	public ijResult describeTable(String schema, String table) throws SQLException, ParseException {
 		ResultSet rs = null;
 		try {
 			haveConnection();
-			verifyTableExists(schema,table);
+			try {
+				verifyTableExists(schema,table);
+			} catch (ijException ignored) {
+				// fallback to full parser with routing for statements like DESCRIBE EXTENDED
+				throw new ParseException();
+			}
 
 			DatabaseMetaData dbmd = theConnection.getMetaData();
 			rs = dbmd.getColumns(null,schema,table,null);
@@ -1622,7 +1627,7 @@ throws SQLException
 | 	r=CloseStatement()
 | 	r=CommitStatement()
 | 	r=ConnectStatement()
-|	r=DescTableStatement()
+// |	r=DescTableStatement()
 |	r=DisconnectStatement()
 |	r=DriverStatement()
 |	r=ElapsedTimeStatement()	
@@ -2348,13 +2353,13 @@ throws SQLException
 }
 {
 	<DESCRIBE>
-	( ( i=identifier() <PERIOD> i2=identifier() )
+	( ( i=identifier() <PERIOD> ( i2=identifier() | s=<MEMBERS> ) )
 	| i2=identifier()
 	| s=<STRING>
 	)
 	{
 		if(s!=null) {
-			i2 = stringValue(s.image);
+			i2 = i == null ? stringValue(s.image) : s.image.toUpperCase(Locale.ENGLISH);
 
 			if (i2.length() == 0)
 				throw ijException.noSuchTable("(missing)");
@@ -2485,13 +2490,13 @@ throws SQLException
 	{
 		return showConnectionsMethod(false);
 	}
+/*
 |   <SHOW> (t=<TABLES> | v=<VIEWS> | <SYNONYMS> | <ALIASES>)
 		[ <IN> schema=identifier() ]
 	{
 		if(t!=null) {
-// GemStone changes: Addition of "COLUMN TABLE", "EXTERNAL TABLE" etc below
-		    types = new String[] { "ROW TABLE", "SYSTEM TABLE", "COLUMN TABLE",
-		        "EXTERNAL TABLE", "STREAM TABLE", "SAMPLE TABLE", "TOPK TABLE" };
+// SnappyData changes: Addition of "VIRTUAL TABLE" below
+		    types = new String[] { "TABLE", "SYSTEM TABLE", "VIRTUAL TABLE" };
 		}
 		else if(v!=null)
 			types = new String[] { "VIEW" };
@@ -2499,6 +2504,7 @@ throws SQLException
 			types = new String[] { "SYNONYM" };
 		return showTables(schema, types);
 	}
+*/
 |	<SHOW> <INDEXES> 
 		[ (<IN> schema=identifier()) |
 		  (<FROM> tblname=identifier() [ <PERIOD> str=identifier() ] ) ]
@@ -2536,14 +2542,17 @@ throws SQLException
 	{
 		return showProcedures(schema);
 	}
+/*
 |	<SHOW> <SCHEMAS>
 	{
 		return showSchemas();
 	}
+*/
 |       <SHOW> <ROLES>
         {
             return showRoles();
         }
+/*
 // GemStone changes BEGIN
 
 |
@@ -2559,7 +2568,8 @@ throws SQLException
             return showMembers();
         }
 
-// GemStone changes END     
+// GemStone changes END
+*/
 }
 
 /**

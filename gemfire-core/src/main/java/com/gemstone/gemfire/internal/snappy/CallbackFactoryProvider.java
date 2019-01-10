@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -17,6 +17,7 @@
 
 package com.gemstone.gemfire.internal.snappy;
 
+import java.net.URLClassLoader;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -90,11 +91,7 @@ public abstract class CallbackFactoryProvider {
     }
 
     @Override
-    public void registerRelationDestroyForHiveStore() {
-    }
-
-    @Override
-    public void performConnectorOp(Object ctx) {
+    public void registerCatalogSchemaChange() {
     }
 
     @Override
@@ -185,6 +182,21 @@ public abstract class CallbackFactoryProvider {
 
     @Override
     public void clearConnectionPools() {
+    }
+
+    @Override
+    public URLClassLoader getLeadClassLoader() { return null; }
+
+    @Override
+    public void clearSessionCache(boolean onlyQueryPlanCache) {}
+
+    @Override
+    public void refreshPolicies(String ldapGroup) {
+    }
+
+    @Override
+    public String checkSchemaPermission(String schema, String currentUser) {
+      return null;
     }
   };
 

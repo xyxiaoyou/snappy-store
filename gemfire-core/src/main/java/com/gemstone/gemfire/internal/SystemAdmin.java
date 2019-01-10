@@ -539,9 +539,13 @@ public class SystemAdmin {
     return ds;
   }
 
+  protected long defaultShutdownAllWait() {
+    return 0;
+  }
+
   public void shutDownAll(String cmd, List<String> cmdLine) {
     try {
-      long timeout = 0;
+      long timeout = defaultShutdownAllWait();
       if (cmdLine.size() > 0) {
         // GemFireXD uses '-' args as DS properties
         String cmdArg;
@@ -1522,6 +1526,7 @@ public class SystemAdmin {
     "compact-disk-store",
     "compact-all-disk-stores",
     "revoke-missing-disk-store",
+    "list-missing-disk-stores",
     "unblock-disk-store",
     "modify-disk-store",
     "show-disk-store-metadata",

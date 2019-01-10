@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -35,6 +35,7 @@
 
 package io.snappydata.thrift.server;
 
+import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.i18n.LogWriterI18n;
 import com.gemstone.gemfire.internal.SystemTimer;
 import com.gemstone.gnu.trove.THashSet;
@@ -124,7 +125,12 @@ public class ClientTracker extends SystemTimer.SystemTimerTask {
     final ClientTracker tracker = service.clientSocketTrackerMap.remove(
         transport);
     if (tracker != null) {
-      tracker.removeClientSocket(transport);
+      try {
+        tracker.removeClientSocket(transport);
+      } catch (CancelException ce) {
+        // try to remove in-line
+        tracker.run();
+      }
     }
   }
 

@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -137,8 +137,8 @@ public class ClientStatement extends ClientFetchColumnValue implements
         .setRetainBucketIds(retain);
   }
 
-  public final void setMetadataVersion(int version) {
-    this.attrs.setMetadataVersion(version);
+  public final void setCatalogVersion(long version) {
+    this.attrs.setCatalogVersion(version);
   }
 
   public final void setSnapshotTransactionId(String txId) {

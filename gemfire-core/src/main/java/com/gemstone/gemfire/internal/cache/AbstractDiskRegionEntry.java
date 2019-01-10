@@ -45,6 +45,7 @@ public abstract class AbstractDiskRegionEntry
 
   @Override
   public  void setValue(RegionEntryContext context, Object v) throws RegionClearedException {
+    initContextForDiskBuffer(context, v);
     Helper.update(this, (LocalRegion) context, v);
     setRecentlyUsed(); // fix for bug #42284 - entry just put into the cache is evicted
   }
@@ -56,6 +57,7 @@ public abstract class AbstractDiskRegionEntry
    */
   @Override
   public void setValueWithContext(RegionEntryContext context, Object value) {
+    initContextForDiskBuffer(context, value);
     _setValue(context, value);
     if (value != null && context != null && context instanceof LocalRegion
         && ((LocalRegion)context).isThisRegionBeingClosedOrDestroyed()

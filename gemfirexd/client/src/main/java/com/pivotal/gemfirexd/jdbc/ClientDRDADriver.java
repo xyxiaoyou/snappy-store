@@ -40,7 +40,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -59,6 +59,7 @@
 package com.pivotal.gemfirexd.jdbc;
 
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -132,7 +133,7 @@ public class ClientDRDADriver implements java.sql.Driver {
           return null;
         }
         com.pivotal.gemfirexd.internal.client.net.NetConnection conn;
-        try {    
+        try {
             if (exceptionsOnLoadDriver__ != null) {
                 throw exceptionsOnLoadDriver__;
             }
@@ -237,10 +238,10 @@ public class ClientDRDADriver implements java.sql.Driver {
         } catch(SqlException se) {
             throw se.getSQLException(null /* GemStoneAddition */);
         }
-        
+
         if(conn.isConnectionNull())
             return null;
-        
+
         return conn;
     }
 
@@ -287,50 +288,56 @@ public class ClientDRDADriver implements java.sql.Driver {
      * {@inheritDoc}
      */
     public java.sql.DriverPropertyInfo[] getPropertyInfo(String url,
-                                                         java.util.Properties properties) throws java.sql.SQLException {
-        java.sql.DriverPropertyInfo driverPropertyInfo[] = new java.sql.DriverPropertyInfo[2];
+        java.util.Properties properties) throws java.sql.SQLException {
+        return ClientDRDADriver.getPropertyInfoUtility(url,properties);
+    }
 
-        // If there are no properties set already,
-        // then create a dummy properties just to make the calls go thru.
-        if (properties == null) {
-            properties = new java.util.Properties();
-        }
+    public static java.sql.DriverPropertyInfo[] getPropertyInfoUtility(String url,
+        java.util.Properties properties) throws java.sql.SQLException {
+      java.sql.DriverPropertyInfo driverPropertyInfo[] = new java.sql.DriverPropertyInfo[2];
 
-        // GemStone changes BEGIN
+      // If there are no properties set already,
+      // then create a dummy properties just to make the calls go thru.
+      if (properties == null) {
+        properties = new java.util.Properties();
+      }
+
+      // GemStone changes BEGIN
         /* (original code)
         driverPropertyInfo[0] =
                 new java.sql.DriverPropertyInfo(Attribute.USERNAME_ATTR,
-                        properties.getProperty(Attribute.USERNAME_ATTR, ClientDataSource.propertyDefault_user));
+                        properties.getProperty(Attribute.USERNAME_ATTR,
+                         ClientDataSource.propertyDefault_user));
          */
-        boolean isUserNameAttribute = false;
-        String userName = properties.getProperty(Attribute.USERNAME_ATTR);
-        if( userName == null) {
-          userName = properties.getProperty(Attribute.USERNAME_ALT_ATTR);
-          if(userName != null) {
-            isUserNameAttribute = true;
-          }
+      boolean isUserNameAttribute = false;
+      String userName = properties.getProperty(Attribute.USERNAME_ATTR);
+      if( userName == null) {
+        userName = properties.getProperty(Attribute.USERNAME_ALT_ATTR);
+        if(userName != null) {
+          isUserNameAttribute = true;
         }
-        
-        driverPropertyInfo[0] = new java.sql.DriverPropertyInfo(
-            isUserNameAttribute ? Attribute.USERNAME_ALT_ATTR
-                : Attribute.USERNAME_ATTR, userName);
-        // GemStone changes END
-        
-        driverPropertyInfo[1] =
-                new java.sql.DriverPropertyInfo(Attribute.PASSWORD_ATTR,
-                        properties.getProperty(Attribute.PASSWORD_ATTR));
+      }
 
-        driverPropertyInfo[0].description =
-            SqlException.getMessageUtil().getTextMessage(
-                MessageId.CONN_USERNAME_DESCRIPTION);
-        driverPropertyInfo[1].description =
-            SqlException.getMessageUtil().getTextMessage(
-                MessageId.CONN_PASSWORD_DESCRIPTION);
+      driverPropertyInfo[0] = new java.sql.DriverPropertyInfo(
+          isUserNameAttribute ? Attribute.USERNAME_ALT_ATTR
+              : Attribute.USERNAME_ATTR, userName);
+      // GemStone changes END
 
-        driverPropertyInfo[0].required = true;
-        driverPropertyInfo[1].required = false; // depending on the security mechanism
+      driverPropertyInfo[1] =
+          new java.sql.DriverPropertyInfo(Attribute.PASSWORD_ATTR,
+              properties.getProperty(Attribute.PASSWORD_ATTR));
 
-        return driverPropertyInfo;
+      driverPropertyInfo[0].description =
+          SqlException.getMessageUtil().getTextMessage(
+              MessageId.CONN_USERNAME_DESCRIPTION);
+      driverPropertyInfo[1].description =
+          SqlException.getMessageUtil().getTextMessage(
+              MessageId.CONN_PASSWORD_DESCRIPTION);
+
+      driverPropertyInfo[0].required = true;
+      driverPropertyInfo[1].required = false; // depending on the security mechanism
+
+      return driverPropertyInfo;
     }
 
     /**
@@ -511,7 +518,7 @@ public class ClientDRDADriver implements java.sql.Driver {
      *(or)
      *ClientJDBCObjectFactoryImpl40
      */
-    
+
     public static ClientJDBCObjectFactory getFactory() {
         if(factoryObject!=null)
             return factoryObject;
@@ -522,7 +529,7 @@ public class ClientDRDADriver implements java.sql.Driver {
         }
         return factoryObject;
     }
-    
+
     /**
      *Returns an instance of the ClientJDBCObjectFactoryImpl class
      */
@@ -544,7 +551,7 @@ public class ClientDRDADriver implements java.sql.Driver {
         */
 // GemStone changes END
     }
-    
+
     /**
      *Returns an instance of the ClientJDBCObjectFactoryImpl40 class
      *If a ClassNotFoundException occurs then it returns an
@@ -556,7 +563,7 @@ public class ClientDRDADriver implements java.sql.Driver {
      *return the lower version thus having a sort of cascading effect
      *until it gets a valid instance
      */
-    
+
     private static ClientJDBCObjectFactory createJDBC40FactoryImpl() {
         final String factoryName =
                 "com.pivotal.gemfirexd.internal.client.net.ClientJDBCObjectFactoryImpl40";
@@ -613,9 +620,8 @@ public class ClientDRDADriver implements java.sql.Driver {
     }
 
     // JDBC 4.1 methods since jdk 1.7
-    public Logger getParentLogger() {
-      throw new AssertionError("should be overridden in JDBC 4.1");
+    public Logger getParentLogger() throws SQLFeatureNotSupportedException {
+      throw new SQLFeatureNotSupportedException("getParentLogger not supported", "0A000");
     }
 // GemStone changes END
 }
-

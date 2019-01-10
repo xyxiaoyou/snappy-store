@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2017 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -515,8 +515,8 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
       }
       ExternalCatalog extcat = Misc.getMemStore().getExistingExternalCatalog();
       // containers are created during initialization, ignore them
-      externalTableMetaData.compareAndSet(null, extcat.getHiveTableMetaData(
-              schemaName, tableName, true));
+      externalTableMetaData.compareAndSet(null, extcat.getCatalogTableMetadata(
+              schemaName, tableName));
       if (isPartitioned()) {
         metaData = externalTableMetaData.get();
         if (metaData == null) return null;
@@ -731,6 +731,7 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
         HAS_AUTO_GENERATED_COLUMNS,
         (isByteArrayStore() && !isPrimaryKeyBased())
             || (cdl != null ? cdl.hasAutoIncrementAlways() : false));
+    clearRowBufferFlag();
   }
 
   private long getDDLId(final LanguageConnectionContext lcc,
@@ -775,6 +776,7 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
           uuidAdvisor.handshake();
         }
       }
+      clearRowBufferFlag();
       this.iargs = null; // free the internal region arguments
     } catch (TimeoutException e) {
       throw StandardException.newException(
@@ -807,6 +809,20 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
     if (r.getConcurrencyChecksEnabled()) {
       SanityManager.DEBUG_PRINT("info:" + GfxdConstants.TRACE_CONGLOM,
           "Concurrency checks enabled for table " + getQualifiedTableName());
+    }
+  }
+
+  /**
+   * reset the isRowBuffer flag for parent row buffer region
+   */
+  private void clearRowBufferFlag() {
+    if (isColumnStore()) {
+      String rowBufferTable = getRowBufferTableName(this.qualifiedName);
+      PartitionedRegion rowBuffer = (PartitionedRegion)Misc.getRegionForTableByPath(
+          rowBufferTable, false);
+      if (rowBuffer != null) {
+        rowBuffer.clearIsRowBuffer();
+      }
     }
   }
 
@@ -937,7 +953,6 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
 
     // ???:ezoerner:20080609 do temp tables get created here
     // if so, then they need to be Scope LOCAL in a session schema
-    // TODO: SW: why LOCAL for session schema? should be replicated with empty
     // on accessors as usual; possibly also needs changes to QueryInfo routing
     if (rattrs == null) {
       af = new AttributesFactory<Object, Object>();
@@ -1398,24 +1413,6 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
   public SortedIndexKey getIndexKey(Object val, RegionEntry entry) {
     try {
       return getLocalIndexKey(val, entry, false, false);
-    } catch (StandardException se) {
-      throw new IndexMaintenanceException(se);
-    }
-  }
-
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  public void insertIntoIndex(SortedIndexKey indexKey, RegionEntry entry,
-      boolean isPutDML) {    
-    if (GemFireXDUtils.TraceIndex) {
-      GfxdIndexManager.traceIndex("GemFireContainer#insertIntoIndexes: "
-          + "index key = %s DiskEntry to be inserted = %s", entry);
-    }
-    try {
-      SortedMap2IndexInsertOperation.doMe(null, null, this, indexKey,
-          (RowLocation)entry, isUniqueIndex(), null, isPutDML);
     } catch (StandardException se) {
       throw new IndexMaintenanceException(se);
     }
@@ -5086,7 +5083,6 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
 
   private final boolean isCandidateForByteArrayStore() {
     return !GfxdConstants.SYSTEM_SCHEMA_NAME.equals(this.schemaName)
-        // TODO: SW: why for session schema??
         && !GfxdConstants.SESSION_SCHEMA_NAME.equals(this.schemaName)
         && !isObjectStore();
   }
@@ -5099,15 +5095,14 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
   }
 
   public final boolean isRowBuffer() {
-    return isPartitioned() && ((PartitionedRegion)this.region).needsBatching();
+    return isPartitioned() && this.region.isRowBuffer();
   }
 
   public final boolean isColumnStore() {
     // latter check is not useful currently since only column tables use
     // object store, but still added the check for possible future use
     // (e.g. local index table on column store)
-    return isObjectStore() &&
-        this.tableName.endsWith(SystemProperties.SHADOW_TABLE_SUFFIX);
+    return isObjectStore() && this.region.isInternalColumnTable();
   }
 
   public final boolean isOffHeap() {
@@ -5628,18 +5623,8 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
         if (senderIds != null) {
           senderIdsStr = SharedUtils.toCSV(senderIds);
         }
-
-        final DataValueDescriptor tType = dvds[SYSTABLESRowFactory.SYSTABLES_TABLETYPE - 1];
-        if (tType != null && "T".equalsIgnoreCase(tType.toString()) &&
-            !LocalRegion.isMetaTable(region.getFullPath())) {
-          ExternalCatalog ec = Misc.getMemStore().getExternalCatalog();
-          LanguageConnectionContext lcc = Misc.getLanguageConnectionContext();
-          if (ec != null && lcc != null && lcc.isQueryRoutingFlagTrue() &&
-              Misc.initialDDLReplayDone()) {
-            if (ec.isColumnTable(schemaName, table.toString(), true)) {
-              dvds[SYSTABLESRowFactory.SYSTABLES_TABLETYPE - 1] = new SQLChar("C");
-            }
-          }
+        if (region.isRowBuffer() || region.isInternalColumnTable()) {
+          dvds[SYSTABLESRowFactory.SYSTABLES_TABLETYPE - 1] = new SQLChar("C");
         }
 
         dvds[SYSTABLESRowFactory.SYSTABLES_DATAPOLICY - 1] = new SQLVarchar(
@@ -6301,7 +6286,7 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
             GemFireXDUtils.TraceLock ? new Throwable() : null);
       }
       final GfxdLockSet lockSet = t.getLockSpace();
-      if (GfxdDataDictionary.SKIP_LOCKS.get()) {
+      if (GfxdDataDictionary.SKIP_CATALOG_OPS.get().skipDDLocks) {
         return true;
       }
       if (lockSet.acquireLock(lockObject,

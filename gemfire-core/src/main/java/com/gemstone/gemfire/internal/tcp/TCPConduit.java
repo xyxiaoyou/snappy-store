@@ -1034,12 +1034,16 @@ public class TCPConduit implements Runnable {
               getLogger().fine("Closing old connection.  conn=" + conn + " before retrying.  remoteID=" + remoteId
                 + " memberInTrouble=" + memberInTrouble);
             }
-            conn.closeForReconnect("closing before retrying"); 
-          } 
+            conn.closeForReconnect("closing before retrying");
+          }
           catch (CancelException ex) {
             throw ex;
           }
-          catch (Exception ex) {
+          catch (Exception ignored) {
+          }
+          finally {
+            releasePooledConnection(conn);
+            conn = null;
           }
         }
       } // not first time in loop
@@ -1064,13 +1068,14 @@ public class TCPConduit implements Runnable {
               getLogger().fine("got an old connection for " + memberAddress
                 + ": " + conn + "@" + conn.hashCode());
             }
-            conn.closeOldConnection("closing old connection");
-            if (useNIOStream()) {
+            try {
+              conn.closeOldConnection("closing old connection");
+            } finally {
               releasePooledConnection(conn);
+              conn = null;
+              retryForOldConnection = true;
+              debugRetry = true;
             }
-            conn = null;
-            retryForOldConnection = true;
-            debugRetry = true;
           }
         } while (retryForOldConnection);
         if (debugRetry && getLogger().fineEnabled()) {
@@ -1172,7 +1177,7 @@ public class TCPConduit implements Runnable {
       }
       finally {
         // need to return unused connections to pool
-        if (!returningCon && conn != null && useNIOStream()) {
+        if (!returningCon && conn != null) {
           releasePooledConnection(conn);
         }
         if (interrupted) {

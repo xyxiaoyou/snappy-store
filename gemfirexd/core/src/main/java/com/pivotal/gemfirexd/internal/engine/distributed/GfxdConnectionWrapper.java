@@ -33,7 +33,6 @@ import com.gemstone.gemfire.internal.cache.TXStateInterface;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.gemstone.gnu.trove.THashMap;
-import com.koloboke.function.LongObjPredicate;
 import com.pivotal.gemfirexd.Attribute;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserver;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserverHolder;
@@ -55,11 +54,11 @@ import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedConnection;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedResultSet;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedStatement;
 import com.pivotal.gemfirexd.internal.impl.jdbc.Util;
-import com.pivotal.gemfirexd.internal.impl.jdbc.authentication.AuthenticationServiceBase;
 import com.pivotal.gemfirexd.internal.impl.sql.execute.ResultSetStatisticsVisitor;
 import com.pivotal.gemfirexd.internal.jdbc.InternalDriver;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
-import io.snappydata.collection.LongObjectHashMap;
+import org.eclipse.collections.api.block.procedure.Procedure;
+import org.eclipse.collections.impl.map.mutable.primitive.LongObjectHashMap;
 
 /**
  * Wrapper class for Connections that provides for statement caching, convert to
@@ -138,8 +137,8 @@ public final class GfxdConnectionWrapper {
       final EmbedConnection conn = createConnection(defaultSchema, isRemote,
           isRemoteDDL, props);
       this.embedConn = conn;
-      this.stmntMap = LongObjectHashMap.withExpectedSize(8);
-      this.sqlMap = LongObjectHashMap.withExpectedSize(8);
+      this.stmntMap = new LongObjectHashMap<>(8);
+      this.sqlMap = new LongObjectHashMap<>(8);
       this.refQueue = new ReferenceQueue<EmbedStatement>();
     }
     else {
@@ -172,12 +171,10 @@ public final class GfxdConnectionWrapper {
     // try to reboot the JVM failing later with arbitrary errors (#47367)
     Misc.getGemFireCache().getCancelCriterion().checkCancelInProgress(null);
     final Properties props = new Properties(prop);
-    props.putAll(AuthenticationServiceBase.getPeerAuthenticationService()
-        .getBootCredentials());
-    GemFireStore store = Misc.getMemStoreBootingNoThrow();
-    boolean isStoreSnappy = store != null ? store.isSnappyStore() : false;
-    String protocol = !isStoreSnappy ? Attribute.PROTOCOL : Attribute.SNAPPY_PROTOCOL;
-    final EmbedConnection conn = (EmbedConnection)InternalDriver.activeDriver()
+    GemFireStore store = Misc.getMemStoreBooting();
+    props.putAll(store.getDatabase().getAuthenticationService().getBootCredentials());
+    String protocol = store.isSnappyStore() ? Attribute.SNAPPY_PROTOCOL : Attribute.PROTOCOL;
+    final EmbedConnection conn = InternalDriver.activeDriver()
         .connect(protocol, props,
             EmbedConnection.CHILD_NOT_CACHEABLE, this.incomingConnId, true, Connection.TRANSACTION_NONE);
     conn.setInternalConnection();
@@ -255,11 +252,11 @@ public final class GfxdConnectionWrapper {
             } else {
               stmnt = (EmbedStatement)getConnection().prepareCall(sql, stmtId);
             }
-            this.stmntMap.justPut(stmtId, new StmntWeakReference(stmnt, stmtId,
+            this.stmntMap.put(stmtId, new StmntWeakReference(stmnt, stmtId,
                 this.refQueue));
             if (!(defaultSchema != null &&
                 defaultSchema.equalsIgnoreCase(SystemProperties.SNAPPY_HIVE_METASTORE))) {
-              this.sqlMap.justPut(stmtId, sql);
+              this.sqlMap.put(stmtId, sql);
             }
             if (GemFireXDUtils.TraceQuery | GemFireXDUtils.TraceNCJ) {
               SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
@@ -290,7 +287,7 @@ public final class GfxdConnectionWrapper {
           // cleanup statement map first
           cleanUpStmntMap();
           stmnt = (EmbedStatement)getConnection().createStatement(stmtId);
-          this.stmntMap.justPut(stmtId, new StmntWeakReference(stmnt, stmtId,
+          this.stmntMap.put(stmtId, new StmntWeakReference(stmnt, stmtId,
               this.refQueue));
           if (GemFireXDUtils.TraceQuery) {
             SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
@@ -720,7 +717,7 @@ public final class GfxdConnectionWrapper {
         // Iterate over the map & close the statements
         // no need to synchronize since we expect only one thread to access
         // a connection at a time in any case
-        this.stmntMap.forEachWhile(collectStmts);
+        this.stmntMap.forEachValue(collectStmts);
         stmts = collectStmts.stmts;
         this.stmntMap.clear();
       }
@@ -765,7 +762,7 @@ public final class GfxdConnectionWrapper {
   public void closeStatement(long statementID) throws SQLException {
     Object stmt;
     synchronized (this.stmntMap) {
-      stmt = this.stmntMap.remove(statementID);
+      stmt = this.stmntMap.removeKey(statementID);
       // also cleanup statement map
       cleanUpStmntMap();
     }
@@ -964,7 +961,7 @@ public final class GfxdConnectionWrapper {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
             "GfxdConnectionWrapper#removeWeakReferenceFromStmntMap: "
                 + "removing statement with id: " + stmntId);
-        this.stmntMap.remove(stmntId);
+        this.stmntMap.removeKey(stmntId);
       }
     }
   }
@@ -975,7 +972,7 @@ public final class GfxdConnectionWrapper {
   public void removeStmtFromMap(long stmntId) {
     if (this.stmntMap != null) {
       synchronized (this.stmntMap) {
-        this.stmntMap.remove(stmntId);
+        this.stmntMap.removeKey(stmntId);
       }
     }
   }
@@ -1006,12 +1003,14 @@ public final class GfxdConnectionWrapper {
   }
 
   private static final class CollectStmts
-      implements LongObjPredicate<StmntWeakReference> {
+      implements Procedure<StmntWeakReference> {
+
+    private static final long serialVersionUID = -5116743221959686823L;
 
     ArrayList<Object> stmts;
 
     @Override
-    public boolean test(final long id, StmntWeakReference stmtRef) {
+    public void value(StmntWeakReference stmtRef) {
       Object stmt = stmtRef.get();
       if (stmt != null) {
         if (this.stmts == null) {
@@ -1019,7 +1018,6 @@ public final class GfxdConnectionWrapper {
         }
         this.stmts.add(stmt);
       }
-      return true;
     }
   }
 

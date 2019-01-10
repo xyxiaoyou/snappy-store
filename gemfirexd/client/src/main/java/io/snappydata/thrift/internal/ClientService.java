@@ -133,12 +133,11 @@ public final class ClientService extends ReentrantLock implements LobService {
         }
       }
     };
-    Level level;
+    Level level = null;
     try {
       level = getLogLevel(null);
     } catch (SQLException sqle) {
       // ignore exception during static initialization
-      level = Level.CONFIG;
     }
     initClientLogger(null, null, level);
 
@@ -158,10 +157,6 @@ public final class ClientService extends ReentrantLock implements LobService {
     sb.append(pid).append('|');
     ClientSharedUtils.formatDate(currentTime, sb);
     hostId = sb.toString();
-    ClientConfiguration config = ClientConfiguration.getInstance();
-    ClientSharedUtils.getLogger().info("Starting client on '" + hostName +
-        "' with ID='" + hostId + "' Source-Revision=" +
-        config.getSourceRevision());
 
     // thread for periodic cleanup of finalizers
     invokeFinalizers = new FinalizeInvoker();
@@ -177,7 +172,7 @@ public final class ClientService extends ReentrantLock implements LobService {
   }
 
   private static Level getLogLevel(Properties props) throws SQLException {
-    Level logLevel = Level.CONFIG;
+    Level logLevel = null;
     String level;
     level = ClientBaseDataSource.readSystemProperty(
         Attribute.CLIENT_JVM_PROPERTY_PREFIX + ClientAttribute.LOG_LEVEL);
@@ -259,6 +254,16 @@ public final class ClientService extends ReentrantLock implements LobService {
       SanityManager.SET_DEBUG_STREAM_IFNULL(logWriter);
     }
     // also set the ClientSharedUtils logger
+    if (logLevel == null) {
+      // preserve existing log4j level if it is higher
+      org.apache.log4j.Level current =
+          org.apache.log4j.Logger.getRootLogger().getLevel();
+      if (current != null && current.isGreaterOrEqual(org.apache.log4j.Level.WARN)) {
+        logLevel = ClientSharedUtils.convertToJavaLogLevel(current);
+      } else {
+        logLevel = Level.CONFIG;
+      }
+    }
     if (logLevel != null) {
       ClientSharedUtils.initLogger(ClientSharedUtils.LOGGER_NAME,
           gfxdLogFile, true, true, logLevel, new LogHandler(logLevel));
@@ -309,6 +314,12 @@ public final class ClientService extends ReentrantLock implements LobService {
 
   private ClientService(HostAddress hostAddr, OpenConnectionArgs connArgs)
       throws SnappyException {
+
+    ClientConfiguration config = ClientConfiguration.getInstance();
+    ClientSharedUtils.getLogger().info("Starting client on '" + hostName +
+        "' with ID='" + hostId + "' Source-Revision=" +
+        config.getSourceRevision());
+
     this.isClosed = true;
 
     this.currentHostConnection = null;
