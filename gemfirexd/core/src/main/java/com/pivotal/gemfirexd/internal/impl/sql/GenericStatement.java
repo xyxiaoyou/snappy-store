@@ -852,7 +852,7 @@ public class GenericStatement
                                             }
                                           }
 
-                                          if (qinfo != null && qinfo.isDML() && qinfo.isInsert() && ((InsertQueryInfo)qinfo).isPutDML()) {
+                                          if (routeQuery && qinfo != null && qinfo.isDML() && qinfo.isInsert() && ((InsertQueryInfo)qinfo).isPutDML()) {
                                             InsertNode in = qt instanceof InsertNode ? ((InsertNode)qt) : null;
                                             TableDescriptor ttd = in != null ? in.targetTableDescriptor : null;
                                             String table = ttd.getQualifiedName();

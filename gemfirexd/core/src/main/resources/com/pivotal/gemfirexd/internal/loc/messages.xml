@@ -5429,7 +5429,7 @@ ln=lower-case two-letter ISO-639 language code, CO=upper-case two-letter ISO-316
 
             <msg>
                 <name>XJ219.S</name>
-                <text>PutInto operation on column table is not supported</text>
+                <text>PUT INTO table values (v1, v2,...,vn) syntax is not supported for column table. Try using PUT INTO table select v1, v2, ....,vn syntax for performing putInto operation.</text>
             </msg>
 
         </family>
