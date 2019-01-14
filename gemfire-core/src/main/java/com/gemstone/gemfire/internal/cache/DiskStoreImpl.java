@@ -1721,6 +1721,13 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     return result;
   }
 
+  private long latestModifiedTime;
+
+  // TODO: KN fill the method appropriately
+  public long getLatestModifiedTime() {
+    return latestModifiedTime;
+  }
+
   private class FlushPauser extends FlushNotifier {
     @Override
     public synchronized void doFlush() {

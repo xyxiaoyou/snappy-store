@@ -53,7 +53,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.LogWriter;
@@ -87,7 +87,7 @@ import com.pivotal.gemfirexd.internal.engine.ddl.catalog.messages.GfxdSystemProc
 import com.pivotal.gemfirexd.internal.engine.ddl.wan.messages.AbstractGfxdReplayableMessage;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdListResultCollector;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdMessage;
-import com.pivotal.gemfirexd.internal.engine.distributed.message.PersistentStateToLeadNodeMsg;
+import com.pivotal.gemfirexd.internal.engine.distributed.message.PersistentStateInRecoveryMode;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.fabricservice.FabricServerImpl;
 import com.pivotal.gemfirexd.internal.engine.fabricservice.FabricServiceImpl;
@@ -1565,7 +1565,8 @@ public final class FabricDatabase implements ModuleControl,
         }
         while (entryIterator.hasNext()) {
           RegionEntry re = (RegionEntry) entryIterator.next();
-          EntryEventImpl event = EntryEventImpl.create(uc.getRegion(), Operation.CREATE, re.getKey(),
+          EntryEventImpl event = EntryEventImpl.create(
+              uc.getRegion(), Operation.CREATE, re.getKey(),
               re.getValue(owner),
               Boolean.FALSE /* indicate that GII is in progress */,
               false, null);
@@ -1573,19 +1574,19 @@ public final class FabricDatabase implements ModuleControl,
           for (GemFireContainer index : indexes) {
             if (logger.infoEnabled()) {
               logger.info("createHiveIndexes: updating index = " + index + " for region = "
-              + " owner and rl = " + re);
+                  + " owner and rl = " + re);
             }
             indexUpdater.insertIntoIndex(null, null, owner, event, false,
-                false, (RowLocation)re, ((RowLocation)re).getRow(uc), null, null, -1,
+                false, (RowLocation) re, ((RowLocation) re).getRow(uc), null, null, -1,
                 index, null, true, true,
                 GfxdIndexManager.Index.LOCAL, false);
           }
         }
-
-
+      }
     }
   }
-  }
+
+  private List<DDLConflatable> otherExtractedDDLs = new ArrayList<>();
 
   private List<GfxdDDLQueueEntry> getOnlyRequiredDdlsForRecoveryMode(
       List<GfxdDDLQueueEntry> preprocessedQueue, final LogWriter logger) {
@@ -1598,44 +1599,87 @@ public final class FabricDatabase implements ModuleControl,
         final DDLConflatable conflatable = (DDLConflatable) qVal;
         String schema = conflatable.getSchemaForTableNoThrow();
         if (conflatable.isCreateDiskStore()) {
-          logger.info("Executing create disk store statement ddl = " + conflatable);
+          logger.info("Adding create disk store statement ddl = " + conflatable);
           list.add(qEntry);
+          otherExtractedDDLs.add(conflatable);
         } else if (Misc.SNAPPY_HIVE_METASTORE.equals(schema) ||
             Misc.SNAPPY_HIVE_METASTORE.equals(conflatable.getCurrentSchema()) ||
             Misc.SNAPPY_HIVE_METASTORE.equals(conflatable.getRegionToConflate())) {
           logger.info("Adding conflatable for ddl replay = " + qEntry);
           list.add(qEntry);
+        } else if (conflatable.isAlterTable() ||
+            conflatable.isCreateIndex() ||
+            isGrantRevokeStatement(conflatable)) {
+          otherExtractedDDLs.add(conflatable);
         } else {
           logger.info("Skipping conflatable = " + conflatable);
         }
       }
     }
-    int cnt = 0;
     return list;
   }
 
-  private void preparePersistentStatesMsg(List<CatalogTableObject> allEntries, final LogWriter logger) {
+  private final static Pattern GRANTREVOKE_PATTERN =
+      Pattern.compile(
+          "(GRANT|REVOKE)\\s+(\\S+)\\s+(ON)\\s+(TABLE)?\\s+(\\S+)\\s+(TO|FROM)\\s+(\\S+)",
+          Pattern.CASE_INSENSITIVE);
+
+  private boolean isGrantRevokeStatement(DDLConflatable conflatable) {
+    String sqlText = conflatable.getValueToConflate();
+    // return (sqlText != null && GRANTREVOKE_PATTERN.matcher(sqlText).matches());
+    return sqlText != null && (sqlText.toUpperCase().startsWith("GRANT") ||
+        sqlText.toUpperCase().startsWith("REVOKE"));
+  }
+
+  private void preparePersistentStatesMsg(
+      List<CatalogTableObject> allEntries, final LogWriter logger) {
     GemFireCacheImpl c = this.memStore.getGemFireCache();
     Collection<DiskStoreImpl> diskStores = c.listDiskStores();
     logger.info("preparePersistentStatesMsg: diskstores list = " + diskStores);
-    GfxdListResultCollector collector = new GfxdListResultCollector();
-    PersistentStateToLeadNodeMsg pmsg
-        = new PersistentStateToLeadNodeMsg(allEntries, collector);
+    PersistentStateInRecoveryMode pmsg
+        = new PersistentStateInRecoveryMode(allEntries, otherExtractedDDLs);
     for (DiskStoreImpl ds : diskStores) {
+      if (logger.infoEnabled()) {
+        logger.info("preparePersistentStatesMsg: disk store = " + ds.getName());
+      }
+      long latestOplogTime = ds.getLatestModifiedTime();
       Map<Long, AbstractDiskRegion> drs = ds.getAllDiskRegions();
       if (drs != null && !drs.isEmpty()) {
         Iterator<Map.Entry<Long, AbstractDiskRegion>> iter = drs.entrySet().iterator();
-        if (logger.fineEnabled()) {
-          logger.fine("preparePersistentStatesMsg: disk store = " + ds.getName());
-        }
         while (iter.hasNext()) {
           Map.Entry<Long, AbstractDiskRegion> elem = iter.next();
           AbstractDiskRegion adr = elem.getValue();
-          PersistentStateToLeadNodeMsg.DiskPersistentView dpv
-              = new PersistentStateToLeadNodeMsg.DiskPersistentView(
-                  adr.getName(), adr.getOnlineMembers(),
-                  adr.getOfflineMembers(), adr.getOfflineAndEqualMembers());
+          if (adr.getRecoveredEntryMap() == null) {
+            if (logger.infoEnabled()) {
+              logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath() + " continuing as map is null");
+            }
+            continue;
+          }
+          if (adr.getRecoveredEntryMap().size() == 0) {
+            if (logger.infoEnabled()) {
+              logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath() + " continuing as size of map is 0");
+            }
+            continue;
+          } else {
+            if (logger.infoEnabled()) {
+              logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath() + " size = " + adr.getRecoveredEntryMap().size());
+            }
+          }
+          if (logger.infoEnabled()) {
+            logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath());
+          }
+          long mostRecentModifiedTime =
+              PersistentStateInRecoveryMode.getLatestModifiedTime(adr, logger);
+          PersistentStateInRecoveryMode.RecoveryModePersistentView dpv
+              = new PersistentStateInRecoveryMode.RecoveryModePersistentView(
+              ds.getName(), adr.getName(),
+              adr.getRegionVersionVector(),
+              mostRecentModifiedTime, latestOplogTime);
           pmsg.addView(dpv);
+        }
+      } else {
+        if (logger.infoEnabled()) {
+          logger.info("preparePersistentStatesMsg: disk store = " + ds.getName() + " drs is null or empty drs = " + drs);
         }
       }
     }
