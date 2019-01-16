@@ -1544,17 +1544,6 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
     }
   }
 
-  /**
-   * Set the RegionEntry into SerializedDiskBuffer value, if present,
-   * so that the value can access data from disk when required independently.
-   */
-  protected void initContextForDiskBuffer(RegionEntryContext context,
-      Object value) {
-    if (value instanceof SerializedDiskBuffer) {
-      ((SerializedDiskBuffer)value).setDiskEntry(null, context);
-    }
-  }
-
   @Override
   @Retained(ABSTRACT_REGION_ENTRY_PREPARE_VALUE_FOR_CACHE)
   public Object prepareValueForCache(RegionEntryContext r,
@@ -1752,7 +1741,7 @@ public abstract class AbstractRegionEntry extends ExclusiveSharedSynchronizer
     // update the memory stats if required
     if (owner != previousOwner && !isOffHeap()) {
       // set the context into the value if required
-      initContextForDiskBuffer(owner, val);
+      setBufferEntry(owner, val);
       // add for new owner
       if (owner != null) owner.updateMemoryStats(null, val);
       // reduce from previous owner

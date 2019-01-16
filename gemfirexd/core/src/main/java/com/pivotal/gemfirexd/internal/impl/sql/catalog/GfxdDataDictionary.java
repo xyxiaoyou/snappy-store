@@ -89,7 +89,6 @@ import com.pivotal.gemfirexd.internal.iapi.sql.execute.ConstantAction;
 import com.pivotal.gemfirexd.internal.iapi.store.access.ConglomerateController;
 import com.pivotal.gemfirexd.internal.iapi.store.access.TransactionController;
 import com.pivotal.gemfirexd.internal.iapi.types.DataTypeDescriptor;
-import com.pivotal.gemfirexd.internal.iapi.util.ReuseFactory;
 import com.pivotal.gemfirexd.internal.impl.sql.compile.CreateAsyncEventListenerNode;
 import com.pivotal.gemfirexd.internal.impl.sql.compile.CreateGatewayReceiverNode;
 import com.pivotal.gemfirexd.internal.impl.sql.compile.CreateGatewaySenderNode;
