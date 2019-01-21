@@ -50,8 +50,8 @@ public class InsertQueryInfo extends DMLQueryInfo {
     return true;
   }
 
-  public boolean isPutDML(){
-      return isPutDml;
+  public boolean isPutDML() {
+    return isPutDml;
   }
 
   @Override
