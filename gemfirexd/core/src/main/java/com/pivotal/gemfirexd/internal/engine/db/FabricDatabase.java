@@ -54,6 +54,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.LogWriter;
@@ -524,11 +525,11 @@ public final class FabricDatabase implements ModuleControl,
           (this.memStore.getMyVMKind().isStore() || this.memStore.getMyVMKind().isLocator())) {
         Misc.getMemStore().initExternalCatalog();
         ExternalCatalog exCatalog = Misc.getMemStore().getExternalCatalog();
-        List<CatalogTableObject> allEntries = exCatalog.getAllHiveEntries();
+        List<Object> allEntries = exCatalog.getAllHiveEntries();
         if (logger.fineEnabled() || GemFireXDUtils.TraceDDLReplay) {
           SanityManager.DEBUG_PRINT("info",
               "Total number of catalog object retrieved " + allEntries.size());
-          for (CatalogTableObject obj : allEntries) {
+          for (Object obj : allEntries) {
             SanityManager.DEBUG_PRINT("info", "Catalogue object " + obj);
           }
         }
@@ -1614,7 +1615,21 @@ public final class FabricDatabase implements ModuleControl,
     return list;
   }
 
-  private void preparePersistentStatesMsg(List<CatalogTableObject> allEntries, final LogWriter logger) {
+  private final static Pattern GRANTREVOKE_PATTERN =
+      Pattern.compile(
+          "(GRANT|REVOKE)\\s+(\\S+)\\s+(ON)\\s+(TABLE)?\\s+(\\S+)\\s+(TO|FROM)\\s+(\\S+)",
+          Pattern.CASE_INSENSITIVE);
+
+  private boolean isGrantRevokeStatement(DDLConflatable conflatable) {
+    String sqlText = conflatable.getValueToConflate();
+    // return (sqlText != null && GRANTREVOKE_PATTERN.matcher(sqlText).matches());
+    return sqlText != null && (sqlText.toUpperCase().startsWith("GRANT") ||
+        sqlText.toUpperCase().startsWith("REVOKE"));
+  }
+
+  private void preparePersistentStatesMsg(
+      List<Object> allEntries, final LogWriter logger) {
+
     GemFireCacheImpl c = this.memStore.getGemFireCache();
     Collection<DiskStoreImpl> diskStores = c.listDiskStores();
     logger.info("preparePersistentStatesMsg: diskstores list = " + diskStores);

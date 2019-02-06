@@ -101,7 +101,7 @@ public class PersistentStateToLeadNodeMsg extends MemberExecutorMessage<Object> 
   private InternalDistributedMember member = null;
 
   public PersistentStateToLeadNodeMsg(
-      List<CatalogTableObject> allEntries, final ResultCollector<Object, Object> rc) {
+      List<Object> allEntries, final ResultCollector<Object, Object> rc) {
     super(rc, null, false, true);
     member = Misc.getMyId();
   }
