@@ -33,6 +33,8 @@ import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.ddl.DDLConflatable;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
+import io.snappydata.thrift.CatalogFunctionObject;
+import io.snappydata.thrift.CatalogSchemaObject;
 import io.snappydata.thrift.CatalogTableObject;
 import org.apache.thrift.TException;
 
@@ -46,14 +48,12 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
   private InternalDistributedMember member = null;
   private final ArrayList<RecoveryModePersistentView>
       allRegionView = new ArrayList<>();
-  private final ArrayList<CatalogTableObject> catalogObjects = new ArrayList<>();
+  private final ArrayList<Object> catalogObjects = new ArrayList<>();
   private ArrayList<String> otherExtractedDDLText = new ArrayList<>();
   private final HashMap<String, Integer> prToNumBuckets = new HashMap<>();
 
-  private boolean isServer;
-
   public PersistentStateInRecoveryMode(
-      List<CatalogTableObject> allEntries,
+      List<Object> allEntries,
       List<DDLConflatable> extractedDDLs) {
     member = Misc.getMyId();
     if (allEntries != null && !allEntries.isEmpty()) {
@@ -66,6 +66,8 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     }
     this.isServer = Misc.getMemStore().getMyVMKind().isStore();
   }
+
+  private boolean isServer;
 
   public PersistentStateInRecoveryMode() {
 
@@ -103,7 +105,7 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     return this.otherExtractedDDLText;
   }
 
-  public ArrayList<CatalogTableObject> getCatalogObjects() {
+  public ArrayList<Object> getCatalogObjects() {
     return this.catalogObjects;
   }
 
@@ -118,13 +120,30 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     this.allRegionView.addAll(DataSerializer.readArrayList(in));
     this.otherExtractedDDLText.addAll(DataSerializer.readArrayList(in));
     this.prToNumBuckets.putAll(DataSerializer.readHashMap(in));
-    int numObjects = in.readInt();
     try {
-      for (int i = 0; i < numObjects; i++) {
+      int numCatSchemaObjects = in.readInt();
+
+      for (int i = 0; i < numCatSchemaObjects; i++) {
         byte[] b = DataSerializer.readByteArray(in);
-        CatalogTableObject obj = new CatalogTableObject();
-        GemFireXDUtils.readThriftObject(obj, b);
-        this.catalogObjects.add(obj);
+        CatalogSchemaObject schemaObject = new CatalogSchemaObject();
+        GemFireXDUtils.readThriftObject(schemaObject, b);
+        this.catalogObjects.add(schemaObject);
+      }
+
+      int numCatFuncObjects = in.readInt();
+      for (int i = 0; i < numCatFuncObjects; i++) {
+        byte[] b = DataSerializer.readByteArray(in);
+        CatalogFunctionObject functionObject = new CatalogFunctionObject();
+        GemFireXDUtils.readThriftObject(functionObject, b);
+        this.catalogObjects.add(functionObject);
+      }
+
+      int numCatTabObjects = in.readInt();
+      for (int i = 0; i < numCatTabObjects; i++) {
+        byte[] b = DataSerializer.readByteArray(in);
+        CatalogTableObject tabObj = new CatalogTableObject();
+        GemFireXDUtils.readThriftObject(tabObj, b);
+        this.catalogObjects.add(tabObj);
       }
     } catch(TException e) {
       throw new IOException(e);
@@ -140,12 +159,39 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     DataSerializer.writeArrayList(this.otherExtractedDDLText, out);
     DataSerializer.writeHashMap(this.prToNumBuckets, out);
     int numCatalogObjects = this.catalogObjects.size();
-    out.writeInt(numCatalogObjects);
+    ArrayList<CatalogTableObject> catTabArr =  new ArrayList<>();
+    ArrayList<CatalogSchemaObject> catSchArr =  new ArrayList<>();
+    ArrayList<CatalogFunctionObject> catfuncArr =  new ArrayList<>();
+
     try {
       for (int i = 0; i < numCatalogObjects; i++) {
-        byte[] b = GemFireXDUtils.writeThriftObject(this.catalogObjects.get(i));
+        if(this.catalogObjects.get(i) instanceof CatalogTableObject){
+          catTabArr.add((CatalogTableObject)this.catalogObjects.get(i));
+        } else if(this.catalogObjects.get(i) instanceof CatalogSchemaObject){
+          catSchArr.add((CatalogSchemaObject)this.catalogObjects.get(i));
+        } else if(this.catalogObjects.get(i) instanceof CatalogFunctionObject){
+          catfuncArr.add((CatalogFunctionObject)this.catalogObjects.get(i));
+        }
+      }
+
+      out.writeInt(catSchArr.size());
+      for(int i = 0; i < catSchArr.size(); i++) {
+        byte[] b = GemFireXDUtils.writeThriftObject(catSchArr.get(i));
         DataSerializer.writeByteArray(b, out);
       }
+
+      out.writeInt(catfuncArr.size());
+      for(int i = 0 ; i < catfuncArr.size() ; i++) {
+        byte[] b = GemFireXDUtils.writeThriftObject(catfuncArr.get(i));
+        DataSerializer.writeByteArray(b,out);
+      }
+
+      out.writeInt(catTabArr.size());
+      for(int i = 0; i < catTabArr.size(); i++) {
+          byte[] b = GemFireXDUtils.writeThriftObject(catTabArr.get(i));
+          DataSerializer.writeByteArray(b, out);
+      }
+
     } catch (TException t) {
       throw new IOException(t);
     }
@@ -163,7 +209,8 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
       sb.append("\n");
     }
     sb.append("Catalog Objects\n");
-    for (CatalogTableObject obj : this.catalogObjects) {
+    for (Object obj : this.catalogObjects) {  /// since like catalogtableobjects, other types also
+      // has implicit tostring  conversion, pattern matching isn't required ?
       sb.append(obj);
       sb.append("\n");
     }

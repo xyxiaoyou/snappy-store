@@ -524,11 +524,11 @@ public final class FabricDatabase implements ModuleControl,
           (this.memStore.getMyVMKind().isStore() || this.memStore.getMyVMKind().isLocator())) {
         Misc.getMemStore().initExternalCatalog();
         ExternalCatalog exCatalog = Misc.getMemStore().getExternalCatalog();
-        List<CatalogTableObject> allEntries = exCatalog.getAllHiveEntries();
+        List<Object> allEntries = exCatalog.getAllHiveEntries();
         if (logger.fineEnabled() || GemFireXDUtils.TraceDDLReplay) {
           SanityManager.DEBUG_PRINT("info",
               "Total number of catalog object retrieved " + allEntries.size());
-          for (CatalogTableObject obj : allEntries) {
+          for (Object obj : allEntries) {
             SanityManager.DEBUG_PRINT("info", "Catalogue object " + obj);
           }
         }
@@ -1632,7 +1632,7 @@ public final class FabricDatabase implements ModuleControl,
   }
 
   private void preparePersistentStatesMsg(
-      List<CatalogTableObject> allEntries, final LogWriter logger) {
+    List<Object> allEntries, final LogWriter logger) {
     GemFireCacheImpl c = this.memStore.getGemFireCache();
     Collection<DiskStoreImpl> diskStores = c.listDiskStores();
     logger.info("preparePersistentStatesMsg: diskstores list = " + diskStores);
