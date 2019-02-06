@@ -72,7 +72,8 @@ public interface ExternalCatalog {
   /**
    * Gets all the entries in hive
    */
-  java.util.List<CatalogTableObject> getAllHiveEntries();
+  // what should be the data type here ???
+  java.util.List<Object> getAllHiveEntries();
 
   /**
    * Removes a table from the external catalog if it exists.
