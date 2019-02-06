@@ -46,7 +46,6 @@ import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
 import com.gemstone.gemfire.GemFireException;
 import com.gemstone.gemfire.InternalGemFireError;
@@ -119,7 +118,6 @@ import com.pivotal.gemfirexd.internal.engine.distributed.GfxdSingleResultCollect
 import com.pivotal.gemfirexd.internal.engine.distributed.message.ContainsKeyBulkExecutorMessage;
 import com.pivotal.gemfirexd.internal.engine.distributed.message.ContainsUniqueKeyBulkExecutorMessage;
 import com.pivotal.gemfirexd.internal.engine.distributed.message.GfxdFunctionMessage;
-import com.pivotal.gemfirexd.internal.engine.distributed.message.PersistentStateToLeadNodeMsg;
 import com.pivotal.gemfirexd.internal.engine.distributed.metadata.ColumnQueryInfo;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.jdbc.GemFireXDRuntimeException;

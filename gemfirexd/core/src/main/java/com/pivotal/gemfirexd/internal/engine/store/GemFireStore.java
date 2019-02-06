@@ -117,7 +117,7 @@ import com.pivotal.gemfirexd.internal.engine.distributed.DistributedConnectionCl
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdConnectionHolder;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdDistributionAdvisor;
 import com.pivotal.gemfirexd.internal.engine.distributed.QueryCancelFunction;
-import com.pivotal.gemfirexd.internal.engine.distributed.message.PersistentStateToLeadNodeMsg;
+import com.pivotal.gemfirexd.internal.engine.distributed.message.PersistentStateInRecoveryMode;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.fabricservice.FabricServiceImpl;
 import com.pivotal.gemfirexd.internal.engine.fabricservice.FabricServiceImpl.NetworkInterfaceImpl;
@@ -3142,13 +3142,17 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
     }
   }
 
-  private volatile PersistentStateToLeadNodeMsg persistentStateMsg = null;
+  private volatile PersistentStateInRecoveryMode persistentStateMsg = null;
 
-  public void setPersistentStateMsg(PersistentStateToLeadNodeMsg msg) {
+  public void setPersistentStateMsg(PersistentStateInRecoveryMode msg) {
     if (GemFireXDUtils.TraceDDLReplay) {
       SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_DDLREPLAY,
           "persistent state message is: " + msg);
     }
     this.persistentStateMsg = msg;
+  }
+
+  public PersistentStateInRecoveryMode getPersistentStateMsg() {
+    return this.persistentStateMsg;
   }
 }

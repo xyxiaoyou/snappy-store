@@ -52,8 +52,6 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
   private ArrayList<String> otherExtractedDDLText = new ArrayList<>();
   private final HashMap<String, Integer> prToNumBuckets = new HashMap<>();
 
-  private boolean isServer;
-
   public PersistentStateInRecoveryMode(
       List<Object> allEntries,
       List<DDLConflatable> extractedDDLs) {
@@ -68,6 +66,8 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     }
     this.isServer = Misc.getMemStore().getMyVMKind().isStore();
   }
+
+  private boolean isServer;
 
   public PersistentStateInRecoveryMode() {
 
