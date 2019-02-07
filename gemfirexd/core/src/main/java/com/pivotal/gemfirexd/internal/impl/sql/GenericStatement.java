@@ -239,10 +239,10 @@ public class GenericStatement
 	// GemStone changes BEGIN
 	private GenericPreparedStatement getPreparedStatementForSnappy(boolean commitNestedTransaction,
 			StatementContext statementContext, LanguageConnectionContext lcc, boolean isDDL,
-			boolean checkCancellation, boolean isUpdateOrDelete, Throwable cause) throws StandardException {
+			boolean checkCancellation, boolean isUpdateOrDeleteOrPut, Throwable cause) throws StandardException {
       GenericPreparedStatement gps = preparedStmt;
       GeneratedClass ac = new SnappyActivationClass(lcc, !isDDL, isPreparedStatement() && !isDDL,
-          isUpdateOrDelete);
+          isUpdateOrDeleteOrPut);
       gps.setActivationClass(ac);
       gps.incrementVersionCounter();
       gps.makeValid();
@@ -256,11 +256,11 @@ public class GenericStatement
      if (GemFireXDUtils.TraceQuery) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
           "GenericStatement.getPreparedStatementForSnappy: Created SnappyActivation for sql: " +
-              this.getSource() + " ,isDDL=" + isDDL + " ,isUpdateOrDelete=" + isUpdateOrDelete);
+              this.getSource() + " ,isDDL=" + isDDL + " ,isUpdateOrDeleteOrPut=" + isUpdateOrDeleteOrPut);
      }
      if (LOGGER.isDebugEnabled()) {
         LOGGER.debug("GenericStatement.getPreparedStatementForSnappy: routing sql: " +
-            this.getSource() + " ,isDDL=" + isDDL + " ,isUpdateOrDelete=" + isUpdateOrDelete, cause);
+            this.getSource() + " ,isDDL=" + isDDL + " ,isUpdateOrDeleteOrPut=" + isUpdateOrDeleteOrPut, cause);
      }
      if (checkCancellation) {
        Misc.checkMemory(thresholdListener, statementText, -1);
@@ -860,8 +860,8 @@ public class GenericStatement
                                             GemFireContainer container = (GemFireContainer)region.getUserAttribute();
                                             boolean isColumnTable = container.isRowBuffer();
                                             if (isColumnTable) {
-                                              return getPreparedStatementForSnappy(false, statementContext, lcc,
-                                                  cc.isMarkedAsDDLForSnappyUse(), checkCancellation,
+                                              return getPreparedStatementForSnappy(true, statementContext, lcc,
+                                                  false, checkCancellation,
                                                   DML_TABLE_PATTERN.matcher(source).find(), null);
                                             }
                                           }
