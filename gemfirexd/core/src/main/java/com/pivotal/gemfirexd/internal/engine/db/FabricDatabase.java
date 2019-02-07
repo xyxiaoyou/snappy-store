@@ -1632,7 +1632,7 @@ public final class FabricDatabase implements ModuleControl,
   }
 
   private void preparePersistentStatesMsg(
-      List<Object> allEntries, final LogWriter logger) {
+    List<Object> allEntries, final LogWriter logger) {
     GemFireCacheImpl c = this.memStore.getGemFireCache();
     Collection<DiskStoreImpl> diskStores = c.listDiskStores();
     logger.info("preparePersistentStatesMsg: diskstores list = " + diskStores);
