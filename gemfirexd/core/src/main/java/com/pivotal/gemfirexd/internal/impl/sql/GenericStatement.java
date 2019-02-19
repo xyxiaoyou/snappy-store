@@ -861,8 +861,7 @@ public class GenericStatement
                                             boolean isColumnTable = container.isRowBuffer();
                                             if (isColumnTable) {
                                               return getPreparedStatementForSnappy(true, statementContext, lcc,
-                                                  false, checkCancellation,
-                                                  DML_TABLE_PATTERN.matcher(source).find(), null);
+                                                  false, checkCancellation, true, null);
                                             }
                                           }
 
