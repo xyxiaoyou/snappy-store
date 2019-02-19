@@ -3022,6 +3022,14 @@ public class GfxdSystemProcedures extends SystemProcedures {
   }
 
   /**
+   * Check whether security is enabled on the snappy cluster or not.
+   * @return true if security is enabled in snappy cluster and false otherwise
+   */
+  public static Boolean GET_IS_SECURITY_ENABLED(){
+    return Misc.isSecurityEnabled();
+  }
+
+  /**
    * Check SELECT authorization for given columns of a column or row table.
    * The parameter "authType" must be one of the Authorizer.*PRIV types while
    * "opType" must be one of the Authorizer.*OP types.
