@@ -48,6 +48,7 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
   private static final org.apache.thrift.protocol.TField CATALOG_TABLE_FIELD_DESC = new org.apache.thrift.protocol.TField("catalogTable", org.apache.thrift.protocol.TType.STRUCT, (short)8);
   private static final org.apache.thrift.protocol.TField CATALOG_FUNCTION_FIELD_DESC = new org.apache.thrift.protocol.TField("catalogFunction", org.apache.thrift.protocol.TType.STRUCT, (short)9);
   private static final org.apache.thrift.protocol.TField CATALOG_PARTITIONS_FIELD_DESC = new org.apache.thrift.protocol.TField("catalogPartitions", org.apache.thrift.protocol.TType.LIST, (short)10);
+  private static final org.apache.thrift.protocol.TField CATALOG_STATS_FIELD_DESC = new org.apache.thrift.protocol.TField("catalogStats", org.apache.thrift.protocol.TType.STRUCT, (short)11);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
   static {
@@ -65,6 +66,7 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
   public CatalogTableObject catalogTable; // optional
   public CatalogFunctionObject catalogFunction; // optional
   public List<CatalogPartitionObject> catalogPartitions; // optional
+  public CatalogStats catalogStats; // optional
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
@@ -77,7 +79,8 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
     CATALOG_SCHEMA((short)7, "catalogSchema"),
     CATALOG_TABLE((short)8, "catalogTable"),
     CATALOG_FUNCTION((short)9, "catalogFunction"),
-    CATALOG_PARTITIONS((short)10, "catalogPartitions");
+    CATALOG_PARTITIONS((short)10, "catalogPartitions"),
+    CATALOG_STATS((short)11, "catalogStats");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -112,6 +115,8 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
           return CATALOG_FUNCTION;
         case 10: // CATALOG_PARTITIONS
           return CATALOG_PARTITIONS;
+        case 11: // CATALOG_STATS
+          return CATALOG_STATS;
         default:
           return null;
       }
@@ -155,7 +160,7 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
   private static final int __CATALOGSCHEMAVERSION_ISSET_ID = 0;
   private static final int __EXISTS_ISSET_ID = 1;
   private byte __isset_bitfield = 0;
-  private static final _Fields optionals[] = {_Fields.NAMES,_Fields.PROPERTIES,_Fields.NEW_PROPERTIES,_Fields.CATALOG_SCHEMA_VERSION,_Fields.EXISTS,_Fields.OTHER_FLAGS,_Fields.CATALOG_SCHEMA,_Fields.CATALOG_TABLE,_Fields.CATALOG_FUNCTION,_Fields.CATALOG_PARTITIONS};
+  private static final _Fields optionals[] = {_Fields.NAMES,_Fields.PROPERTIES,_Fields.NEW_PROPERTIES,_Fields.CATALOG_SCHEMA_VERSION,_Fields.EXISTS,_Fields.OTHER_FLAGS,_Fields.CATALOG_SCHEMA,_Fields.CATALOG_TABLE,_Fields.CATALOG_FUNCTION,_Fields.CATALOG_PARTITIONS,_Fields.CATALOG_STATS};
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
     Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
@@ -188,6 +193,8 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
     tmpMap.put(_Fields.CATALOG_PARTITIONS, new org.apache.thrift.meta_data.FieldMetaData("catalogPartitions", org.apache.thrift.TFieldRequirementType.OPTIONAL, 
         new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
             new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, CatalogPartitionObject.class))));
+    tmpMap.put(_Fields.CATALOG_STATS, new org.apache.thrift.meta_data.FieldMetaData("catalogStats", org.apache.thrift.TFieldRequirementType.OPTIONAL, 
+        new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, CatalogStats.class)));
     metaDataMap = Collections.unmodifiableMap(tmpMap);
     org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(CatalogMetadataDetails.class, metaDataMap);
   }
@@ -242,6 +249,9 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
       }
       this.catalogPartitions = __this__catalogPartitions;
     }
+    if (other.isSetCatalogStats()) {
+      this.catalogStats = new CatalogStats(other.catalogStats);
+    }
   }
 
   public CatalogMetadataDetails deepCopy() {
@@ -262,6 +272,7 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
     this.catalogTable = null;
     this.catalogFunction = null;
     this.catalogPartitions = null;
+    this.catalogStats = null;
   }
 
   public int getNamesSize() {
@@ -577,6 +588,30 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
     }
   }
 
+  public CatalogStats getCatalogStats() {
+    return this.catalogStats;
+  }
+
+  public CatalogMetadataDetails setCatalogStats(CatalogStats catalogStats) {
+    this.catalogStats = catalogStats;
+    return this;
+  }
+
+  public void unsetCatalogStats() {
+    this.catalogStats = null;
+  }
+
+  /** Returns true if field catalogStats is set (has been assigned a value) and false otherwise */
+  public boolean isSetCatalogStats() {
+    return this.catalogStats != null;
+  }
+
+  public void setCatalogStatsIsSet(boolean value) {
+    if (!value) {
+      this.catalogStats = null;
+    }
+  }
+
   public void setFieldValue(_Fields field, Object value) {
     switch (field) {
     case NAMES:
@@ -659,6 +694,14 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
       }
       break;
 
+    case CATALOG_STATS:
+      if (value == null) {
+        unsetCatalogStats();
+      } else {
+        setCatalogStats((CatalogStats)value);
+      }
+      break;
+
     }
   }
 
@@ -694,6 +737,9 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
     case CATALOG_PARTITIONS:
       return getCatalogPartitions();
 
+    case CATALOG_STATS:
+      return getCatalogStats();
+
     }
     throw new IllegalStateException();
   }
@@ -725,6 +771,8 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
       return isSetCatalogFunction();
     case CATALOG_PARTITIONS:
       return isSetCatalogPartitions();
+    case CATALOG_STATS:
+      return isSetCatalogStats();
     }
     throw new IllegalStateException();
   }
@@ -832,6 +880,15 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
         return false;
     }
 
+    boolean this_present_catalogStats = true && this.isSetCatalogStats();
+    boolean that_present_catalogStats = true && that.isSetCatalogStats();
+    if (this_present_catalogStats || that_present_catalogStats) {
+      if (!(this_present_catalogStats && that_present_catalogStats))
+        return false;
+      if (!this.catalogStats.equals(that.catalogStats))
+        return false;
+    }
+
     return true;
   }
 
@@ -888,6 +945,11 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
     list.add(present_catalogPartitions);
     if (present_catalogPartitions)
       list.add(catalogPartitions);
+
+    boolean present_catalogStats = true && (isSetCatalogStats());
+    list.add(present_catalogStats);
+    if (present_catalogStats)
+      list.add(catalogStats);
 
     return list.hashCode();
   }
@@ -996,6 +1058,16 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
     }
     if (isSetCatalogPartitions()) {
       lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.catalogPartitions, other.catalogPartitions);
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+    }
+    lastComparison = Boolean.valueOf(isSetCatalogStats()).compareTo(other.isSetCatalogStats());
+    if (lastComparison != 0) {
+      return lastComparison;
+    }
+    if (isSetCatalogStats()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.catalogStats, other.catalogStats);
       if (lastComparison != 0) {
         return lastComparison;
       }
@@ -1111,6 +1183,16 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
       }
       first = false;
     }
+    if (isSetCatalogStats()) {
+      if (!first) sb.append(", ");
+      sb.append("catalogStats:");
+      if (this.catalogStats == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.catalogStats);
+      }
+      first = false;
+    }
     sb.append(")");
     return sb.toString();
   }
@@ -1126,6 +1208,9 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
     }
     if (catalogFunction != null) {
       catalogFunction.validate();
+    }
+    if (catalogStats != null) {
+      catalogStats.validate();
     }
   }
 
@@ -1323,6 +1408,15 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
+          case 11: // CATALOG_STATS
+            if (schemeField.type == org.apache.thrift.protocol.TType.STRUCT) {
+              struct.catalogStats = new CatalogStats();
+              struct.catalogStats.read(iprot);
+              struct.setCatalogStatsIsSet(true);
+            } else { 
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+            }
+            break;
           default:
             org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
         }
@@ -1455,6 +1549,13 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
           oprot.writeFieldEnd();
         }
       }
+      if (struct.catalogStats != null) {
+        if (struct.isSetCatalogStats()) {
+          oprot.writeFieldBegin(CATALOG_STATS_FIELD_DESC);
+          struct.catalogStats.write(oprot);
+          oprot.writeFieldEnd();
+        }
+      }
       oprot.writeFieldStop();
       oprot.writeStructEnd();
     }
@@ -1503,7 +1604,10 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
       if (struct.isSetCatalogPartitions()) {
         optionals.set(9);
       }
-      oprot.writeBitSet(optionals, 10);
+      if (struct.isSetCatalogStats()) {
+        optionals.set(10);
+      }
+      oprot.writeBitSet(optionals, 11);
       if (struct.isSetNames()) {
         {
           oprot.writeI32(struct.names.size());
@@ -1578,12 +1682,15 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
           }
         }
       }
+      if (struct.isSetCatalogStats()) {
+        struct.catalogStats.write(oprot);
+      }
     }
 
     @Override
     public void read(org.apache.thrift.protocol.TProtocol prot, CatalogMetadataDetails struct) throws org.apache.thrift.TException {
       TTupleProtocol iprot = (TTupleProtocol) prot;
-      BitSet incoming = iprot.readBitSet(10);
+      BitSet incoming = iprot.readBitSet(11);
       if (incoming.get(0)) {
         {
           org.apache.thrift.protocol.TList _list467 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
@@ -1694,6 +1801,11 @@ public class CatalogMetadataDetails implements org.apache.thrift.TBase<CatalogMe
           }
         }
         struct.setCatalogPartitionsIsSet(true);
+      }
+      if (incoming.get(10)) {
+        struct.catalogStats = new CatalogStats();
+        struct.catalogStats.read(iprot);
+        struct.setCatalogStatsIsSet(true);
       }
     }
   }

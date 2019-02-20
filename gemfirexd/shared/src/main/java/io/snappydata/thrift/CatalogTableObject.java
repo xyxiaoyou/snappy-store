@@ -56,16 +56,14 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
   private static final org.apache.thrift.protocol.TField CREATE_TIME_FIELD_DESC = new org.apache.thrift.protocol.TField("createTime", org.apache.thrift.protocol.TType.I64, (short)16);
   private static final org.apache.thrift.protocol.TField LAST_ACCESS_TIME_FIELD_DESC = new org.apache.thrift.protocol.TField("lastAccessTime", org.apache.thrift.protocol.TType.I64, (short)17);
   private static final org.apache.thrift.protocol.TField PROPERTIES_FIELD_DESC = new org.apache.thrift.protocol.TField("properties", org.apache.thrift.protocol.TType.MAP, (short)18);
-  private static final org.apache.thrift.protocol.TField SIZE_IN_BYTES_FIELD_DESC = new org.apache.thrift.protocol.TField("sizeInBytes", org.apache.thrift.protocol.TType.I64, (short)19);
-  private static final org.apache.thrift.protocol.TField ROW_COUNT_FIELD_DESC = new org.apache.thrift.protocol.TField("rowCount", org.apache.thrift.protocol.TType.I64, (short)20);
-  private static final org.apache.thrift.protocol.TField COL_STATS_FIELD_DESC = new org.apache.thrift.protocol.TField("colStats", org.apache.thrift.protocol.TType.LIST, (short)21);
-  private static final org.apache.thrift.protocol.TField VIEW_ORIGINAL_TEXT_FIELD_DESC = new org.apache.thrift.protocol.TField("viewOriginalText", org.apache.thrift.protocol.TType.STRING, (short)22);
-  private static final org.apache.thrift.protocol.TField VIEW_TEXT_FIELD_DESC = new org.apache.thrift.protocol.TField("viewText", org.apache.thrift.protocol.TType.STRING, (short)23);
-  private static final org.apache.thrift.protocol.TField COMMENT_FIELD_DESC = new org.apache.thrift.protocol.TField("comment", org.apache.thrift.protocol.TType.STRING, (short)24);
-  private static final org.apache.thrift.protocol.TField UNSUPPORTED_FEATURES_FIELD_DESC = new org.apache.thrift.protocol.TField("unsupportedFeatures", org.apache.thrift.protocol.TType.LIST, (short)25);
-  private static final org.apache.thrift.protocol.TField TRACKS_PARTITIONS_IN_CATALOG_FIELD_DESC = new org.apache.thrift.protocol.TField("tracksPartitionsInCatalog", org.apache.thrift.protocol.TType.BOOL, (short)26);
-  private static final org.apache.thrift.protocol.TField SCHEMA_PRESERVES_CASE_FIELD_DESC = new org.apache.thrift.protocol.TField("schemaPreservesCase", org.apache.thrift.protocol.TType.BOOL, (short)27);
-  private static final org.apache.thrift.protocol.TField IGNORED_PROPERTIES_FIELD_DESC = new org.apache.thrift.protocol.TField("ignoredProperties", org.apache.thrift.protocol.TType.MAP, (short)28);
+  private static final org.apache.thrift.protocol.TField STATS_FIELD_DESC = new org.apache.thrift.protocol.TField("stats", org.apache.thrift.protocol.TType.STRUCT, (short)19);
+  private static final org.apache.thrift.protocol.TField VIEW_ORIGINAL_TEXT_FIELD_DESC = new org.apache.thrift.protocol.TField("viewOriginalText", org.apache.thrift.protocol.TType.STRING, (short)20);
+  private static final org.apache.thrift.protocol.TField VIEW_TEXT_FIELD_DESC = new org.apache.thrift.protocol.TField("viewText", org.apache.thrift.protocol.TType.STRING, (short)21);
+  private static final org.apache.thrift.protocol.TField COMMENT_FIELD_DESC = new org.apache.thrift.protocol.TField("comment", org.apache.thrift.protocol.TType.STRING, (short)22);
+  private static final org.apache.thrift.protocol.TField UNSUPPORTED_FEATURES_FIELD_DESC = new org.apache.thrift.protocol.TField("unsupportedFeatures", org.apache.thrift.protocol.TType.LIST, (short)23);
+  private static final org.apache.thrift.protocol.TField TRACKS_PARTITIONS_IN_CATALOG_FIELD_DESC = new org.apache.thrift.protocol.TField("tracksPartitionsInCatalog", org.apache.thrift.protocol.TType.BOOL, (short)24);
+  private static final org.apache.thrift.protocol.TField SCHEMA_PRESERVES_CASE_FIELD_DESC = new org.apache.thrift.protocol.TField("schemaPreservesCase", org.apache.thrift.protocol.TType.BOOL, (short)25);
+  private static final org.apache.thrift.protocol.TField IGNORED_PROPERTIES_FIELD_DESC = new org.apache.thrift.protocol.TField("ignoredProperties", org.apache.thrift.protocol.TType.MAP, (short)26);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
   static {
@@ -91,9 +89,7 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
   public long createTime; // required
   public long lastAccessTime; // required
   public Map<String,String> properties; // required
-  public long sizeInBytes; // optional
-  public long rowCount; // optional
-  public List<Map<String,String>> colStats; // required
+  public CatalogStats stats; // optional
   public String viewOriginalText; // optional
   public String viewText; // optional
   public String comment; // optional
@@ -122,16 +118,14 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
     CREATE_TIME((short)16, "createTime"),
     LAST_ACCESS_TIME((short)17, "lastAccessTime"),
     PROPERTIES((short)18, "properties"),
-    SIZE_IN_BYTES((short)19, "sizeInBytes"),
-    ROW_COUNT((short)20, "rowCount"),
-    COL_STATS((short)21, "colStats"),
-    VIEW_ORIGINAL_TEXT((short)22, "viewOriginalText"),
-    VIEW_TEXT((short)23, "viewText"),
-    COMMENT((short)24, "comment"),
-    UNSUPPORTED_FEATURES((short)25, "unsupportedFeatures"),
-    TRACKS_PARTITIONS_IN_CATALOG((short)26, "tracksPartitionsInCatalog"),
-    SCHEMA_PRESERVES_CASE((short)27, "schemaPreservesCase"),
-    IGNORED_PROPERTIES((short)28, "ignoredProperties");
+    STATS((short)19, "stats"),
+    VIEW_ORIGINAL_TEXT((short)20, "viewOriginalText"),
+    VIEW_TEXT((short)21, "viewText"),
+    COMMENT((short)22, "comment"),
+    UNSUPPORTED_FEATURES((short)23, "unsupportedFeatures"),
+    TRACKS_PARTITIONS_IN_CATALOG((short)24, "tracksPartitionsInCatalog"),
+    SCHEMA_PRESERVES_CASE((short)25, "schemaPreservesCase"),
+    IGNORED_PROPERTIES((short)26, "ignoredProperties");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -182,25 +176,21 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
           return LAST_ACCESS_TIME;
         case 18: // PROPERTIES
           return PROPERTIES;
-        case 19: // SIZE_IN_BYTES
-          return SIZE_IN_BYTES;
-        case 20: // ROW_COUNT
-          return ROW_COUNT;
-        case 21: // COL_STATS
-          return COL_STATS;
-        case 22: // VIEW_ORIGINAL_TEXT
+        case 19: // STATS
+          return STATS;
+        case 20: // VIEW_ORIGINAL_TEXT
           return VIEW_ORIGINAL_TEXT;
-        case 23: // VIEW_TEXT
+        case 21: // VIEW_TEXT
           return VIEW_TEXT;
-        case 24: // COMMENT
+        case 22: // COMMENT
           return COMMENT;
-        case 25: // UNSUPPORTED_FEATURES
+        case 23: // UNSUPPORTED_FEATURES
           return UNSUPPORTED_FEATURES;
-        case 26: // TRACKS_PARTITIONS_IN_CATALOG
+        case 24: // TRACKS_PARTITIONS_IN_CATALOG
           return TRACKS_PARTITIONS_IN_CATALOG;
-        case 27: // SCHEMA_PRESERVES_CASE
+        case 25: // SCHEMA_PRESERVES_CASE
           return SCHEMA_PRESERVES_CASE;
-        case 28: // IGNORED_PROPERTIES
+        case 26: // IGNORED_PROPERTIES
           return IGNORED_PROPERTIES;
         default:
           return null;
@@ -246,12 +236,10 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
   private static final int __REDUNDANCY_ISSET_ID = 1;
   private static final int __CREATETIME_ISSET_ID = 2;
   private static final int __LASTACCESSTIME_ISSET_ID = 3;
-  private static final int __SIZEINBYTES_ISSET_ID = 4;
-  private static final int __ROWCOUNT_ISSET_ID = 5;
-  private static final int __TRACKSPARTITIONSINCATALOG_ISSET_ID = 6;
-  private static final int __SCHEMAPRESERVESCASE_ISSET_ID = 7;
+  private static final int __TRACKSPARTITIONSINCATALOG_ISSET_ID = 4;
+  private static final int __SCHEMAPRESERVESCASE_ISSET_ID = 5;
   private byte __isset_bitfield = 0;
-  private static final _Fields optionals[] = {_Fields.SCHEMA_NAME,_Fields.PROVIDER,_Fields.NUM_BUCKETS,_Fields.REDUNDANCY,_Fields.SIZE_IN_BYTES,_Fields.ROW_COUNT,_Fields.VIEW_ORIGINAL_TEXT,_Fields.VIEW_TEXT,_Fields.COMMENT,_Fields.IGNORED_PROPERTIES};
+  private static final _Fields optionals[] = {_Fields.SCHEMA_NAME,_Fields.PROVIDER,_Fields.NUM_BUCKETS,_Fields.REDUNDANCY,_Fields.STATS,_Fields.VIEW_ORIGINAL_TEXT,_Fields.VIEW_TEXT,_Fields.COMMENT,_Fields.IGNORED_PROPERTIES};
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
     Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
@@ -299,15 +287,8 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         new org.apache.thrift.meta_data.MapMetaData(org.apache.thrift.protocol.TType.MAP, 
             new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING), 
             new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING))));
-    tmpMap.put(_Fields.SIZE_IN_BYTES, new org.apache.thrift.meta_data.FieldMetaData("sizeInBytes", org.apache.thrift.TFieldRequirementType.OPTIONAL, 
-        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
-    tmpMap.put(_Fields.ROW_COUNT, new org.apache.thrift.meta_data.FieldMetaData("rowCount", org.apache.thrift.TFieldRequirementType.OPTIONAL, 
-        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
-    tmpMap.put(_Fields.COL_STATS, new org.apache.thrift.meta_data.FieldMetaData("colStats", org.apache.thrift.TFieldRequirementType.REQUIRED, 
-        new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
-            new org.apache.thrift.meta_data.MapMetaData(org.apache.thrift.protocol.TType.MAP, 
-                new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING), 
-                new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)))));
+    tmpMap.put(_Fields.STATS, new org.apache.thrift.meta_data.FieldMetaData("stats", org.apache.thrift.TFieldRequirementType.OPTIONAL, 
+        new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, CatalogStats.class)));
     tmpMap.put(_Fields.VIEW_ORIGINAL_TEXT, new org.apache.thrift.meta_data.FieldMetaData("viewOriginalText", org.apache.thrift.TFieldRequirementType.OPTIONAL, 
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
     tmpMap.put(_Fields.VIEW_TEXT, new org.apache.thrift.meta_data.FieldMetaData("viewText", org.apache.thrift.TFieldRequirementType.OPTIONAL, 
@@ -347,7 +328,6 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
     long createTime,
     long lastAccessTime,
     Map<String,String> properties,
-    List<Map<String,String>> colStats,
     List<String> unsupportedFeatures,
     boolean tracksPartitionsInCatalog,
     boolean schemaPreservesCase)
@@ -369,7 +349,6 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
     this.lastAccessTime = lastAccessTime;
     setLastAccessTimeIsSet(true);
     this.properties = properties;
-    this.colStats = colStats;
     this.unsupportedFeatures = unsupportedFeatures;
     this.tracksPartitionsInCatalog = tracksPartitionsInCatalog;
     setTracksPartitionsInCatalogIsSet(true);
@@ -438,15 +417,8 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       Map<String,String> __this__properties = new HashMap<String,String>(other.properties);
       this.properties = __this__properties;
     }
-    this.sizeInBytes = other.sizeInBytes;
-    this.rowCount = other.rowCount;
-    if (other.isSetColStats()) {
-      List<Map<String,String>> __this__colStats = new ArrayList<Map<String,String>>(other.colStats.size());
-      for (Map<String,String> other_element : other.colStats) {
-        Map<String,String> __this__colStats_copy = new HashMap<String,String>(other_element);
-        __this__colStats.add(__this__colStats_copy);
-      }
-      this.colStats = __this__colStats;
+    if (other.isSetStats()) {
+      this.stats = new CatalogStats(other.stats);
     }
     if (other.isSetViewOriginalText()) {
       this.viewOriginalText = other.viewOriginalText;
@@ -497,11 +469,7 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
     setLastAccessTimeIsSet(false);
     this.lastAccessTime = 0;
     this.properties = null;
-    setSizeInBytesIsSet(false);
-    this.sizeInBytes = 0;
-    setRowCountIsSet(false);
-    this.rowCount = 0;
-    this.colStats = null;
+    this.stats = null;
     this.viewOriginalText = null;
     this.viewText = null;
     this.comment = null;
@@ -1042,88 +1010,27 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
     }
   }
 
-  public long getSizeInBytes() {
-    return this.sizeInBytes;
+  public CatalogStats getStats() {
+    return this.stats;
   }
 
-  public CatalogTableObject setSizeInBytes(long sizeInBytes) {
-    this.sizeInBytes = sizeInBytes;
-    setSizeInBytesIsSet(true);
+  public CatalogTableObject setStats(CatalogStats stats) {
+    this.stats = stats;
     return this;
   }
 
-  public void unsetSizeInBytes() {
-    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __SIZEINBYTES_ISSET_ID);
+  public void unsetStats() {
+    this.stats = null;
   }
 
-  /** Returns true if field sizeInBytes is set (has been assigned a value) and false otherwise */
-  public boolean isSetSizeInBytes() {
-    return EncodingUtils.testBit(__isset_bitfield, __SIZEINBYTES_ISSET_ID);
+  /** Returns true if field stats is set (has been assigned a value) and false otherwise */
+  public boolean isSetStats() {
+    return this.stats != null;
   }
 
-  public void setSizeInBytesIsSet(boolean value) {
-    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __SIZEINBYTES_ISSET_ID, value);
-  }
-
-  public long getRowCount() {
-    return this.rowCount;
-  }
-
-  public CatalogTableObject setRowCount(long rowCount) {
-    this.rowCount = rowCount;
-    setRowCountIsSet(true);
-    return this;
-  }
-
-  public void unsetRowCount() {
-    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __ROWCOUNT_ISSET_ID);
-  }
-
-  /** Returns true if field rowCount is set (has been assigned a value) and false otherwise */
-  public boolean isSetRowCount() {
-    return EncodingUtils.testBit(__isset_bitfield, __ROWCOUNT_ISSET_ID);
-  }
-
-  public void setRowCountIsSet(boolean value) {
-    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __ROWCOUNT_ISSET_ID, value);
-  }
-
-  public int getColStatsSize() {
-    return (this.colStats == null) ? 0 : this.colStats.size();
-  }
-
-  public java.util.Iterator<Map<String,String>> getColStatsIterator() {
-    return (this.colStats == null) ? null : this.colStats.iterator();
-  }
-
-  public void addToColStats(Map<String,String> elem) {
-    if (this.colStats == null) {
-      this.colStats = new ArrayList<Map<String,String>>();
-    }
-    this.colStats.add(elem);
-  }
-
-  public List<Map<String,String>> getColStats() {
-    return this.colStats;
-  }
-
-  public CatalogTableObject setColStats(List<Map<String,String>> colStats) {
-    this.colStats = colStats;
-    return this;
-  }
-
-  public void unsetColStats() {
-    this.colStats = null;
-  }
-
-  /** Returns true if field colStats is set (has been assigned a value) and false otherwise */
-  public boolean isSetColStats() {
-    return this.colStats != null;
-  }
-
-  public void setColStatsIsSet(boolean value) {
+  public void setStatsIsSet(boolean value) {
     if (!value) {
-      this.colStats = null;
+      this.stats = null;
     }
   }
 
@@ -1465,27 +1372,11 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       }
       break;
 
-    case SIZE_IN_BYTES:
+    case STATS:
       if (value == null) {
-        unsetSizeInBytes();
+        unsetStats();
       } else {
-        setSizeInBytes((Long)value);
-      }
-      break;
-
-    case ROW_COUNT:
-      if (value == null) {
-        unsetRowCount();
-      } else {
-        setRowCount((Long)value);
-      }
-      break;
-
-    case COL_STATS:
-      if (value == null) {
-        unsetColStats();
-      } else {
-        setColStats((List<Map<String,String>>)value);
+        setStats((CatalogStats)value);
       }
       break;
 
@@ -1604,14 +1495,8 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
     case PROPERTIES:
       return getProperties();
 
-    case SIZE_IN_BYTES:
-      return getSizeInBytes();
-
-    case ROW_COUNT:
-      return getRowCount();
-
-    case COL_STATS:
-      return getColStats();
+    case STATS:
+      return getStats();
 
     case VIEW_ORIGINAL_TEXT:
       return getViewOriginalText();
@@ -1681,12 +1566,8 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       return isSetLastAccessTime();
     case PROPERTIES:
       return isSetProperties();
-    case SIZE_IN_BYTES:
-      return isSetSizeInBytes();
-    case ROW_COUNT:
-      return isSetRowCount();
-    case COL_STATS:
-      return isSetColStats();
+    case STATS:
+      return isSetStats();
     case VIEW_ORIGINAL_TEXT:
       return isSetViewOriginalText();
     case VIEW_TEXT:
@@ -1880,30 +1761,12 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         return false;
     }
 
-    boolean this_present_sizeInBytes = true && this.isSetSizeInBytes();
-    boolean that_present_sizeInBytes = true && that.isSetSizeInBytes();
-    if (this_present_sizeInBytes || that_present_sizeInBytes) {
-      if (!(this_present_sizeInBytes && that_present_sizeInBytes))
+    boolean this_present_stats = true && this.isSetStats();
+    boolean that_present_stats = true && that.isSetStats();
+    if (this_present_stats || that_present_stats) {
+      if (!(this_present_stats && that_present_stats))
         return false;
-      if (this.sizeInBytes != that.sizeInBytes)
-        return false;
-    }
-
-    boolean this_present_rowCount = true && this.isSetRowCount();
-    boolean that_present_rowCount = true && that.isSetRowCount();
-    if (this_present_rowCount || that_present_rowCount) {
-      if (!(this_present_rowCount && that_present_rowCount))
-        return false;
-      if (this.rowCount != that.rowCount)
-        return false;
-    }
-
-    boolean this_present_colStats = true && this.isSetColStats();
-    boolean that_present_colStats = true && that.isSetColStats();
-    if (this_present_colStats || that_present_colStats) {
-      if (!(this_present_colStats && that_present_colStats))
-        return false;
-      if (!this.colStats.equals(that.colStats))
+      if (!this.stats.equals(that.stats))
         return false;
     }
 
@@ -2067,20 +1930,10 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
     if (present_properties)
       list.add(properties);
 
-    boolean present_sizeInBytes = true && (isSetSizeInBytes());
-    list.add(present_sizeInBytes);
-    if (present_sizeInBytes)
-      list.add(sizeInBytes);
-
-    boolean present_rowCount = true && (isSetRowCount());
-    list.add(present_rowCount);
-    if (present_rowCount)
-      list.add(rowCount);
-
-    boolean present_colStats = true && (isSetColStats());
-    list.add(present_colStats);
-    if (present_colStats)
-      list.add(colStats);
+    boolean present_stats = true && (isSetStats());
+    list.add(present_stats);
+    if (present_stats)
+      list.add(stats);
 
     boolean present_viewOriginalText = true && (isSetViewOriginalText());
     list.add(present_viewOriginalText);
@@ -2308,32 +2161,12 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         return lastComparison;
       }
     }
-    lastComparison = Boolean.valueOf(isSetSizeInBytes()).compareTo(other.isSetSizeInBytes());
+    lastComparison = Boolean.valueOf(isSetStats()).compareTo(other.isSetStats());
     if (lastComparison != 0) {
       return lastComparison;
     }
-    if (isSetSizeInBytes()) {
-      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.sizeInBytes, other.sizeInBytes);
-      if (lastComparison != 0) {
-        return lastComparison;
-      }
-    }
-    lastComparison = Boolean.valueOf(isSetRowCount()).compareTo(other.isSetRowCount());
-    if (lastComparison != 0) {
-      return lastComparison;
-    }
-    if (isSetRowCount()) {
-      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.rowCount, other.rowCount);
-      if (lastComparison != 0) {
-        return lastComparison;
-      }
-    }
-    lastComparison = Boolean.valueOf(isSetColStats()).compareTo(other.isSetColStats());
-    if (lastComparison != 0) {
-      return lastComparison;
-    }
-    if (isSetColStats()) {
-      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.colStats, other.colStats);
+    if (isSetStats()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.stats, other.stats);
       if (lastComparison != 0) {
         return lastComparison;
       }
@@ -2563,26 +2396,16 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       sb.append(this.properties);
     }
     first = false;
-    if (isSetSizeInBytes()) {
+    if (isSetStats()) {
       if (!first) sb.append(", ");
-      sb.append("sizeInBytes:");
-      sb.append(this.sizeInBytes);
+      sb.append("stats:");
+      if (this.stats == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.stats);
+      }
       first = false;
     }
-    if (isSetRowCount()) {
-      if (!first) sb.append(", ");
-      sb.append("rowCount:");
-      sb.append(this.rowCount);
-      first = false;
-    }
-    if (!first) sb.append(", ");
-    sb.append("colStats:");
-    if (this.colStats == null) {
-      sb.append("null");
-    } else {
-      sb.append(this.colStats);
-    }
-    first = false;
     if (isSetViewOriginalText()) {
       if (!first) sb.append(", ");
       sb.append("viewOriginalText:");
@@ -2683,9 +2506,6 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
     if (properties == null) {
       throw new org.apache.thrift.protocol.TProtocolException("Required field 'properties' was not present! Struct: " + toString());
     }
-    if (colStats == null) {
-      throw new org.apache.thrift.protocol.TProtocolException("Required field 'colStats' was not present! Struct: " + toString());
-    }
     if (unsupportedFeatures == null) {
       throw new org.apache.thrift.protocol.TProtocolException("Required field 'unsupportedFeatures' was not present! Struct: " + toString());
     }
@@ -2694,6 +2514,9 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
     // check for sub-struct validity
     if (storage != null) {
       storage.validate();
+    }
+    if (stats != null) {
+      stats.validate();
     }
   }
 
@@ -2785,13 +2608,13 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
           case 7: // PARTITION_COLUMNS
             if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
               {
-                org.apache.thrift.protocol.TList _list298 = iprot.readListBegin();
-                struct.partitionColumns = new ArrayList<String>(_list298.size);
-                String _elem299;
-                for (int _i300 = 0; _i300 < _list298.size; ++_i300)
+                org.apache.thrift.protocol.TList _list316 = iprot.readListBegin();
+                struct.partitionColumns = new ArrayList<String>(_list316.size);
+                String _elem317;
+                for (int _i318 = 0; _i318 < _list316.size; ++_i318)
                 {
-                  _elem299 = iprot.readString();
-                  struct.partitionColumns.add(_elem299);
+                  _elem317 = iprot.readString();
+                  struct.partitionColumns.add(_elem317);
                 }
                 iprot.readListEnd();
               }
@@ -2803,13 +2626,13 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
           case 8: // INDEX_COLUMNS
             if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
               {
-                org.apache.thrift.protocol.TList _list301 = iprot.readListBegin();
-                struct.indexColumns = new ArrayList<String>(_list301.size);
-                String _elem302;
-                for (int _i303 = 0; _i303 < _list301.size; ++_i303)
+                org.apache.thrift.protocol.TList _list319 = iprot.readListBegin();
+                struct.indexColumns = new ArrayList<String>(_list319.size);
+                String _elem320;
+                for (int _i321 = 0; _i321 < _list319.size; ++_i321)
                 {
-                  _elem302 = iprot.readString();
-                  struct.indexColumns.add(_elem302);
+                  _elem320 = iprot.readString();
+                  struct.indexColumns.add(_elem320);
                 }
                 iprot.readListEnd();
               }
@@ -2821,13 +2644,13 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
           case 9: // PRIMARY_KEY_COLUMNS
             if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
               {
-                org.apache.thrift.protocol.TList _list304 = iprot.readListBegin();
-                struct.primaryKeyColumns = new ArrayList<String>(_list304.size);
-                String _elem305;
-                for (int _i306 = 0; _i306 < _list304.size; ++_i306)
+                org.apache.thrift.protocol.TList _list322 = iprot.readListBegin();
+                struct.primaryKeyColumns = new ArrayList<String>(_list322.size);
+                String _elem323;
+                for (int _i324 = 0; _i324 < _list322.size; ++_i324)
                 {
-                  _elem305 = iprot.readString();
-                  struct.primaryKeyColumns.add(_elem305);
+                  _elem323 = iprot.readString();
+                  struct.primaryKeyColumns.add(_elem323);
                 }
                 iprot.readListEnd();
               }
@@ -2855,14 +2678,14 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
           case 12: // BUCKET_OWNERS
             if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
               {
-                org.apache.thrift.protocol.TList _list307 = iprot.readListBegin();
-                struct.bucketOwners = new ArrayList<BucketOwners>(_list307.size);
-                BucketOwners _elem308;
-                for (int _i309 = 0; _i309 < _list307.size; ++_i309)
+                org.apache.thrift.protocol.TList _list325 = iprot.readListBegin();
+                struct.bucketOwners = new ArrayList<BucketOwners>(_list325.size);
+                BucketOwners _elem326;
+                for (int _i327 = 0; _i327 < _list325.size; ++_i327)
                 {
-                  _elem308 = new BucketOwners();
-                  _elem308.read(iprot);
-                  struct.bucketOwners.add(_elem308);
+                  _elem326 = new BucketOwners();
+                  _elem326.read(iprot);
+                  struct.bucketOwners.add(_elem326);
                 }
                 iprot.readListEnd();
               }
@@ -2874,13 +2697,13 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
           case 13: // BUCKET_COLUMNS
             if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
               {
-                org.apache.thrift.protocol.TList _list310 = iprot.readListBegin();
-                struct.bucketColumns = new ArrayList<String>(_list310.size);
-                String _elem311;
-                for (int _i312 = 0; _i312 < _list310.size; ++_i312)
+                org.apache.thrift.protocol.TList _list328 = iprot.readListBegin();
+                struct.bucketColumns = new ArrayList<String>(_list328.size);
+                String _elem329;
+                for (int _i330 = 0; _i330 < _list328.size; ++_i330)
                 {
-                  _elem311 = iprot.readString();
-                  struct.bucketColumns.add(_elem311);
+                  _elem329 = iprot.readString();
+                  struct.bucketColumns.add(_elem329);
                 }
                 iprot.readListEnd();
               }
@@ -2892,13 +2715,13 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
           case 14: // SORT_COLUMNS
             if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
               {
-                org.apache.thrift.protocol.TList _list313 = iprot.readListBegin();
-                struct.sortColumns = new ArrayList<String>(_list313.size);
-                String _elem314;
-                for (int _i315 = 0; _i315 < _list313.size; ++_i315)
+                org.apache.thrift.protocol.TList _list331 = iprot.readListBegin();
+                struct.sortColumns = new ArrayList<String>(_list331.size);
+                String _elem332;
+                for (int _i333 = 0; _i333 < _list331.size; ++_i333)
                 {
-                  _elem314 = iprot.readString();
-                  struct.sortColumns.add(_elem314);
+                  _elem332 = iprot.readString();
+                  struct.sortColumns.add(_elem332);
                 }
                 iprot.readListEnd();
               }
@@ -2934,15 +2757,15 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
           case 18: // PROPERTIES
             if (schemeField.type == org.apache.thrift.protocol.TType.MAP) {
               {
-                org.apache.thrift.protocol.TMap _map316 = iprot.readMapBegin();
-                struct.properties = new HashMap<String,String>(2*_map316.size);
-                String _key317;
-                String _val318;
-                for (int _i319 = 0; _i319 < _map316.size; ++_i319)
+                org.apache.thrift.protocol.TMap _map334 = iprot.readMapBegin();
+                struct.properties = new HashMap<String,String>(2*_map334.size);
+                String _key335;
+                String _val336;
+                for (int _i337 = 0; _i337 < _map334.size; ++_i337)
                 {
-                  _key317 = iprot.readString();
-                  _val318 = iprot.readString();
-                  struct.properties.put(_key317, _val318);
+                  _key335 = iprot.readString();
+                  _val336 = iprot.readString();
+                  struct.properties.put(_key335, _val336);
                 }
                 iprot.readMapEnd();
               }
@@ -2951,53 +2774,16 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 19: // SIZE_IN_BYTES
-            if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
-              struct.sizeInBytes = iprot.readI64();
-              struct.setSizeInBytesIsSet(true);
+          case 19: // STATS
+            if (schemeField.type == org.apache.thrift.protocol.TType.STRUCT) {
+              struct.stats = new CatalogStats();
+              struct.stats.read(iprot);
+              struct.setStatsIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 20: // ROW_COUNT
-            if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
-              struct.rowCount = iprot.readI64();
-              struct.setRowCountIsSet(true);
-            } else { 
-              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-            }
-            break;
-          case 21: // COL_STATS
-            if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
-              {
-                org.apache.thrift.protocol.TList _list320 = iprot.readListBegin();
-                struct.colStats = new ArrayList<Map<String,String>>(_list320.size);
-                Map<String,String> _elem321;
-                for (int _i322 = 0; _i322 < _list320.size; ++_i322)
-                {
-                  {
-                    org.apache.thrift.protocol.TMap _map323 = iprot.readMapBegin();
-                    _elem321 = new HashMap<String,String>(2*_map323.size);
-                    String _key324;
-                    String _val325;
-                    for (int _i326 = 0; _i326 < _map323.size; ++_i326)
-                    {
-                      _key324 = iprot.readString();
-                      _val325 = iprot.readString();
-                      _elem321.put(_key324, _val325);
-                    }
-                    iprot.readMapEnd();
-                  }
-                  struct.colStats.add(_elem321);
-                }
-                iprot.readListEnd();
-              }
-              struct.setColStatsIsSet(true);
-            } else { 
-              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-            }
-            break;
-          case 22: // VIEW_ORIGINAL_TEXT
+          case 20: // VIEW_ORIGINAL_TEXT
             if (schemeField.type == org.apache.thrift.protocol.TType.STRING) {
               struct.viewOriginalText = iprot.readString();
               struct.setViewOriginalTextIsSet(true);
@@ -3005,7 +2791,7 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 23: // VIEW_TEXT
+          case 21: // VIEW_TEXT
             if (schemeField.type == org.apache.thrift.protocol.TType.STRING) {
               struct.viewText = iprot.readString();
               struct.setViewTextIsSet(true);
@@ -3013,7 +2799,7 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 24: // COMMENT
+          case 22: // COMMENT
             if (schemeField.type == org.apache.thrift.protocol.TType.STRING) {
               struct.comment = iprot.readString();
               struct.setCommentIsSet(true);
@@ -3021,16 +2807,16 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 25: // UNSUPPORTED_FEATURES
+          case 23: // UNSUPPORTED_FEATURES
             if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
               {
-                org.apache.thrift.protocol.TList _list327 = iprot.readListBegin();
-                struct.unsupportedFeatures = new ArrayList<String>(_list327.size);
-                String _elem328;
-                for (int _i329 = 0; _i329 < _list327.size; ++_i329)
+                org.apache.thrift.protocol.TList _list338 = iprot.readListBegin();
+                struct.unsupportedFeatures = new ArrayList<String>(_list338.size);
+                String _elem339;
+                for (int _i340 = 0; _i340 < _list338.size; ++_i340)
                 {
-                  _elem328 = iprot.readString();
-                  struct.unsupportedFeatures.add(_elem328);
+                  _elem339 = iprot.readString();
+                  struct.unsupportedFeatures.add(_elem339);
                 }
                 iprot.readListEnd();
               }
@@ -3039,7 +2825,7 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 26: // TRACKS_PARTITIONS_IN_CATALOG
+          case 24: // TRACKS_PARTITIONS_IN_CATALOG
             if (schemeField.type == org.apache.thrift.protocol.TType.BOOL) {
               struct.tracksPartitionsInCatalog = iprot.readBool();
               struct.setTracksPartitionsInCatalogIsSet(true);
@@ -3047,7 +2833,7 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 27: // SCHEMA_PRESERVES_CASE
+          case 25: // SCHEMA_PRESERVES_CASE
             if (schemeField.type == org.apache.thrift.protocol.TType.BOOL) {
               struct.schemaPreservesCase = iprot.readBool();
               struct.setSchemaPreservesCaseIsSet(true);
@@ -3055,18 +2841,18 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 28: // IGNORED_PROPERTIES
+          case 26: // IGNORED_PROPERTIES
             if (schemeField.type == org.apache.thrift.protocol.TType.MAP) {
               {
-                org.apache.thrift.protocol.TMap _map330 = iprot.readMapBegin();
-                struct.ignoredProperties = new HashMap<String,String>(2*_map330.size);
-                String _key331;
-                String _val332;
-                for (int _i333 = 0; _i333 < _map330.size; ++_i333)
+                org.apache.thrift.protocol.TMap _map341 = iprot.readMapBegin();
+                struct.ignoredProperties = new HashMap<String,String>(2*_map341.size);
+                String _key342;
+                String _val343;
+                for (int _i344 = 0; _i344 < _map341.size; ++_i344)
                 {
-                  _key331 = iprot.readString();
-                  _val332 = iprot.readString();
-                  struct.ignoredProperties.put(_key331, _val332);
+                  _key342 = iprot.readString();
+                  _val343 = iprot.readString();
+                  struct.ignoredProperties.put(_key342, _val343);
                 }
                 iprot.readMapEnd();
               }
@@ -3140,9 +2926,9 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         oprot.writeFieldBegin(PARTITION_COLUMNS_FIELD_DESC);
         {
           oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, struct.partitionColumns.size()));
-          for (String _iter334 : struct.partitionColumns)
+          for (String _iter345 : struct.partitionColumns)
           {
-            oprot.writeString(_iter334);
+            oprot.writeString(_iter345);
           }
           oprot.writeListEnd();
         }
@@ -3152,9 +2938,9 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         oprot.writeFieldBegin(INDEX_COLUMNS_FIELD_DESC);
         {
           oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, struct.indexColumns.size()));
-          for (String _iter335 : struct.indexColumns)
+          for (String _iter346 : struct.indexColumns)
           {
-            oprot.writeString(_iter335);
+            oprot.writeString(_iter346);
           }
           oprot.writeListEnd();
         }
@@ -3164,9 +2950,9 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         oprot.writeFieldBegin(PRIMARY_KEY_COLUMNS_FIELD_DESC);
         {
           oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, struct.primaryKeyColumns.size()));
-          for (String _iter336 : struct.primaryKeyColumns)
+          for (String _iter347 : struct.primaryKeyColumns)
           {
-            oprot.writeString(_iter336);
+            oprot.writeString(_iter347);
           }
           oprot.writeListEnd();
         }
@@ -3186,9 +2972,9 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         oprot.writeFieldBegin(BUCKET_OWNERS_FIELD_DESC);
         {
           oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, struct.bucketOwners.size()));
-          for (BucketOwners _iter337 : struct.bucketOwners)
+          for (BucketOwners _iter348 : struct.bucketOwners)
           {
-            _iter337.write(oprot);
+            _iter348.write(oprot);
           }
           oprot.writeListEnd();
         }
@@ -3198,9 +2984,9 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         oprot.writeFieldBegin(BUCKET_COLUMNS_FIELD_DESC);
         {
           oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, struct.bucketColumns.size()));
-          for (String _iter338 : struct.bucketColumns)
+          for (String _iter349 : struct.bucketColumns)
           {
-            oprot.writeString(_iter338);
+            oprot.writeString(_iter349);
           }
           oprot.writeListEnd();
         }
@@ -3210,9 +2996,9 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         oprot.writeFieldBegin(SORT_COLUMNS_FIELD_DESC);
         {
           oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, struct.sortColumns.size()));
-          for (String _iter339 : struct.sortColumns)
+          for (String _iter350 : struct.sortColumns)
           {
-            oprot.writeString(_iter339);
+            oprot.writeString(_iter350);
           }
           oprot.writeListEnd();
         }
@@ -3233,44 +3019,21 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         oprot.writeFieldBegin(PROPERTIES_FIELD_DESC);
         {
           oprot.writeMapBegin(new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING, struct.properties.size()));
-          for (Map.Entry<String, String> _iter340 : struct.properties.entrySet())
+          for (Map.Entry<String, String> _iter351 : struct.properties.entrySet())
           {
-            oprot.writeString(_iter340.getKey());
-            oprot.writeString(_iter340.getValue());
+            oprot.writeString(_iter351.getKey());
+            oprot.writeString(_iter351.getValue());
           }
           oprot.writeMapEnd();
         }
         oprot.writeFieldEnd();
       }
-      if (struct.isSetSizeInBytes()) {
-        oprot.writeFieldBegin(SIZE_IN_BYTES_FIELD_DESC);
-        oprot.writeI64(struct.sizeInBytes);
-        oprot.writeFieldEnd();
-      }
-      if (struct.isSetRowCount()) {
-        oprot.writeFieldBegin(ROW_COUNT_FIELD_DESC);
-        oprot.writeI64(struct.rowCount);
-        oprot.writeFieldEnd();
-      }
-      if (struct.colStats != null) {
-        oprot.writeFieldBegin(COL_STATS_FIELD_DESC);
-        {
-          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.MAP, struct.colStats.size()));
-          for (Map<String,String> _iter341 : struct.colStats)
-          {
-            {
-              oprot.writeMapBegin(new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING, _iter341.size()));
-              for (Map.Entry<String, String> _iter342 : _iter341.entrySet())
-              {
-                oprot.writeString(_iter342.getKey());
-                oprot.writeString(_iter342.getValue());
-              }
-              oprot.writeMapEnd();
-            }
-          }
-          oprot.writeListEnd();
+      if (struct.stats != null) {
+        if (struct.isSetStats()) {
+          oprot.writeFieldBegin(STATS_FIELD_DESC);
+          struct.stats.write(oprot);
+          oprot.writeFieldEnd();
         }
-        oprot.writeFieldEnd();
       }
       if (struct.viewOriginalText != null) {
         if (struct.isSetViewOriginalText()) {
@@ -3297,9 +3060,9 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         oprot.writeFieldBegin(UNSUPPORTED_FEATURES_FIELD_DESC);
         {
           oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, struct.unsupportedFeatures.size()));
-          for (String _iter343 : struct.unsupportedFeatures)
+          for (String _iter352 : struct.unsupportedFeatures)
           {
-            oprot.writeString(_iter343);
+            oprot.writeString(_iter352);
           }
           oprot.writeListEnd();
         }
@@ -3316,10 +3079,10 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
           oprot.writeFieldBegin(IGNORED_PROPERTIES_FIELD_DESC);
           {
             oprot.writeMapBegin(new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING, struct.ignoredProperties.size()));
-            for (Map.Entry<String, String> _iter344 : struct.ignoredProperties.entrySet())
+            for (Map.Entry<String, String> _iter353 : struct.ignoredProperties.entrySet())
             {
-              oprot.writeString(_iter344.getKey());
-              oprot.writeString(_iter344.getValue());
+              oprot.writeString(_iter353.getKey());
+              oprot.writeString(_iter353.getValue());
             }
             oprot.writeMapEnd();
           }
@@ -3349,44 +3112,44 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       oprot.writeString(struct.tableSchema);
       {
         oprot.writeI32(struct.partitionColumns.size());
-        for (String _iter345 : struct.partitionColumns)
+        for (String _iter354 : struct.partitionColumns)
         {
-          oprot.writeString(_iter345);
+          oprot.writeString(_iter354);
         }
       }
       {
         oprot.writeI32(struct.indexColumns.size());
-        for (String _iter346 : struct.indexColumns)
+        for (String _iter355 : struct.indexColumns)
         {
-          oprot.writeString(_iter346);
+          oprot.writeString(_iter355);
         }
       }
       {
         oprot.writeI32(struct.primaryKeyColumns.size());
-        for (String _iter347 : struct.primaryKeyColumns)
+        for (String _iter356 : struct.primaryKeyColumns)
         {
-          oprot.writeString(_iter347);
+          oprot.writeString(_iter356);
         }
       }
       {
         oprot.writeI32(struct.bucketOwners.size());
-        for (BucketOwners _iter348 : struct.bucketOwners)
+        for (BucketOwners _iter357 : struct.bucketOwners)
         {
-          _iter348.write(oprot);
+          _iter357.write(oprot);
         }
       }
       {
         oprot.writeI32(struct.bucketColumns.size());
-        for (String _iter349 : struct.bucketColumns)
+        for (String _iter358 : struct.bucketColumns)
         {
-          oprot.writeString(_iter349);
+          oprot.writeString(_iter358);
         }
       }
       {
         oprot.writeI32(struct.sortColumns.size());
-        for (String _iter350 : struct.sortColumns)
+        for (String _iter359 : struct.sortColumns)
         {
-          oprot.writeString(_iter350);
+          oprot.writeString(_iter359);
         }
       }
       oprot.writeString(struct.owner);
@@ -3394,31 +3157,17 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       oprot.writeI64(struct.lastAccessTime);
       {
         oprot.writeI32(struct.properties.size());
-        for (Map.Entry<String, String> _iter351 : struct.properties.entrySet())
+        for (Map.Entry<String, String> _iter360 : struct.properties.entrySet())
         {
-          oprot.writeString(_iter351.getKey());
-          oprot.writeString(_iter351.getValue());
-        }
-      }
-      {
-        oprot.writeI32(struct.colStats.size());
-        for (Map<String,String> _iter352 : struct.colStats)
-        {
-          {
-            oprot.writeI32(_iter352.size());
-            for (Map.Entry<String, String> _iter353 : _iter352.entrySet())
-            {
-              oprot.writeString(_iter353.getKey());
-              oprot.writeString(_iter353.getValue());
-            }
-          }
+          oprot.writeString(_iter360.getKey());
+          oprot.writeString(_iter360.getValue());
         }
       }
       {
         oprot.writeI32(struct.unsupportedFeatures.size());
-        for (String _iter354 : struct.unsupportedFeatures)
+        for (String _iter361 : struct.unsupportedFeatures)
         {
-          oprot.writeString(_iter354);
+          oprot.writeString(_iter361);
         }
       }
       oprot.writeBool(struct.tracksPartitionsInCatalog);
@@ -3436,25 +3185,22 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       if (struct.isSetRedundancy()) {
         optionals.set(3);
       }
-      if (struct.isSetSizeInBytes()) {
+      if (struct.isSetStats()) {
         optionals.set(4);
       }
-      if (struct.isSetRowCount()) {
+      if (struct.isSetViewOriginalText()) {
         optionals.set(5);
       }
-      if (struct.isSetViewOriginalText()) {
+      if (struct.isSetViewText()) {
         optionals.set(6);
       }
-      if (struct.isSetViewText()) {
+      if (struct.isSetComment()) {
         optionals.set(7);
       }
-      if (struct.isSetComment()) {
+      if (struct.isSetIgnoredProperties()) {
         optionals.set(8);
       }
-      if (struct.isSetIgnoredProperties()) {
-        optionals.set(9);
-      }
-      oprot.writeBitSet(optionals, 10);
+      oprot.writeBitSet(optionals, 9);
       if (struct.isSetSchemaName()) {
         oprot.writeString(struct.schemaName);
       }
@@ -3467,11 +3213,8 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       if (struct.isSetRedundancy()) {
         oprot.writeI32(struct.redundancy);
       }
-      if (struct.isSetSizeInBytes()) {
-        oprot.writeI64(struct.sizeInBytes);
-      }
-      if (struct.isSetRowCount()) {
-        oprot.writeI64(struct.rowCount);
+      if (struct.isSetStats()) {
+        struct.stats.write(oprot);
       }
       if (struct.isSetViewOriginalText()) {
         oprot.writeString(struct.viewOriginalText);
@@ -3485,10 +3228,10 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       if (struct.isSetIgnoredProperties()) {
         {
           oprot.writeI32(struct.ignoredProperties.size());
-          for (Map.Entry<String, String> _iter355 : struct.ignoredProperties.entrySet())
+          for (Map.Entry<String, String> _iter362 : struct.ignoredProperties.entrySet())
           {
-            oprot.writeString(_iter355.getKey());
-            oprot.writeString(_iter355.getValue());
+            oprot.writeString(_iter362.getKey());
+            oprot.writeString(_iter362.getValue());
           }
         }
       }
@@ -3507,69 +3250,69 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       struct.tableSchema = iprot.readString();
       struct.setTableSchemaIsSet(true);
       {
-        org.apache.thrift.protocol.TList _list356 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
-        struct.partitionColumns = new ArrayList<String>(_list356.size);
-        String _elem357;
-        for (int _i358 = 0; _i358 < _list356.size; ++_i358)
+        org.apache.thrift.protocol.TList _list363 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
+        struct.partitionColumns = new ArrayList<String>(_list363.size);
+        String _elem364;
+        for (int _i365 = 0; _i365 < _list363.size; ++_i365)
         {
-          _elem357 = iprot.readString();
-          struct.partitionColumns.add(_elem357);
+          _elem364 = iprot.readString();
+          struct.partitionColumns.add(_elem364);
         }
       }
       struct.setPartitionColumnsIsSet(true);
       {
-        org.apache.thrift.protocol.TList _list359 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
-        struct.indexColumns = new ArrayList<String>(_list359.size);
-        String _elem360;
-        for (int _i361 = 0; _i361 < _list359.size; ++_i361)
+        org.apache.thrift.protocol.TList _list366 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
+        struct.indexColumns = new ArrayList<String>(_list366.size);
+        String _elem367;
+        for (int _i368 = 0; _i368 < _list366.size; ++_i368)
         {
-          _elem360 = iprot.readString();
-          struct.indexColumns.add(_elem360);
+          _elem367 = iprot.readString();
+          struct.indexColumns.add(_elem367);
         }
       }
       struct.setIndexColumnsIsSet(true);
       {
-        org.apache.thrift.protocol.TList _list362 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
-        struct.primaryKeyColumns = new ArrayList<String>(_list362.size);
-        String _elem363;
-        for (int _i364 = 0; _i364 < _list362.size; ++_i364)
+        org.apache.thrift.protocol.TList _list369 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
+        struct.primaryKeyColumns = new ArrayList<String>(_list369.size);
+        String _elem370;
+        for (int _i371 = 0; _i371 < _list369.size; ++_i371)
         {
-          _elem363 = iprot.readString();
-          struct.primaryKeyColumns.add(_elem363);
+          _elem370 = iprot.readString();
+          struct.primaryKeyColumns.add(_elem370);
         }
       }
       struct.setPrimaryKeyColumnsIsSet(true);
       {
-        org.apache.thrift.protocol.TList _list365 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, iprot.readI32());
-        struct.bucketOwners = new ArrayList<BucketOwners>(_list365.size);
-        BucketOwners _elem366;
-        for (int _i367 = 0; _i367 < _list365.size; ++_i367)
+        org.apache.thrift.protocol.TList _list372 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, iprot.readI32());
+        struct.bucketOwners = new ArrayList<BucketOwners>(_list372.size);
+        BucketOwners _elem373;
+        for (int _i374 = 0; _i374 < _list372.size; ++_i374)
         {
-          _elem366 = new BucketOwners();
-          _elem366.read(iprot);
-          struct.bucketOwners.add(_elem366);
+          _elem373 = new BucketOwners();
+          _elem373.read(iprot);
+          struct.bucketOwners.add(_elem373);
         }
       }
       struct.setBucketOwnersIsSet(true);
       {
-        org.apache.thrift.protocol.TList _list368 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
-        struct.bucketColumns = new ArrayList<String>(_list368.size);
-        String _elem369;
-        for (int _i370 = 0; _i370 < _list368.size; ++_i370)
+        org.apache.thrift.protocol.TList _list375 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
+        struct.bucketColumns = new ArrayList<String>(_list375.size);
+        String _elem376;
+        for (int _i377 = 0; _i377 < _list375.size; ++_i377)
         {
-          _elem369 = iprot.readString();
-          struct.bucketColumns.add(_elem369);
+          _elem376 = iprot.readString();
+          struct.bucketColumns.add(_elem376);
         }
       }
       struct.setBucketColumnsIsSet(true);
       {
-        org.apache.thrift.protocol.TList _list371 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
-        struct.sortColumns = new ArrayList<String>(_list371.size);
-        String _elem372;
-        for (int _i373 = 0; _i373 < _list371.size; ++_i373)
+        org.apache.thrift.protocol.TList _list378 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
+        struct.sortColumns = new ArrayList<String>(_list378.size);
+        String _elem379;
+        for (int _i380 = 0; _i380 < _list378.size; ++_i380)
         {
-          _elem372 = iprot.readString();
-          struct.sortColumns.add(_elem372);
+          _elem379 = iprot.readString();
+          struct.sortColumns.add(_elem379);
         }
       }
       struct.setSortColumnsIsSet(true);
@@ -3580,40 +3323,18 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       struct.lastAccessTime = iprot.readI64();
       struct.setLastAccessTimeIsSet(true);
       {
-        org.apache.thrift.protocol.TMap _map374 = new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING, iprot.readI32());
-        struct.properties = new HashMap<String,String>(2*_map374.size);
-        String _key375;
-        String _val376;
-        for (int _i377 = 0; _i377 < _map374.size; ++_i377)
+        org.apache.thrift.protocol.TMap _map381 = new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING, iprot.readI32());
+        struct.properties = new HashMap<String,String>(2*_map381.size);
+        String _key382;
+        String _val383;
+        for (int _i384 = 0; _i384 < _map381.size; ++_i384)
         {
-          _key375 = iprot.readString();
-          _val376 = iprot.readString();
-          struct.properties.put(_key375, _val376);
+          _key382 = iprot.readString();
+          _val383 = iprot.readString();
+          struct.properties.put(_key382, _val383);
         }
       }
       struct.setPropertiesIsSet(true);
-      {
-        org.apache.thrift.protocol.TList _list378 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.MAP, iprot.readI32());
-        struct.colStats = new ArrayList<Map<String,String>>(_list378.size);
-        Map<String,String> _elem379;
-        for (int _i380 = 0; _i380 < _list378.size; ++_i380)
-        {
-          {
-            org.apache.thrift.protocol.TMap _map381 = new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING, iprot.readI32());
-            _elem379 = new HashMap<String,String>(2*_map381.size);
-            String _key382;
-            String _val383;
-            for (int _i384 = 0; _i384 < _map381.size; ++_i384)
-            {
-              _key382 = iprot.readString();
-              _val383 = iprot.readString();
-              _elem379.put(_key382, _val383);
-            }
-          }
-          struct.colStats.add(_elem379);
-        }
-      }
-      struct.setColStatsIsSet(true);
       {
         org.apache.thrift.protocol.TList _list385 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
         struct.unsupportedFeatures = new ArrayList<String>(_list385.size);
@@ -3629,7 +3350,7 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
       struct.setTracksPartitionsInCatalogIsSet(true);
       struct.schemaPreservesCase = iprot.readBool();
       struct.setSchemaPreservesCaseIsSet(true);
-      BitSet incoming = iprot.readBitSet(10);
+      BitSet incoming = iprot.readBitSet(9);
       if (incoming.get(0)) {
         struct.schemaName = iprot.readString();
         struct.setSchemaNameIsSet(true);
@@ -3647,26 +3368,23 @@ public class CatalogTableObject implements org.apache.thrift.TBase<CatalogTableO
         struct.setRedundancyIsSet(true);
       }
       if (incoming.get(4)) {
-        struct.sizeInBytes = iprot.readI64();
-        struct.setSizeInBytesIsSet(true);
+        struct.stats = new CatalogStats();
+        struct.stats.read(iprot);
+        struct.setStatsIsSet(true);
       }
       if (incoming.get(5)) {
-        struct.rowCount = iprot.readI64();
-        struct.setRowCountIsSet(true);
-      }
-      if (incoming.get(6)) {
         struct.viewOriginalText = iprot.readString();
         struct.setViewOriginalTextIsSet(true);
       }
-      if (incoming.get(7)) {
+      if (incoming.get(6)) {
         struct.viewText = iprot.readString();
         struct.setViewTextIsSet(true);
       }
-      if (incoming.get(8)) {
+      if (incoming.get(7)) {
         struct.comment = iprot.readString();
         struct.setCommentIsSet(true);
       }
-      if (incoming.get(9)) {
+      if (incoming.get(8)) {
         {
           org.apache.thrift.protocol.TMap _map388 = new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING, iprot.readI32());
           struct.ignoredProperties = new HashMap<String,String>(2*_map388.size);
