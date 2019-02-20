@@ -743,13 +743,13 @@ struct CatalogTableObject {
  20: optional i64                                          rowCount
  // statistics for each column of the table (or empty if none)
  21: required list<map<string, string>>                    colStats
- 22: required bool                                         isBroadcastable
- 23: optional string                                       viewOriginalText
- 24: optional string                                       viewText
- 25: optional string                                       comment
- 26: required list<string>                                 unsupportedFeatures
- 27: required bool                                         tracksPartitionsInCatalog
- 28: required bool                                         schemaPreservesCase
+ 22: optional string                                       viewOriginalText
+ 23: optional string                                       viewText
+ 24: optional string                                       comment
+ 25: required list<string>                                 unsupportedFeatures
+ 26: required bool                                         tracksPartitionsInCatalog
+ 27: required bool                                         schemaPreservesCase
+ 28: optional map<string, string>                          ignoredProperties
 }
 
 // encapsulates Spark's CatalogFunction
