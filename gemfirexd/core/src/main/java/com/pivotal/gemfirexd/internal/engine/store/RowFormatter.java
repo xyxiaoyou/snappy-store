@@ -1039,6 +1039,8 @@ public final class RowFormatter implements Serializable {
     this.metadata = null;
     this.isTableFormatter = false;
     this.isPrimaryKeyFormatter = false;
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#cqi#column[] = " + ArrayUtils.toString(this.columns));
   }
 
   /**
@@ -1103,6 +1105,8 @@ public final class RowFormatter implements Serializable {
       this.isTableFormatter = true;
     }
     this.isPrimaryKeyFormatter = false;
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#const1#column[] = " + ArrayUtils.toString(this.columns));
   }
 
   /**
@@ -1161,6 +1165,8 @@ public final class RowFormatter implements Serializable {
     if (isTableFormatter && container != null) {
       container.hasLobs = hasLobs();
     }
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#const2#column[] = " + ArrayUtils.toString(this.columns));
   }
 
   /**
@@ -1219,6 +1225,8 @@ public final class RowFormatter implements Serializable {
     this.metadata = null;
     this.isTableFormatter = false;
     this.isPrimaryKeyFormatter = false;
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#const3#column[] = " + ArrayUtils.toString(this.columns));
   }
 
   /**
@@ -1279,8 +1287,14 @@ public final class RowFormatter implements Serializable {
     this.metadata = getMetaData(schemaName, tableName, schemaVersion);
     this.isTableFormatter = false;
     this.isPrimaryKeyFormatter = isPrimaryKeyFormatter;
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#const4#column[] = " + ArrayUtils.toString(this.columns));
   }
 
+  public void printColumnArray() {
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#Recovery#column[] = " + ArrayUtils.toString(this.columns));
+  }
   /**
    * Get the fixed width, variable width and LOB column positions for this
    * formatter.
@@ -1453,13 +1467,23 @@ public final class RowFormatter implements Serializable {
       final DataValueDescriptor[] dvds, final int[] validColumns)
       throws StandardException {
     DataValueDescriptor dvd, newDVD;
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#getColumns validColumns = " + ArrayUtils.toString(validColumns));
     if (validColumns != null) {
       final int nCols = validColumns.length;
       for (int index = 0; index < nCols; index++) {
         final int logicalPosition = validColumns[index];
         dvd = dvds[index];
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+            "RowFormatter#getColumns dvd = " + dvd + " and index = " + index);
         if (logicalPosition > 0) {
           newDVD = getColumn(logicalPosition, byteArrays);
+          SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+              "RowFormatter#getColumns newDvd = " + newDVD);
+          if (newDVD != null) {
+            SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+                "RowFormatter#getColumns newDvd type format id= " + newDVD.getTypeFormatId());
+          }
           if (dvd == null || dvd.getTypeFormatId() == newDVD.getTypeFormatId()) {
             dvds[index] = newDVD;
           } else {
@@ -5482,16 +5506,24 @@ public final class RowFormatter implements Serializable {
     final int offsetFromMap = this.positionMap[index];
     final ColumnDescriptor cd = this.columns[index];
     final DataValueDescriptor dvd;
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#getColumn logical position = " + logicalPosition + " and cd = " + cd);
     if (byteArrays != null) {
       if (!cd.isLob) {
         final byte[] bytes = byteArrays[0];
         final long offsetAndWidth = getOffsetAndWidth(index, bytes,
             offsetFromMap, cd);
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+            "RowFormatter#getColumn offsetAndWidth = " + offsetAndWidth);
         if (offsetAndWidth >= 0) {
           final int columnWidth = (int)offsetAndWidth;
           final int offset = (int)(offsetAndWidth >>> Integer.SIZE);
           dvd = cd.columnType.getNull();
+          SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+              "RowFormatter#getColumn empty dvd = " + dvd);
           final int bytesRead = dvd.readBytes(bytes, offset, columnWidth);
+          SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+              "RowFormatter#getColumn after reading bytes dvd = " + dvd);
           assert bytesRead == columnWidth : "bytesRead=" + bytesRead
               + ", columnWidth=" + columnWidth + " for " + dvd;
         } else if (offsetAndWidth == OFFSET_AND_WIDTH_IS_NULL) {
@@ -5505,6 +5537,8 @@ public final class RowFormatter implements Serializable {
         }
       } else {
         dvd = cd.columnType.getNull();
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+            "RowFormatter#getColumn isLob = true for dvd " + dvd);
         // for the special case of default value after ALTER TABLE, copy the
         // default bytes
         if (offsetFromMap != 0) {
@@ -5521,14 +5555,14 @@ public final class RowFormatter implements Serializable {
     } else {
       dvd = cd.columnType.getNull();
     }
-    if (SanityManager.DEBUG) {
-      if (GemFireXDUtils.TraceRowFormatter) {
+    // if (SanityManager.DEBUG) {
+      // if (GemFireXDUtils.TraceRowFormatter) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
             "RowFormatter#getColumn(byte[][]): for column at position "
                 + logicalPosition + " returning DVD {" + dvd + ", type: "
                 + cd.columnType + '}');
-      }
-    }
+      // }
+    //}
     return dvd;
   }
 
