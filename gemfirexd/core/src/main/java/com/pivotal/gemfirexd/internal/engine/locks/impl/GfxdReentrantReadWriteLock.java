@@ -445,7 +445,7 @@ public final class GfxdReentrantReadWriteLock extends AtomicInteger implements
     boolean res = false;
     while (msecs > timeoutMillis) {
       if (this.sync.tryAcquireNanos(0 /* not used */, owner, this,
-          TimeUnit.MILLISECONDS.toNanos(timeoutMillis), null, null)) {
+              TimeUnit.MILLISECONDS.toNanos(timeoutMillis), null, null)) {
         res = true;
         break;
       }
@@ -453,9 +453,9 @@ public final class GfxdReentrantReadWriteLock extends AtomicInteger implements
       msecs -= timeoutMillis;
       if (logger.warningEnabled()) {
         logger.warning(LocalizedStrings.LocalLock_Waiting, new Object[] {
-            "GfxdReentrantReadWriteLock", Double.toString(
+                "GfxdReentrantReadWriteLock", Double.toString(
                 timeoutMillis / 1000.0),
-            "WRITE", this.lockName + ", owner=" + owner, toString(), msecs });
+                "WRITE", this.lockName + ", owner=" + owner, toString(), msecs });
       }
       // increase the timeout by a factor for next iteration
       if (this.waitThreshold > 0) {

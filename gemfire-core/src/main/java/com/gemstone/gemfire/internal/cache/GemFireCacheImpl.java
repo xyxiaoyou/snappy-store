@@ -568,7 +568,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
   private final ThreadPoolExecutor diskDelayedWritePool;
 
   //TODO:Suranjan This has to be replcaed with better approach. guava cache or WeakHashMap.
-  private final Map<String, Map<Object, BlockingQueue<RegionEntry>
+  private final Map<String, Map<Object, Object
     /*RegionEntry*/>>  oldEntryMap;
   
   private ScheduledExecutorService oldEntryMapCleanerService;
@@ -654,7 +654,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
           newEntry.getVersionStamp().getEntryVersion());
     }
 
-    Map<Object, BlockingQueue<RegionEntry>> snapshot = this.oldEntryMap.get(regionPath);
+    Map<Object, Object> snapshot = this.oldEntryMap.get(regionPath);
     if (snapshot != null) {
       enqueueOldEntry(oldRe, snapshot);
     } else {
@@ -862,7 +862,27 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
                 if (re.isUpdateInProgress()) {
                   continue;
                 } else {
-                  if (notRequiredByAnyTx(oldEntriesQueue, (LocalRegion)region, re)) {
+                  if (notRequiredByOldest(oldEntriesQueue, region, re)) {
+                    if (getLoggerI18n().fineEnabled()) {
+                      getLoggerI18n().info(LocalizedStrings.DEBUG,
+                              "OldEntriesCleanerThread : Removing the entry " + re );
+                    }
+                    // continue if some explicit call removed the entry
+                    if (!oldEntriesQueue.remove(re)) continue;
+                    if (GemFireCacheImpl.hasNewOffHeap()) {
+                      // also remove reference to region buffer, if any
+                      Object value = re._getValue();
+                      if (value instanceof SerializedDiskBuffer) {
+                        ((SerializedDiskBuffer)value).release();
+                      }
+                    }
+                    // free the allocated memory
+                    if (!region.reservedTable() && region.needAccounting()) {
+                      NonLocalRegionEntry nre = (NonLocalRegionEntry)re;
+                      region.freePoolMemory(nre.getValueSize(), nre.isForDelete());
+                    }
+                  }
+                  /*if (notRequiredByAnyTx(oldEntriesQueue, region, re)) {
                     if (getLoggerI18n().fineEnabled()) {
                       getLoggerI18n().info(LocalizedStrings.DEBUG,
                           "OldEntriesCleanerThread : Removing the entry " + re );
@@ -881,7 +901,8 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
                       NonLocalRegionEntry nre = (NonLocalRegionEntry)re;
                       region.freePoolMemory(nre.getValueSize(), nre.isForDelete());
                     }
-                  }
+                  }*/
+
                 }
               }
             }
@@ -909,6 +930,25 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
                   "Exception:", e);
         }
       }
+    }
+
+    boolean notRequiredByOldest(BlockingQueue<RegionEntry> queue,
+                                LocalRegion region, RegionEntry re) {
+      TXId txId = txIdQueue.peek();
+      if (txId != null) {
+        for (RegionEntry otherOldEntry : queue) {
+          if (otherOldEntry == re) {
+            continue;
+          }
+          TXState txState = getTxManager().getHostedTXState(txId).getLocalTXState();
+
+          if ((txState != null && !txState.isClosed() && TXState.checkEntryInSnapshot
+                  (txState, region, otherOldEntry))) {
+            return true;
+          }
+        }
+      }
+      return false;
     }
 
     boolean notRequiredByAnyTx(BlockingQueue<RegionEntry> queue,
@@ -1744,12 +1784,19 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
     return DEFAULT_SNAPSHOT_ENABLED_TEST;
   }
 
+  private final BlockingQueue<TXId> txIdQueue = new LinkedBlockingQueue();
+
+  public void removeTXId(TXId txId) {
+    txIdQueue.remove(txId);
+  }
+
   // currently it will wait for a long time
   // we can have differnt ds or read write locks to avoid waiting of read operations.
   //TODO: As an optimizations we can change the ds and maintain it at cache level and punish writes.
   //return snapshotRVV;
-  public Map getSnapshotRVV() {
+  public Map getSnapshotRVV(TXId txId) {
     lockForSnapshotRvv.readLock().lock();
+    txIdQueue.add(txId);
     try {
       // Wait for all the regions to get initialized before taking snapshot.
       final UnifiedMap<String, Map> snapshot =
