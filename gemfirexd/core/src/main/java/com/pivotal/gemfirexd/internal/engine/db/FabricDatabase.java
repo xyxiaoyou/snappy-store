@@ -64,6 +64,7 @@ import com.gemstone.gemfire.internal.ClassPathLoader;
 import com.gemstone.gemfire.internal.GFToSlf4jBridge;
 import com.gemstone.gemfire.internal.LogWriterImpl;
 import com.gemstone.gemfire.internal.cache.*;
+import com.gemstone.gemfire.internal.cache.persistence.PRPersistentConfig;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.gemstone.gnu.trove.THashMap;
@@ -1644,6 +1645,7 @@ public final class FabricDatabase implements ModuleControl,
       }
       long latestOplogTime = ds.getLatestModifiedTime();
       Map<Long, AbstractDiskRegion> drs = ds.getAllDiskRegions();
+
       if (drs != null && !drs.isEmpty()) {
         Iterator<Map.Entry<Long, AbstractDiskRegion>> iter = drs.entrySet().iterator();
         while (iter.hasNext()) {
@@ -1670,11 +1672,13 @@ public final class FabricDatabase implements ModuleControl,
           }
           long mostRecentModifiedTime =
               PersistentStateInRecoveryMode.getLatestModifiedTime(adr, logger);
+
           PersistentStateInRecoveryMode.RecoveryModePersistentView dpv
               = new PersistentStateInRecoveryMode.RecoveryModePersistentView(
               ds.getName(), adr.getName(),
               adr.getRegionVersionVector(),
               mostRecentModifiedTime, latestOplogTime);
+
           pmsg.addView(dpv);
         }
       } else {
@@ -1683,6 +1687,8 @@ public final class FabricDatabase implements ModuleControl,
         }
       }
     }
+    System.out.println("1891: adding prconfigs for pmsg: " + pmsg.getMember());
+    pmsg.addPRConfigs();
     this.memStore.setPersistentStateMsg(pmsg);
   }
 
