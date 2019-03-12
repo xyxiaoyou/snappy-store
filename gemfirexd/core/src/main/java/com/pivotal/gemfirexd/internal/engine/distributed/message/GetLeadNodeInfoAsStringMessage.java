@@ -21,10 +21,13 @@ import com.gemstone.gemfire.DataSerializer;
 import com.gemstone.gemfire.cache.execute.ResultCollector;
 import com.gemstone.gemfire.distributed.DistributedMember;
 import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
+import com.pivotal.gemfirexd.internal.catalog.ExternalCatalog;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
+import com.pivotal.gemfirexd.internal.iapi.sql.conn.ConnectionUtil;
+import com.pivotal.gemfirexd.internal.impl.sql.conn.GenericLanguageConnectionContext;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 
 import java.io.DataInput;
@@ -42,13 +45,15 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
 
   private Object[] additionalArgs;
   private DataReqType requestType;
+  private Long connID;
 
-  public enum DataReqType {GET_JARS}
+  public enum DataReqType {GET_JARS, RECOVER_DATA}
 
-  public GetLeadNodeInfoAsStringMessage(final ResultCollector<Object, Object> rc, DataReqType reqType, Object... args) {
+  public GetLeadNodeInfoAsStringMessage(final ResultCollector<Object, Object> rc, DataReqType reqType, Long connID, Object... args) {
     super(rc, null, false, true);
     this.requestType = reqType;
     this.additionalArgs = args;
+    this.connID = connID;
   }
 
   public GetLeadNodeInfoAsStringMessage() {
@@ -86,6 +91,9 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
         case GET_JARS:
           result = handleGetJarsRequest();
           break;
+        case RECOVER_DATA:
+          result = exportRecoveredData();
+          break;
 
         default:
           throw new IllegalArgumentException("GetLeadNodeInfoAsStringMessage:" +
@@ -96,6 +104,15 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
     } catch (Exception ex) {
       throw LeadNodeExecutorMsg.getExceptionToSendToServer(ex);
     }
+  }
+
+
+  private String exportRecoveredData() {
+
+    com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().recoverData(connID,
+        additionalArgs[0].toString(), additionalArgs[1].toString(), additionalArgs[2].toString());
+
+    return "Data recovered";
   }
 
   private String handleGetJarsRequest() {
@@ -138,6 +155,7 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
     super.fromData(in);
     this.requestType = DataSerializer.readObject(in);
     this.additionalArgs = DataSerializer.readObjectArray(in);
+    this.connID = DataSerializer.readLong(in);
   }
 
   @Override
@@ -145,6 +163,7 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
     super.toData(out);
     DataSerializer.writeObject(this.requestType, out);
     DataSerializer.writeObjectArray(this.additionalArgs, out);
+    DataSerializer.writeLong(this.connID, out);
   }
 
   public void appendFields(final StringBuilder sb) {

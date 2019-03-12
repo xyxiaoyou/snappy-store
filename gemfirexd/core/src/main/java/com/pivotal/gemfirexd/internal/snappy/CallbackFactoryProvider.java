@@ -60,6 +60,10 @@ public abstract class CallbackFactoryProvider {
     }
 
     @Override
+    public void recoverData(Long connId, String exportUri, String formatType, String tableNames){
+    }
+
+    @Override
     public Object readDataType(ByteArrayDataInput in) {
       return null;
     }

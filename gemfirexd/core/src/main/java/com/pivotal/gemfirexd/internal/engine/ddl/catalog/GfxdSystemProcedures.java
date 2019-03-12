@@ -1537,12 +1537,36 @@ public class GfxdSystemProcedures extends SystemProcedures {
             "executing GET_DEPLOYED_JARS");
       }
       GfxdListResultCollector collector = new GfxdListResultCollector();
+      // ConnectionId is not being used for GET_DEPLOYED_JARS; hence passing dummy value(0L)
       GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
-          collector, GetLeadNodeInfoAsStringMessage.DataReqType.GET_JARS, (Object[])null);
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.GET_JARS, 0L, (Object[])null);
       msg.executeFunction();
       ArrayList<Object> result = collector.getResult();
       String resJarStrings = (String)result.get(0);
       jarStrings[0] = resJarStrings;
+    } catch (StandardException se) {
+      throw PublicAPI.wrapStandardException(se);
+    }
+  }
+
+  // comma separated table names
+  public static void RECOVER_DATA(String exportUri, String formatType, String tableNames) throws SQLException {
+    try {
+      if (GemFireXDUtils.TraceSysProcedures) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+            "Executing RECOVER_DATA");
+      }
+      Long connectionId = Misc.getLanguageConnectionContext().getConnectionId();
+
+      GfxdListResultCollector collector = new GfxdListResultCollector();
+      GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.RECOVER_DATA, connectionId, exportUri, formatType, tableNames);
+
+      msg.executeFunction();
+      if (GemFireXDUtils.TraceSysProcedures) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+            "RECOVER_DATA successful.");
+      }
     } catch (StandardException se) {
       throw PublicAPI.wrapStandardException(se);
     }
