@@ -82,13 +82,18 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     Collection<DiskStoreImpl> diskStores = cache.listDiskStores();
     for(DiskStoreImpl ds : diskStores) {
       String dsName = ds.getName();
-      if (!(dsName.equals(GfxdConstants.GFXD_DD_DISKSTORE_NAME) ||
+      if ((!dsName.equals(GfxdConstants.GFXD_DD_DISKSTORE_NAME) ||
          dsName.equals(GfxdConstants.SNAPPY_DEFAULT_DELTA_DISKSTORE) ||
          dsName.endsWith(GfxdConstants.SNAPPY_DELTA_DISKSTORE_SUFFIX))) {
         Map<String, PRPersistentConfig> prConfigs = ds.getDiskInitFile().getAllPRs();
         for (Map.Entry<String, PRPersistentConfig> e : prConfigs.entrySet()) {
+          System.out.println("1891: adding prtonumbuckets: " +
+              e.getKey() + " -> " + e.getValue().getTotalNumBuckets());
           this.prToNumBuckets.put(e.getKey(), e.getValue().getTotalNumBuckets());
         }
+        System.out.println("1891: done writing to prnumbuckets for " + getMember() + ". size of prconfigs=" + prConfigs.size());
+      } else {
+        System.out.println("1891: dsname doesnt match: " + dsName);
       }
     }
   }
