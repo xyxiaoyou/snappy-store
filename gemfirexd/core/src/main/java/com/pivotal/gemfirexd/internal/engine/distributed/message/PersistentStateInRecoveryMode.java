@@ -23,12 +23,14 @@ import com.gemstone.gemfire.DataSerializer;
 import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.internal.cache.AbstractDiskRegion;
+import com.gemstone.gemfire.internal.cache.DiskInitFile;
 import com.gemstone.gemfire.internal.cache.DiskStoreImpl;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
 import com.gemstone.gemfire.internal.cache.RegionEntry;
 import com.gemstone.gemfire.internal.cache.persistence.PRPersistentConfig;
 import com.gemstone.gemfire.internal.cache.versions.RegionVersionHolder;
 import com.gemstone.gemfire.internal.cache.versions.RegionVersionVector;
+import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.ddl.DDLConflatable;
@@ -51,6 +53,7 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
   private final ArrayList<Object> catalogObjects = new ArrayList<>();
   private ArrayList<String> otherExtractedDDLText = new ArrayList<>();
   private final HashMap<String, Integer> prToNumBuckets = new HashMap<>();
+  HashSet replicatedRegions = new HashSet<String>();
 
   public PersistentStateInRecoveryMode(
       List<Object> allEntries,
@@ -80,20 +83,31 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
   public void addPRConfigs() {
     GemFireCacheImpl cache = Misc.getGemFireCache();
     Collection<DiskStoreImpl> diskStores = cache.listDiskStores();
+
     for(DiskStoreImpl ds : diskStores) {
       String dsName = ds.getName();
       if ((!dsName.equals(GfxdConstants.GFXD_DD_DISKSTORE_NAME) ||
          dsName.equals(GfxdConstants.SNAPPY_DEFAULT_DELTA_DISKSTORE) ||
          dsName.endsWith(GfxdConstants.SNAPPY_DELTA_DISKSTORE_SUFFIX))) {
-        Map<String, PRPersistentConfig> prConfigs = ds.getDiskInitFile().getAllPRs();
+        DiskInitFile dif = ds.getDiskInitFile();
+        Map<String, PRPersistentConfig> prConfigs = dif.getAllPRs();
+
         for (Map.Entry<String, PRPersistentConfig> e : prConfigs.entrySet()) {
           System.out.println("1891: adding prtonumbuckets: " +
               e.getKey() + " -> " + e.getValue().getTotalNumBuckets());
           this.prToNumBuckets.put(e.getKey(), e.getValue().getTotalNumBuckets());
         }
+
+        Set<String> diskRegionNames = new HashSet<String>();
+        for (AbstractDiskRegion adr : ds.getAllDiskRegions().values()) {
+          if (!adr.isBucket()) {
+            diskRegionNames.add(adr.getFullPath());
+          }
+        }
+
+        replicatedRegions.addAll(diskRegionNames);
+        System.out.println("1891: srmapkeys = " + ArrayUtils.toString(diskRegionNames));
         System.out.println("1891: done writing to prnumbuckets for " + getMember() + ". size of prconfigs=" + prConfigs.size());
-      } else {
-        System.out.println("1891: dsname doesnt match: " + dsName);
       }
     }
   }
@@ -118,6 +132,10 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     return this.prToNumBuckets;
   }
 
+  public Set<String> getreplicatedRegions() {
+    return this.replicatedRegions;
+  }
+
   @Override
   public void fromData(DataInput in) throws IOException, ClassNotFoundException {
     this.member = DataSerializer.readObject(in);
@@ -125,6 +143,7 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     this.allRegionView.addAll(DataSerializer.readArrayList(in));
     this.otherExtractedDDLText.addAll(DataSerializer.readArrayList(in));
     this.prToNumBuckets.putAll(DataSerializer.readHashMap(in));
+    this.replicatedRegions = DataSerializer.readHashSet(in);
     try {
       int numCatSchemaObjects = in.readInt();
 
@@ -163,6 +182,7 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     DataSerializer.writeArrayList(this.allRegionView, out);
     DataSerializer.writeArrayList(this.otherExtractedDDLText, out);
     DataSerializer.writeHashMap(this.prToNumBuckets, out);
+    DataSerializer.writeHashSet(this.replicatedRegions, out);
     int numCatalogObjects = this.catalogObjects.size();
     ArrayList<CatalogTableObject> catTabArr =  new ArrayList<>();
     ArrayList<CatalogSchemaObject> catSchArr =  new ArrayList<>();
