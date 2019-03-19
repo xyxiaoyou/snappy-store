@@ -1467,23 +1467,13 @@ public final class RowFormatter implements Serializable {
       final DataValueDescriptor[] dvds, final int[] validColumns)
       throws StandardException {
     DataValueDescriptor dvd, newDVD;
-    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
-        "RowFormatter#getColumns validColumns = " + ArrayUtils.toString(validColumns));
     if (validColumns != null) {
       final int nCols = validColumns.length;
       for (int index = 0; index < nCols; index++) {
         final int logicalPosition = validColumns[index];
         dvd = dvds[index];
-        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
-            "RowFormatter#getColumns dvd = " + dvd + " and index = " + index);
         if (logicalPosition > 0) {
           newDVD = getColumn(logicalPosition, byteArrays);
-          SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
-              "RowFormatter#getColumns newDvd = " + newDVD);
-          if (newDVD != null) {
-            SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
-                "RowFormatter#getColumns newDvd type format id= " + newDVD.getTypeFormatId());
-          }
           if (dvd == null || dvd.getTypeFormatId() == newDVD.getTypeFormatId()) {
             dvds[index] = newDVD;
           } else {
