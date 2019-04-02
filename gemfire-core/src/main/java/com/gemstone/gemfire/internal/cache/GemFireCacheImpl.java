@@ -175,7 +175,6 @@ import com.gemstone.gemfire.pdx.internal.PdxInstanceFactoryImpl;
 import com.gemstone.gemfire.pdx.internal.PdxInstanceImpl;
 import com.gemstone.gemfire.pdx.internal.TypeRegistry;
 import com.gemstone.gnu.trove.THashSet;
-import org.apache.tools.ant.taskdefs.Local;
 import org.eclipse.collections.impl.map.mutable.UnifiedMap;
 import org.eclipse.collections.impl.set.mutable.UnifiedSet;
 
@@ -728,10 +727,12 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
     Object entries = regionMap.get(entryKey);
     if (entries == null) {
       if (getLoggerI18n().fineEnabled()) {
-        getLoggerI18n().info(LocalizedStrings.DEBUG, "For region  " + region + " the snapshot doesn't have any snapshot yet but there " +
+        getLoggerI18n().info(LocalizedStrings.DEBUG, "For region  " + region +
+                " the snapshot doesn't have any snapshot yet but there " +
             "are entries present in the region" +
             " the RVV " + ((LocalRegion)region).getVersionVector().fullToString() + " and snapshot RVV " +
-            ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() + " the entries are " + entries + " against the key " + entryKey +
+            ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() +
+                " the entries are " + entries + " against the key " + entryKey +
             " the entry in region is " + re + " with version " + re.getVersionStamp().asVersionTag());
       }
       return;
@@ -760,7 +761,8 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
       Map<Object, Object> regionMap = oldEntryMap.get(regionPath);
       if (regionMap == null) {
         if (getLoggerI18n().fineEnabled()) {
-          getLoggerI18n().info(LocalizedStrings.DEBUG,"For region  " + region + " the snapshot doesn't have any snapshot yet but there " +
+          getLoggerI18n().info(LocalizedStrings.DEBUG,"For region  " + region +
+                  " the snapshot doesn't have any snapshot yet but there " +
               "are entries present in the region" +
               " the RVV " + ((LocalRegion)region).getVersionVector().fullToString() + " and snapshot RVV " +
               ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() + "against the key " + entryKey +
@@ -776,10 +778,12 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
       // modified multiple times after an snapshot is taken
       if (entry == null) {
         if (getLoggerI18n().fineEnabled()) {
-        getLoggerI18n().info(LocalizedStrings.DEBUG,"For region  " + region + " the snapshot doesn't have any snapshot yet but there " +
+        getLoggerI18n().info(LocalizedStrings.DEBUG,"For region  " + region +
+                " the snapshot doesn't have any snapshot yet but there " +
             "are entries present in the region" +
             " the RVV " + ((LocalRegion)region).getVersionVector().fullToString() + " and snapshot RVV " +
-            ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() + " the entries are " + entry + " against the key " + entryKey +
+            ((LocalRegion)region).getVersionVector().getSnapShotOfMemberVersion() +
+                " the entries are " + entry + " against the key " + entryKey +
         " the entry in region is " + re + " with version " + re.getVersionStamp().asVersionTag());
         }
         return max;

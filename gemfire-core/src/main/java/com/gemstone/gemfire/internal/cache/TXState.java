@@ -405,7 +405,7 @@ public final class TXState implements TXStateInterface {
   }
 
   public void takeSnapshot(TXId txId) {
-    this.snapshot = getCache().getSnapshotRVV();
+    this.snapshot = getCache().getSnapshotRVV(txId);
     if (TXStateProxy.LOG_FINE) {
       this.txManager.getLogger().info(LocalizedStrings.DEBUG,
           " The snapshot taken in txStats is " + this.snapshot);
