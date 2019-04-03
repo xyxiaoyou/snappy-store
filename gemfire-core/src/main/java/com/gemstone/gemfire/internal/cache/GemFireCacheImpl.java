@@ -687,7 +687,8 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
   private void enqueueOldEntry(RegionEntry oldRe, Map<Object, Object> snapshot) {
     Object oldEntry = snapshot.get(oldRe.getKeyCopy());
     if (oldEntry == null) {
-      snapshot.put(oldRe.getKeyCopy(), oldEntry);
+
+      snapshot.put(oldRe.getKeyCopy(), oldRe);
       return;
     }
     if (oldEntry instanceof NonLocalRegionEntry) {
@@ -708,9 +709,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
       final Map<String, Map<VersionSource, RegionVersionHolder>> snapshot, final boolean
       checkValid, RegionEntry re, TXState txState) {
 
-
     String regionPath = region.getFullPath();
-
     List<RegionEntry> oldEntries = new ArrayList<>();
     Map<Object, Object> regionMap = oldEntryMap.get(regionPath);
     if (regionMap == null) {
