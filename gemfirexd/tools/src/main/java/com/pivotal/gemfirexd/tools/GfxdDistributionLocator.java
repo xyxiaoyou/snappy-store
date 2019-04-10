@@ -248,8 +248,9 @@ public class GfxdDistributionLocator extends GfxdServerLauncher {
       this.bindAddress = FabricLocator.LOCATOR_DEFAULT_BIND_ADDRESS;
     }
 
-    if (options.get(DistributionConfig.DISABLE_AUTO_RECONNECT_NAME) == null) {
-      Properties prop = (Properties) options.get(PROPERTIES);
+    Properties prop = (Properties) options.get(PROPERTIES);
+    if (prop.get(DistributionConfig.DISABLE_AUTO_RECONNECT_NAME) == null &&
+            prop.get(DistributionConfig.GEMFIRE_PREFIX + DistributionConfig.DISABLE_AUTO_RECONNECT_NAME) == null) {
       prop.put(DistributionConfig.DISABLE_AUTO_RECONNECT_NAME, "false");
     }
 
