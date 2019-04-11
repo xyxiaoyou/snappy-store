@@ -127,10 +127,6 @@ public class TransactionTest extends JdbcTestBase {
     Statement st = conn.createStatement();
     st.execute("Create table t1 (c1 int not null , c2 int not null, "
         + "primary key(c1)) replicate"+getSuffix());
-
-    st.execute("Create table t2 (c1 clob not null , c2 clob not null "
-            + ") partition by column(c1) "+getSuffix());
-
     conn.commit();
     conn = getConnection();
     conn.setTransactionIsolation(getIsolationLevel());
