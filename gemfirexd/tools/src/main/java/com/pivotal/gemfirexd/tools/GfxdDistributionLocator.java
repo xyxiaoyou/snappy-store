@@ -249,8 +249,9 @@ public class GfxdDistributionLocator extends GfxdServerLauncher {
     }
 
     Properties prop = (Properties) options.get(PROPERTIES);
-    if (prop.get(DistributionConfig.DISABLE_AUTO_RECONNECT_NAME) == null &&
-            prop.get(DistributionConfig.GEMFIRE_PREFIX + DistributionConfig.DISABLE_AUTO_RECONNECT_NAME) == null) {
+    if (prop.getProperty(DistributionConfig.DISABLE_AUTO_RECONNECT_NAME) == null &&
+            prop.getProperty(DistributionConfig.GEMFIRE_PREFIX
+                    + DistributionConfig.DISABLE_AUTO_RECONNECT_NAME) == null) {
       prop.put(DistributionConfig.DISABLE_AUTO_RECONNECT_NAME, "false");
     }
 
