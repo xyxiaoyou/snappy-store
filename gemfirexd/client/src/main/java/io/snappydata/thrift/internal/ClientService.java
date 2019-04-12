@@ -458,7 +458,8 @@ public final class ClientService extends ReentrantLock implements LobService {
             boolean hasLocator = false;
             if (!locators.isEmpty()) {
               for (HostAddress addr : locators) {
-                if (addr.getServerType().isThriftLocator()) {
+                if (addr.getServerType() == null ||
+                    addr.getServerType().isThriftLocator()) {
                   hasLocator = true;
                   break;
                 }
