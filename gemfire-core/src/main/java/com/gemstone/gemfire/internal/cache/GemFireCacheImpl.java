@@ -882,7 +882,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
                     continue;
                   } else {
                     if (notRequired(region, re, null)) {
-                      removeEntry(regionEntryMap, re, region, entry);
+                      removeEntry(regionEntryMap, re, region);
                     }
                   }
                 } else {
@@ -932,7 +932,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
 
                 if (getLoggerI18n().fineEnabled()) {
                   getLoggerI18n().fine(
-                          "OldEntriesCleanerThread : Removing the map against the key " + entry.getKey());
+                          "OldEntriesCleanerThread : Removing the queue against the key " + entry.getKey());
                 }
               }
             }
@@ -948,15 +948,10 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
       }
     }
 
-    void removeEntry(Map regionEntryMap, RegionEntry re, LocalRegion region, Map.Entry oldMapEntry) {
-      if (getLoggerI18n().fineEnabled()) {
-        getLoggerI18n().info(LocalizedStrings.DEBUG,
-                "OldEntriesCleanerThread : Removing the entry " + re);
-      }
-
+    void removeEntry(Map regionEntryMap, RegionEntry re, LocalRegion region) {
+      if (regionEntryMap.remove(re.getKey()) == null) return;
       if (GemFireCacheImpl.hasNewOffHeap()) {
         // also remove reference to region buffer, if any
-        if (regionEntryMap.remove(oldMapEntry.getKey()) == null) return;
         Object value = re._getValue();
         if (value instanceof SerializedDiskBuffer) {
           ((SerializedDiskBuffer) value).release();
@@ -1031,7 +1026,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
 
     boolean notRequiredByAnyTx( LocalRegion region, RegionEntry re,
                                 BlockingQueue<RegionEntry> queue) {
-      if(getLoggerI18n().fineEnabled()) {
+      if (getLoggerI18n().fineEnabled()) {
         getLoggerI18n().info(LocalizedStrings.DEBUG, "OldEntriesCleanerThread: Getting called for re " + re);
       }
       int myVersion = re.getVersionStamp().getEntryVersion();
@@ -1087,11 +1082,11 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
 
       // if entry in region is valid for all tx, then remove the entry in oldEntryMap
       if (txIds.equals(othersTxIds)) {
-        if(getLoggerI18n().fineEnabled()) {
+        if (getLoggerI18n().fineEnabled()) {
           getLoggerI18n().info(LocalizedStrings.DEBUG, "OldEntriesCleanerThread: SKSK1 " +
               " Entry in region " + entryInRegion + " its version " +
               entryInRegion.getVersionStamp().getEntryVersion()
-              + " myVersion " + myVersion + " myRE " + re);
+              + " myVersion " + myVersion + " myRE " + re + " txIds " + txIds + " otherTxIds " + othersTxIds);
         }
         return true;
       }
