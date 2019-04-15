@@ -1183,6 +1183,10 @@ public class TestConfiguration {
         "/odbc/odbc.ini");
 
     public static String getNetProtocol(String hostName, int port) {
+      return getNetProtocol(hostName, port, ClientSharedUtils.isThriftDefault());
+    }
+
+    public static String getNetProtocol(String hostName, int port, boolean useThrift) {
       if (USE_ODBC_BRIDGE) {
         // create an odbc.ini with the host/port, if required
         if (!odbcIni.exists()) {
@@ -1204,8 +1208,8 @@ public class TestConfiguration {
         return odbcProtocol;
       }
       else {
-        return (ClientSharedUtils.isThriftDefault()
-            ? thriftProtocol : netProtocol) + hostName + '[' + port + "]/";
+        return (useThrift ? thriftProtocol : netProtocol) +
+            hostName + '[' + port + "]/";
       }
     }
 // GemStone changes END
