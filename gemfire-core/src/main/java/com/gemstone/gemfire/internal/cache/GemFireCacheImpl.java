@@ -692,10 +692,7 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
 
 
   // keeping this for debug purposes
-  final void printOldEntries(Region region, final Object entryKey,
-      final Map<String, Map<VersionSource, RegionVersionHolder>> snapshot, final boolean
-      checkValid, RegionEntry re, TXState txState) {
-
+  final void printOldEntries(Region region, final Object entryKey, RegionEntry re) {
 
     String regionPath = region.getFullPath();
 
@@ -793,6 +790,24 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
       }
       return max;
     }
+  }
+
+  public void dumpOldEntryMap(String regionPath) {
+    Map<Object, BlockingQueue<RegionEntry>> regionMap = oldEntryMap.get(regionPath);
+    StringBuilder builder = new StringBuilder();
+
+    regionMap.forEach((key, queue) -> {
+      StringBuilder queueStringBuilder = new StringBuilder();
+      queue.forEach(re -> {
+        queueStringBuilder.append(re).append(",");
+      });
+      queueStringBuilder.deleteCharAt(queueStringBuilder.length());
+      String queueString = queueStringBuilder.toString();
+      builder.append("key : ").append(key).append(",").append(queueString).append("\n");
+    });
+
+    getLoggerI18n().info(LocalizedStrings.DEBUG, "The oldEntryMap for region "
+            + regionPath + " is " + builder.toString());
   }
 
   public boolean isGFEConnectorBucketMovedException(Throwable th) {
@@ -1316,9 +1331,12 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
           bufferAllocator = (DirectBufferAllocator)method.invoke(null);
           // test availability of configured memory-size
           getLogger().info("Configuring off-heap memory-size = " + memorySize);
-          long address = UnsafeHolder.getUnsafe().allocateMemory(memorySize);
-          UnsafeHolder.getUnsafe().freeMemory(address);
-          getLogger().info("Enabled memory-size = " + memorySize);
+
+          if (!isReconnecting()) {
+            long address = UnsafeHolder.getUnsafe().allocateMemory(memorySize);
+            UnsafeHolder.getUnsafe().freeMemory(address);
+            getLogger().info("Enabled memory-size = " + memorySize);
+          }
         } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException |
             InvocationTargetException e) {
           if (usingDefaultMemorySize) {

@@ -1440,6 +1440,43 @@ public final class GfxdSystemProcedureMessage extends
       }
     },
 
+    dumpRowsNotInSnapshot {
+
+      @Override
+      boolean allowExecution(Object[] params) {
+        // allow dumping of stacks for all nodes
+        return GemFireXDUtils.getMyVMKind().isStore();
+      }
+
+      @Override
+      public void processMessage(Object[] params, DistributedMember sender) {
+
+        Object user = params[0];
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+                "GfxdSystemProcedureMessage: dumping entries not in snapshot "
+                        + "invoked by " + user);
+        GemFireXDUtils.dumpStacks(Misc.getMemStoreBooting(),
+                "SYS.DUMP_ROWS_NOT_IN_SNAPSHOT invoked by " + user);
+      }
+
+      @Override
+      public Object[] readParams(DataInput in, short flags) throws IOException,
+              ClassNotFoundException {
+        return new Object[] { DataSerializer.readString(in) };
+      }
+
+      @Override
+      public void writeParams(Object[] params, DataOutput out)
+              throws IOException {
+        DataSerializer.writeObject(params[0], out);
+      }
+
+      @Override
+      String getSQLStatement(Object[] params) throws StandardException {
+        return "CALL SYS.DUMP_ROWS_NOT_IN_SNAPSHOT(1)";
+      }
+    },
+
     forceHDFSWriteonlyFileRollover {
 
       @Override

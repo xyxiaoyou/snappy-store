@@ -46,6 +46,10 @@ import com.gemstone.gemfire.internal.NanoTimer;
 import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.cache.control.InternalResourceManager;
 import com.gemstone.gemfire.internal.cache.persistence.query.CloseableIterator;
+import com.gemstone.gemfire.internal.cache.versions.RegionVersionHolder;
+import com.gemstone.gemfire.internal.cache.versions.VersionSource;
+import com.gemstone.gemfire.internal.cache.versions.VersionStamp;
+import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
 import com.gemstone.gemfire.internal.snappy.ColumnTableEntry;
 import com.gemstone.gnu.trove.TIntArrayList;
@@ -2339,6 +2343,70 @@ public class GfxdSystemProcedures extends SystemProcedures {
         ((DistributedRegion)region).getDistributionAdvisor().resetPrevOpCount();
       }
     }
+  }
+
+  public static void DUMP_REGION_ENTRIES_WITH_RVV(String tableName) {
+    PartitionedRegion pr = (PartitionedRegion) Misc.getRegionForTable(tableName, true);
+    Iterator iter = pr.getAppropriateLocalEntriesIterator(
+            pr.getDataStore().getAllLocalBucketIds(), true,
+            false, false, pr, false);
+
+    while (iter.hasNext()) {
+      RegionEntry re = (RegionEntry) iter.next();
+      re.getKey();
+
+    }
+  }
+
+  public static void dumpRowsNotInSnapshot(String tableName) {
+    GemFireCacheImpl cache = Misc.getGemFireCache();
+    PartitionedRegion pr = (PartitionedRegion) Misc.getRegionForTable(tableName, true);
+
+    Misc.getGemFireCache().getLogger().info(LocalizedStrings.DEBUG,
+            " The current snapshot is " + Misc.getGemFireCache().getSnapshotRVV());
+
+    Misc.getGemFireCache().dumpOldEntryMap(pr.getFullPath());
+
+    Iterator iter = pr.getAppropriateLocalEntriesIterator(
+            pr.getDataStore().getAllLocalBucketIds(), true,
+            false, false, pr, false);
+
+    Map<String, Map<VersionSource,RegionVersionHolder>> snapshot = cache.getSnapshotRVV();
+    Map<VersionSource, RegionVersionHolder> regionSnapshot;
+    StringBuilder builder = new StringBuilder();
+
+    while (iter.hasNext()) {
+      RegionEntry re = (RegionEntry) iter.next();
+      VersionStamp stamp = re.getVersionStamp();
+      VersionSource id = stamp.getMemberID();
+      if ((regionSnapshot = snapshot.get(pr.getFullPath())) != null) {
+        RegionVersionHolder holder = regionSnapshot.get(id);
+        if (holder == null) {
+          cache.getLoggerI18n().info(LocalizedStrings.DEBUG, " The holder against the id " + id);
+        } else {
+          if (!holder.contains(stamp.getRegionVersion())) {
+            builder.append(" re: " + re);
+            builder.append("\n");
+          }
+        }
+      } else {
+        cache.getLoggerI18n().info(LocalizedStrings.DEBUG, " No entry for region in the snapshot! ");
+      }
+    }
+    logger.info("The entries not in snapshot are " + builder.toString());
+  }
+
+  public static void DUMP_ROWS_NOT_IN_SNAPSHOT(String tableName)
+          throws SQLException, StandardException {
+    LanguageConnectionContext lcc = ConnectionUtil.getCurrentLCC();
+    final Object[] params = new Object[]{tableName};
+    // first process locally
+    GfxdSystemProcedureMessage.SysProcMethod.dumpRowsNotInSnapshot.processMessage(params,
+            Misc.getMyId());
+    // publish to other members including locators
+    publishMessage(params, false,
+            GfxdSystemProcedureMessage.SysProcMethod.dumpRowsNotInSnapshot, false, false);
+
   }
 
   /**

@@ -1639,6 +1639,27 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
           argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null, newlyCreatedRoutines,
           tc, GFXD_SYS_PROC_CLASSNAME, true);
     }
+
+    {
+      // void DUMP_STACKS(Boolean all)
+      String[] argNames = new String[] { "TABLE_NAME" };
+      TypeDescriptor[] argTypes = new TypeDescriptor[] {
+              DataTypeDescriptor.getCatalogType(Types.VARCHAR) };
+      super.createSystemProcedureOrFunction("FIX_PREVIOUS_OPS_COUNT", sysUUID, argNames,
+              argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null, newlyCreatedRoutines,
+              tc, GFXD_SYS_PROC_CLASSNAME, false);
+    }
+
+    {
+      // void DUMP_STACKS(Boolean all)
+      String[] argNames = new String[] { "TABLE_NAME" };
+      TypeDescriptor[] argTypes = new TypeDescriptor[] {
+              DataTypeDescriptor.getCatalogType(Types.VARCHAR) };
+      super.createSystemProcedureOrFunction("DUMP_ROWS_NOT_IN_SNAPSHOT", sysUUID, argNames,
+              argTypes, 0, 0, RoutineAliasInfo.NO_SQL, null, newlyCreatedRoutines,
+              tc, GFXD_SYS_PROC_CLASSNAME, false);
+    }
+
     
     {
         // void SET_BUCKETS_FOR_LOCAL_EXECUTION(TableName, buckets)
