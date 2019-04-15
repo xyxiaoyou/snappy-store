@@ -614,30 +614,30 @@ gradle.taskGraph.whenReady { graph ->
         environment 'GEMFIREXD'                           : productDir.getAbsolutePath(),
                     'JUNIT_JAR'                           : project.sourceSets.test.java.outputDir
 
-        int numTestClasses = 0
-        def testCount = new java.util.concurrent.atomic.AtomicInteger(0)
-
-        doFirst {
-          numTestClasses = test.getCandidateClassFiles().getFiles().size()
-        }
-        beforeSuite { desc ->
-          if (desc.className != null) {
-            def count = testCount.incrementAndGet()
-            println "${now()} Start ${desc.className} ($count/$numTestClasses)"
-          }
-        }
-        afterSuite { desc, result ->
-          if (desc.className != null) {
-            println "${now()} END ${desc.className}"
-          }
-        }
-
         if (rootProject.name == 'snappy-store') {
           def failureCount = new java.util.concurrent.atomic.AtomicInteger(0)
           def progress = new File(workingDir, 'progress.txt')
           def output = new File(workingDir, 'output.txt')
 
           def eol = System.getProperty('line.separator')
+
+          int numTestClasses = 0
+          def testCount = new java.util.concurrent.atomic.AtomicInteger(0)
+          doFirst {
+            numTestClasses = test.getCandidateClassFiles().getFiles().size()
+          }
+          beforeSuite { desc ->
+            if (desc.className != null) {
+              def count = testCount.incrementAndGet()
+              println "${now()} Start ${desc.className} ($count/$numTestClasses)"
+            }
+          }
+          afterSuite { desc, result ->
+            if (desc.className != null) {
+              println "${now()} END ${desc.className}"
+            }
+          }
+
           beforeTest { desc ->
             String now = now()
             progress << "${now} Starting test ${desc.className} ${desc.name}${eol}"
