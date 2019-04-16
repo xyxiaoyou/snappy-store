@@ -311,6 +311,7 @@ public class SQLParser
 
 	static final String SINGLEQUOTES = "\'\'";
 	static final String DOUBLEQUOTES = "\"\"";
+	static final String BACKTICK = "`";
 
 // GemStone changes BEGIN
     static final String DEFAULT_INDEX_TYPE = GfxdConstants.LOCAL_SORTEDMAP_INDEX_TYPE; //   "BTREE";
@@ -770,6 +771,7 @@ public class SQLParser
 	private static String normalizeDelimitedID(String str)
 	{
 		str = compressQuotes(str, DOUBLEQUOTES);
+		str = compressQuotes(str, BACKTICK);
 		return str;
 	}
 	private static boolean isDATETIME(int val)
@@ -16304,7 +16306,7 @@ dropSchemaStatement() throws StandardException :
 }
 {
 	// GemStone changes BEGIN
-	<SCHEMA>
+	( <SCHEMA> | <DATABASE> )
 	{
 		CompilerContext cc = getCompilerContext();
 		cc.markAsDDLForSnappyUse(true);

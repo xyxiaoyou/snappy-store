@@ -393,7 +393,7 @@ public final class TXState implements TXStateInterface {
     // We don't know the semantics for RR, so ideally there shouldn't be snapshot for it.
     // Need to disable it.
     if (isSnapshot() && getCache().snapshotEnabled()) {
-      takeSnapshot();
+      takeSnapshot(this.txId);
     } else {
       this.snapshot = null;
     }
@@ -404,8 +404,8 @@ public final class TXState implements TXStateInterface {
     }
   }
 
-  public void takeSnapshot() {
-    this.snapshot = getCache().getSnapshotRVV();
+  public void takeSnapshot(TXId txId) {
+    this.snapshot = getCache().getSnapshotRVV(txId);
     if (TXStateProxy.LOG_FINE) {
       this.txManager.getLogger().info(LocalizedStrings.DEBUG,
           " The snapshot taken in txStats is " + this.snapshot);

@@ -446,11 +446,12 @@ public final class FabricDatabase implements ModuleControl,
       notifyRunning();
       return;
     }
+    final GemFireCacheImpl cache = GemFireCacheImpl.getExisting();
+    final LogWriter logger = cache.getLogger();
+    final EmbedConnection embedConn = (EmbedConnection)conn;
 
+    List<GfxdSystemProcedureMessage> postMsgs = null;
     try {
-      final EmbedConnection embedConn = (EmbedConnection)conn;
-      final GemFireCacheImpl cache = GemFireCacheImpl.getExisting();
-      final LogWriter logger = cache.getLogger();
       final LanguageConnectionContext lcc = embedConn.getLanguageConnection();
       final GemFireTransaction tc = (GemFireTransaction)lcc
           .getTransactionExecute();
@@ -496,7 +497,7 @@ public final class FabricDatabase implements ModuleControl,
         else {
           this.memStore.getDDLStmtQueue().initializeQueue(this.dd);
         }
-        postCreateDDLReplay(embedConn, bootProps, lcc, tc, logger);
+        postMsgs =  postCreateDDLReplay(embedConn, bootProps, lcc, tc, logger);
       } finally {
         if (ddReadLockAcquired) {
           this.dd.unlockAfterReading(null);
@@ -538,7 +539,7 @@ public final class FabricDatabase implements ModuleControl,
       }
     } catch (Throwable t) {
       try {
-        LogWriter logger = Misc.getCacheLogWriter();
+
         if (logger != null) {
           logger.warning("got throwable: " + t.getMessage() + " calling shut down", t);
         }
@@ -569,6 +570,30 @@ public final class FabricDatabase implements ModuleControl,
       throw StandardException.newException(SQLState.BOOT_DATABASE_FAILED, t,
           Attribute.GFXD_DBNAME);
     }
+
+
+    for (GfxdSystemProcedureMessage msg : postMsgs) {
+      if (msg.getSysProcMethod().isOffHeapMethod()
+        && this.memStore.getGemFireCache().getOffHeapStore() == null) {
+        if (logger.severeEnabled()) {
+          logger.severe("FabricDatabase: aborted initial replay "
+            + "for message " + msg + " method "
+            + msg.getSysProcMethod().name());
+        }
+        continue;
+      }
+      try {
+        msg.execute();
+      } catch (Exception ex) {
+        if (logger.severeEnabled()) {
+          logger.severe("FabricDatabase: failed initial replay "
+            + "for message " + msg + " due to exception", ex);
+        }
+        throw StandardException.newException(SQLState.BOOT_DATABASE_FAILED, ex,
+          Attribute.GFXD_DBNAME);
+      }
+    }
+
   }
 
   private Region createSnappySpecificGlobalCmdRegion(boolean isLead) throws IOException, ClassNotFoundException {
@@ -919,7 +944,7 @@ public final class FabricDatabase implements ModuleControl,
    * Replays the initial DDL received by GII from other nodes or recovered from
    * disc.
    */
-  private void postCreateDDLReplay(final EmbedConnection embedConn,
+  private List<GfxdSystemProcedureMessage> postCreateDDLReplay(final EmbedConnection embedConn,
       final Properties bootProps, final LanguageConnectionContext lcc,
       final GemFireTransaction tc, final LogWriter logger) throws Exception {
 
@@ -1000,7 +1025,7 @@ public final class FabricDatabase implements ModuleControl,
     final LinkedHashSet<GemFireContainer> uninitializedTables =
         new LinkedHashSet<GemFireContainer>();
     final Statement stmt = embedConn.createStatement();
-
+    List<GfxdSystemProcedureMessage> postMessages = new ArrayList<>();
     try {
       // commenting out for snap-585
       /*
@@ -1117,7 +1142,11 @@ public final class FabricDatabase implements ModuleControl,
           // for user-defined authenticators
           if (qVal instanceof GfxdSystemProcedureMessage) {
             final GfxdSystemProcedureMessage msg =
-                (GfxdSystemProcedureMessage) qVal;
+                (GfxdSystemProcedureMessage)qVal;
+            if (msg.postprocess()) {
+              postMessages.add(msg);
+              continue;
+            }
             if (msg.getSysProcMethod().isOffHeapMethod()
                 && this.memStore.getGemFireCache().getOffHeapStore() == null) {
               if (logger.severeEnabled()) {
@@ -1142,7 +1171,7 @@ public final class FabricDatabase implements ModuleControl,
               continue;
             }
             final AbstractGfxdReplayableMessage msg =
-                (AbstractGfxdReplayableMessage) qVal;
+                (AbstractGfxdReplayableMessage)qVal;
             try {
               msg.execute();
             } catch (Exception ex) {
@@ -1165,38 +1194,38 @@ public final class FabricDatabase implements ModuleControl,
             // check for any merged DDLs
             final String confTable = conflatable.getRegionToConflate();
             final boolean isCreateTable = conflatable.isCreateTable();
-          /*
-          DDLConflatable dependent = null;
-          if (skipRegionInit.size() > 0) {
-            dependent = skipRegionInit.get(conflatable);
-            final String colocatedWith;
-            // also check if this region is colocated with another whose
-            // initialization has been delayed
-            if (dependent == null && isCreateTable && (colocatedWith =
-                conflatable.getColocatedWithTable()) != null) {
-              // search in the list of regions being skipped
-              for (DDLConflatable oddl : skipRegionInit.keySet()) {
-                if (colocatedWith.equals(oddl.getRegionToConflate())) {
-                  dependent = oddl;
-                  if (traceConflation) {
-                    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_CONFLATION,
-                        "FabricDatabase: delaying initializing ["
-                            + conflatable + "] for: " + oddl);
+            /*
+            DDLConflatable dependent = null;
+            if (skipRegionInit.size() > 0) {
+              dependent = skipRegionInit.get(conflatable);
+              final String colocatedWith;
+              // also check if this region is colocated with another whose
+              // initialization has been delayed
+              if (dependent == null && isCreateTable && (colocatedWith =
+                  conflatable.getColocatedWithTable()) != null) {
+                // search in the list of regions being skipped
+                for (DDLConflatable oddl : skipRegionInit.keySet()) {
+                  if (colocatedWith.equals(oddl.getRegionToConflate())) {
+                    dependent = oddl;
+                    if (traceConflation) {
+                      SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_CONFLATION,
+                          "FabricDatabase: delaying initializing ["
+                              + conflatable + "] for: " + oddl);
+                    }
+                    break;
                   }
-                  break;
+                }
+                if (dependent != null) {
+                  skipRegionInit.put(conflatable, dependent);
                 }
               }
-              if (dependent != null) {
-                skipRegionInit.put(conflatable, dependent);
+              if (dependent != null && logger.infoEnabled()) {
+                logger.info("FabricDatabase: delaying initialization of "
+                    + "entry with key=" + qEntry.getKey() + " due to: "
+                    + dependent);
               }
             }
-            if (dependent != null && logger.infoEnabled()) {
-              logger.info("FabricDatabase: delaying initialization of "
-                  + "entry with key=" + qEntry.getKey() + " due to: "
-                  + dependent);
-            }
-          }
-          */
+            */
 
             boolean skipInitialization = false;
             int pre11SchemaVer = 0;
@@ -1204,11 +1233,11 @@ public final class FabricDatabase implements ModuleControl,
                 && (isCreateTable || conflatable.isAlterTable())) {
               pre11SchemaVer = pre11TableSchemaVer.get(confTable);
             }
-          /*
-          if (dependent != null) {
-            skipInitialization = true;
-          }
-          */
+            /*
+            if (dependent != null) {
+              skipInitialization = true;
+            }
+            */
             if (isCreateTable || conflatable.isCreateIndex()
                 || conflatable.isAlterTable()) {
               // always skip initialization now for the case in #47873
@@ -1221,12 +1250,12 @@ public final class FabricDatabase implements ModuleControl,
             String schema = executeDDL(conflatable, stmt, skipInitialization,
                 embedConn, lastCurrentSchema, lcc, tc, logger);
             if (isCreateTable && skipInitialization) {
-              uninitializedTables.add((GemFireContainer) Misc
+              uninitializedTables.add((GemFireContainer)Misc
                   .getRegionForTableByPath(confTable, true).getUserAttribute());
             }
             // set the current schema version as pre 1.1 recovery version
             if (pre11SchemaVer > 0) {
-              final GemFireContainer container = (GemFireContainer) Misc
+              final GemFireContainer container = (GemFireContainer)Misc
                   .getRegionForTableByPath(confTable, true).getUserAttribute();
               if (container != null
                   && container.getCurrentSchemaVersion() == pre11SchemaVer) {
@@ -1538,12 +1567,13 @@ public final class FabricDatabase implements ModuleControl,
       stmt.close();
       // Setting this to false so that the waiting compactor thread finishes
       this.memStore.setInitialDDLReplayInProgress(false);
-    }
+      // restore the original schema if required
+      if (!ArrayUtils.objectEquals(initSchema, lcc.getCurrentSchemaName())) {
+        FabricDatabase.setupDefaultSchema(dd, lcc, tc, initSchema, true);
+      }
 
-    // restore the original schema if required
-    if (!ArrayUtils.objectEquals(initSchema, lcc.getCurrentSchemaName())) {
-      FabricDatabase.setupDefaultSchema(dd, lcc, tc, initSchema, true);
     }
+    return  postMessages;
   }
 
   private void loadHiveIndexes(final ArrayList<GemFireContainer> uninitializedContainers,

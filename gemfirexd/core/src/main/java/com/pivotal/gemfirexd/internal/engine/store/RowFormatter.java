@@ -5496,24 +5496,16 @@ public final class RowFormatter implements Serializable {
     final int offsetFromMap = this.positionMap[index];
     final ColumnDescriptor cd = this.columns[index];
     final DataValueDescriptor dvd;
-//    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
-//        "RowFormatter#getColumn logical position = " + logicalPosition + " and cd = " + cd);
     if (byteArrays != null) {
       if (!cd.isLob) {
         final byte[] bytes = byteArrays[0];
         final long offsetAndWidth = getOffsetAndWidth(index, bytes,
             offsetFromMap, cd);
-//        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
-//            "RowFormatter#getColumn offsetAndWidth = " + offsetAndWidth);
         if (offsetAndWidth >= 0) {
           final int columnWidth = (int)offsetAndWidth;
           final int offset = (int)(offsetAndWidth >>> Integer.SIZE);
           dvd = cd.columnType.getNull();
-//          SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
-//              "RowFormatter#getColumn empty dvd = " + dvd);
           final int bytesRead = dvd.readBytes(bytes, offset, columnWidth);
-//          SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
-//              "RowFormatter#getColumn after reading bytes dvd = " + dvd);
           assert bytesRead == columnWidth : "bytesRead=" + bytesRead
               + ", columnWidth=" + columnWidth + " for " + dvd;
         } else if (offsetAndWidth == OFFSET_AND_WIDTH_IS_NULL) {
@@ -5527,8 +5519,6 @@ public final class RowFormatter implements Serializable {
         }
       } else {
         dvd = cd.columnType.getNull();
-//        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
-//            "RowFormatter#getColumn isLob = true for dvd " + dvd);
         // for the special case of default value after ALTER TABLE, copy the
         // default bytes
         if (offsetFromMap != 0) {
@@ -7181,7 +7171,7 @@ public final class RowFormatter implements Serializable {
     if (hasUnknown || maxDataLength > Integer.MAX_VALUE) {
       maxDataLength = Integer.MAX_VALUE;
     }
-    calcNumOffsetBytesToUse((int)maxDataLength, result[VAR_DATA_OFFSET_POS],
+    calcNumOffsetBytesToUse((int)maxDataLength, result[NUM_VAR_WIDTH_COLS_POS],
         result);
     return result;
   }
