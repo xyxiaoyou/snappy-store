@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -134,9 +134,9 @@ allprojects {
     PRODUCT_CLASSIFIER = ''
     PRODUCT_RELEASE_STAGE = ''
     PRODUCT_VERSION = "${PRODUCT_MAJOR}.${PRODUCT_MINOR}.${PRODUCT_MAINT}${PRODUCT_CLASSIFIER}"
-    vendorName = 'TIBCO, Inc.'
+    vendorName = 'TIBCO Software Inc.'
     PRODUCT_VENDOR = vendorName
-    COPYRIGHT = "Copyright 2017, ${PRODUCT_VENDOR} All rights reserved."
+    COPYRIGHT = "Copyright (c) 2017-2019, ${PRODUCT_VENDOR} All rights reserved."
 
     if (rootProject.name == 'snappy-store') {
       subprojectBase = ':'
