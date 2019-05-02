@@ -69,11 +69,11 @@ ControlConnection::ControlConnection(ClientService *const &service) :m_serverGro
   boost::assign::insert(m_snappyServerTypeSet)(service->getServerType(true,false,false));
   std::copy(m_locators.begin(),m_locators.end(),std::inserter(m_controlHostSet,m_controlHostSet.end()));
   m_controlLocator = nullptr;
-  //initliaze failoverSQLStateSet
-  short arrSize = sizeof(failoverSQLStateArray)/sizeof(failoverSQLStateArray[0]);
-  for(short i =0; i< arrSize;++i){
-    failoverSQLStateSet.insert(failoverSQLStateArray[i]);
-  }
+//  //initliaze failoverSQLStateSet
+//  short arrSize = sizeof(failoverSQLStateArray)/sizeof(failoverSQLStateArray[0]);
+//  for(short i =0; i< arrSize;++i){
+//    failoverSQLStateSet.insert(failoverSQLStateArray[i]);
+//  }
 }
 const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlConnection(
     const std::vector<thrift::HostAddress>& hostAddrs, ClientService *const &service, std::exception* failure){
@@ -186,7 +186,7 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
       }
       return;
     }catch(thrift::SnappyException &snEx){
-      FailoverStatus status = getFailoverStatus(snEx.exceptionData.sqlState,snEx.exceptionData.errorCode,snEx);
+      FailoverStatus status = NetConnection::getFailoverStatus(snEx.exceptionData.sqlState,snEx.exceptionData.errorCode,snEx);
       if(status== FailoverStatus::NONE){
         throw snEx;
       }else if(status== FailoverStatus::RETRY){
@@ -383,38 +383,3 @@ thrift::SnappyException* ControlConnection::failoverExhausted(const std::set<thr
   return snappyEx;
 }
 
-FailoverStatus ControlConnection::getFailoverStatus(const std::string& sqlState,const int32_t& errorCode, const TException& snappyEx){
-  if(! std::strcmp(SQLState::SNAPPY_NODE_SHUTDOWN.getSQLState(),sqlState.c_str())
-    || std::strcmp(SQLState::NODE_BUCKET_MOVED.getSQLState(),sqlState.c_str())){
-    return FailoverStatus::RETRY;
-  }
-  /* for 08001 we have to, unfortunately, resort to string search to
-  * determine if failover makes sense or it is due to some problem
-  * with authentication or invalid properties */
-  else if(!sqlState.compare("08001")){
-    std::string msg(snappyEx.what());
-    if(!msg.empty() &&
-        ((msg.find("rror")!=std::string::npos)  // cater to CONNECT_UNABLE_TO_CONNECT_TO_SERVER
-            || (msg.find("xception")!=std::string::npos ) // cater to CONNECT_SOCKET_EXCEPTION
-            ||(msg.find("ocket")!=std::string::npos))// cater to CONNECT_UNABLE_TO_OPEN_SOCKET_STREAM
-      ){
-      return FailoverStatus::NEW_SERVER;
-    }
-  }
-  /* for 08004 we have to, unfortunately, resort to string search to
-   *  determine if failover makes sense or it is due to some problem
-   *  with authentication
-   */
-  else if(!sqlState.compare("08004")){
-      std::string msg(snappyEx.what());
-      if(!msg.empty() &&
-         (msg.find("connection refused") !=std::string::npos)
-         ){
-        return FailoverStatus::NEW_SERVER;
-      }
-    }
-  else if(failoverSQLStateSet.find(sqlState)!= failoverSQLStateSet.end()){
-    return FailoverStatus::NEW_SERVER;
-  }
-  return FailoverStatus::NONE;
-}
