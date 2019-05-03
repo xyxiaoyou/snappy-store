@@ -284,7 +284,7 @@ if ((rootProject.name.contains('native') && !rootProject.hasProperty('skipNative
             cppCompiler.args '/W3', '/FS', '/Zc:inline', '/WX', '/EHsc',
                              '/Fdsnappyclient.pdb', '/errorReport:prompt',
                              "/I${VS_2017_INCLUDE_DIR_UM}", "/I${VS_2017_INCLUDE_DIR_SHARED}",
-+                             "/I${VS_2017_INCLUDE_DIR}"
+                             "/I${VS_2017_INCLUDE_DIR}"
             if (buildType == buildTypes.debug) {
               cppCompiler.define '_DEBUG'
               cppCompiler.args '/Od', '/Gm', '/ZI', '/RTC1', '/MDd'
