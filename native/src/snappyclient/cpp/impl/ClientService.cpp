@@ -402,11 +402,11 @@ void ClientService::openConnection(thrift::HostAddress& hostAddr,
 
   while (true) {
     boost::lock_guard<boost::mutex> serviceGuard(m_lock);
-    if (m_loadBalance) {
-      boost::optional<ControlConnection&> controlService = ControlConnection::getOrCreateControlConnection(m_connHosts,this,nullptr);
-      // at this point query the control service for preferred server
-      controlService->getPreferredServer(hostAddr ,nullptr,failedServers,this->m_serverGroups, false);
-    }
+    //if (m_loadBalance) {
+    //  boost::optional<ControlConnection&> controlService = ControlConnection::getOrCreateControlConnection(m_connHosts,this,nullptr);
+    //  // at this point query the control service for preferred server
+    //  controlService->getPreferredServer(hostAddr ,nullptr,failedServers,this->m_serverGroups, false);
+    //}
 
     try {
       // first close any existing transport

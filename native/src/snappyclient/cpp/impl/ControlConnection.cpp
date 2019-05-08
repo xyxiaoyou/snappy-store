@@ -90,10 +90,22 @@ const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlC
     boost::lock_guard<boost::mutex> serviceGuard(controlConn->m_lock);
     std::vector<thrift::HostAddress> _locators = controlConn->m_locators;
     for(thrift::HostAddress hostAddr : hostAddrs){
-      auto result = std::find(_locators.begin(),_locators.end(),hostAddr);
+     /* auto result = std::find(_locators.begin(),_locators.end(),hostAddr);
       if(result == _locators.end()){
         continue;
+      }*/
+      bool result = true; // means not found in vector
+      for (auto it = _locators.begin(); it != _locators.end(); ++it)
+         {
+        if (hostAddr.port != 0 && it->port != 0) {
+          if (hostAddr.hostName.compare(it->hostName) != 0) {
+            result = false;
+            
+          }
+          
+        }
       }
+      if (result) continue;
       auto serviceServerType = service->getServerType(true,false,false); // TODO: need to discuss with sumedh about this getServerType method
       auto contrConnServerType = controlConn->m_snappyServerType;
       if(contrConnServerType == serviceServerType){
