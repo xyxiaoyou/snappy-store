@@ -1640,7 +1640,10 @@ public final class FabricDatabase implements ModuleControl,
           list.add(qEntry);
         } else if (conflatable.isAlterTable() ||
             conflatable.isCreateIndex() ||
-            isGrantRevokeStatement(conflatable)) {
+            isGrantRevokeStatement(conflatable) ||
+             conflatable.isCreateTable() ||
+            conflatable.isDropStatement() ||
+            conflatable.isCreateSchemaText()) {
           otherExtractedDDLs.add(conflatable);
         } else {
           logger.info("Skipping conflatable = " + conflatable);

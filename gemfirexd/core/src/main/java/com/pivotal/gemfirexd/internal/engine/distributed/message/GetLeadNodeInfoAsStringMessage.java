@@ -47,7 +47,7 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
   private DataReqType requestType;
   private Long connID;
 
-  public enum DataReqType {GET_JARS, RECOVER_DATA}
+  public enum DataReqType {GET_JARS, RECOVER_DATA, RECOVER_DDLS}
 
   public GetLeadNodeInfoAsStringMessage(final ResultCollector<Object, Object> rc, DataReqType reqType, Long connID, Object... args) {
     super(rc, null, false, true);
@@ -94,7 +94,11 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
         case RECOVER_DATA:
           result = exportRecoveredData();
           break;
-
+        case RECOVER_DDLS:
+          SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
+              "GetLeadNodeInfoAsStringMessage - case REcover_ddls");
+          result = exportRecoveredDDLs();
+          break;
         default:
           throw new IllegalArgumentException("GetLeadNodeInfoAsStringMessage:" +
               " Unknown data request type: " + this.requestType);
@@ -110,9 +114,14 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
   private String exportRecoveredData() {
 
     com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().recoverData(connID,
-        additionalArgs[0].toString(), additionalArgs[1].toString(), additionalArgs[2].toString());
+        additionalArgs[0].toString(), additionalArgs[1].toString(), additionalArgs[2].toString(), Boolean.parseBoolean(additionalArgs[3].toString()));
 
     return "Data recovered";
+  }
+
+  private String exportRecoveredDDLs() {
+    com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().recoverDDLs(additionalArgs[0].toString());
+    return "DDLs recovered.";
   }
 
   private String handleGetJarsRequest() {

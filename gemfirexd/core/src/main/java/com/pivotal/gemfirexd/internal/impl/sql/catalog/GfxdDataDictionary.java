@@ -1791,14 +1791,23 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
     }
 
     {
-      String[] arg_names = new String[] {"PATH_URI", "FORMAT_TYPE", "TABLES"};
+      String[] arg_names = new String[] {"PATH_URI", "FORMAT_TYPE", "TABLES", "IGNORE_ERROR"};
       TypeDescriptor[] arg_types = new TypeDescriptor[] {
           DataTypeDescriptor.getCatalogType(Types.VARCHAR),
           DataTypeDescriptor.getCatalogType(Types.VARCHAR),
-          DataTypeDescriptor.getCatalogType(Types.VARCHAR) };
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
+          DataTypeDescriptor.getCatalogType(Types.BOOLEAN)};
       super.createSystemProcedureOrFunction("RECOVER_DATA",
           sysUUID, arg_names, arg_types, 0, 0, RoutineAliasInfo.READS_SQL_DATA, null,
           newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
+    }
+
+    {
+      String[] arg_name = new String[] { "EXPORT_URI" };
+      TypeDescriptor[] arg_types = new TypeDescriptor[] {
+          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
+      };
+      super.createSystemProcedureOrFunction("RECOVER_DDLS", sysUUID, arg_name, arg_types, 0, 0, RoutineAliasInfo.READS_SQL_DATA, null, newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
     }
 
     {

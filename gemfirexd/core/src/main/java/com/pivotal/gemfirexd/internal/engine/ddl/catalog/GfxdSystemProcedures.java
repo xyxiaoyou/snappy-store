@@ -1549,8 +1549,18 @@ public class GfxdSystemProcedures extends SystemProcedures {
     }
   }
 
+  /**
+   * A recovery mode procedure which allows the user to export the specified(all) tables/views
+   * in the specified format at the specified location.
+   *
+   * @param exportUri
+   * @param formatType any format supported by the spark dataframe api
+   * @param tableNames comma separated list of fully qualified table names OR all
+   * @param ignoreError ignores any exception while querying and exporting any of the tables.
+   * @throws SQLException
+   */
   // comma separated table names
-  public static void RECOVER_DATA(String exportUri, String formatType, String tableNames) throws SQLException {
+  public static void RECOVER_DATA(String exportUri, String formatType, String tableNames, Boolean ignoreError) throws SQLException {
     try {
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
@@ -1560,12 +1570,37 @@ public class GfxdSystemProcedures extends SystemProcedures {
 
       GfxdListResultCollector collector = new GfxdListResultCollector();
       GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
-          collector, GetLeadNodeInfoAsStringMessage.DataReqType.RECOVER_DATA, connectionId, exportUri, formatType, tableNames);
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.RECOVER_DATA, connectionId, exportUri, formatType, tableNames, ignoreError);
 
       msg.executeFunction();
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
             "RECOVER_DATA successful.");
+      }
+    } catch (StandardException se) {
+      throw PublicAPI.wrapStandardException(se);
+    }
+  }
+
+  /**
+   * Exports all DDLs to specified directory path
+   * @param exportUri complete file path
+   * @throws SQLException
+   */
+
+  public static void RECOVER_DDLS(String exportUri) throws SQLException  {
+    try {
+      if (GemFireXDUtils.TraceSysProcedures) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+            "Executing RECOVER_DDLS");
+      }
+      GfxdListResultCollector collector = new GfxdListResultCollector();
+      GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.RECOVER_DDLS, 0L, exportUri);
+      msg.executeFunction();
+      if (GemFireXDUtils.TraceSysProcedures) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+            "RECOVER_DDLS successful.");
       }
     } catch (StandardException se) {
       throw PublicAPI.wrapStandardException(se);
