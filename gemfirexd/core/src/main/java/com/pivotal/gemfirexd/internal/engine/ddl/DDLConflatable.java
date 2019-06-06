@@ -164,6 +164,8 @@ public final class DDLConflatable extends GfxdDataSerializable implements
         this.additionalFlags = GemFireXDUtils.set(this.additionalFlags,
             F_HAS_COLOCATED_WITH);
       }
+    } else if (constantAction instanceof DropTableConstantAction) {
+      this.flags = GemFireXDUtils.set(this.flags, IS_DROP_TABLE);
     }
     if (implicitSchema != null) {
       this.implicitSchema = implicitSchema;
