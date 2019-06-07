@@ -120,7 +120,7 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
   }
 
   private String exportRecoveredDDLs() {
-    com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().recoverDDLs(additionalArgs[0].toString());
+    com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().recoverDDLs(connID, additionalArgs[0].toString());
     return "DDLs recovered.";
   }
 
