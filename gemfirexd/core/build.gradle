@@ -31,6 +31,7 @@ dependencies {
   compile "org.apache.ant:ant:${antVersion}"
   compile "javax.servlet:javax.servlet-api:${servletAPIVersion}"
   compile "org.apache.thrift:libthrift:${thriftVersion}"
+  compileOnly "org.apache.spark:spark-unsafe_${scalaBinaryVersion}:${sparkVersion}"
   compile "com.esotericsoftware:kryo-shaded:${kryoVersion}"
 
   compileOnly "org.apache.hadoop:hadoop-annotations:${hadoopVersion}"

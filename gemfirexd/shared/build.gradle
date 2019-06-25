@@ -18,6 +18,7 @@
 dependencies {
   compileOnly "org.apache.thrift:libthrift:${thriftVersion}"
   compile "net.java.dev.jna:jna:${jnaVersion}"
+  compileOnly "org.apache.spark:spark-unsafe_${scalaBinaryVersion}:${sparkVersion}"
   compile "commons-io:commons-io:${commonsIoVersion}"
 
   compile project(subprojectBase + 'gemfire-shared')
