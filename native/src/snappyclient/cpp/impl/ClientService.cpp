@@ -105,6 +105,11 @@ std::string ClientService::s_hostId;
 boost::mutex ClientService::s_globalLock;
 bool ClientService::s_initialized = false;
 
+std::set<std::string> NetConnection::failoverSQLStateSet={ "08001",
+                                     "08003", "08004", "08006", "X0J15", "X0Z32", "XN001", "XN014", "XN016",
+                                     "58009", "58014", "58015", "58016", "58017", "57017", "58010", "30021",
+                                     "XJ040", "XJ041", "XSDA3", "XSDA4", "XSDAJ", "XJ217" };
+
 void DEFAULT_OUTPUT_FN(const char *str) {
   LogWriter::info() << str << _SNAPPY_NEWLINE;
 }
@@ -216,14 +221,36 @@ void ClientService::handleUnknownException(const char* op) {
 }
 
 void ClientService::handleSnappyException(const thrift::SnappyException& se) {
+  FailoverStatus status = NetConnection::getFailoverStatus(se.exceptionData.sqlState,
+                                          se.exceptionData.errorCode,se);
+  if(status== FailoverStatus::NONE){
   throw GET_SQLEXCEPTION(se);
+  }else if(status== FailoverStatus::RETRY){
+    // need to do failover to new server, so get the next one
+    //close the connection explicitly since server may still be alive
+    close();
+    std::set<thrift::HostAddress> failedServers;
+    updateFailedServersForCurrent(failedServers,true,nullptr);
+    thrift::HostAddress hostAddr= m_connHosts.at(0);
+    openConnection(hostAddr,failedServers);
+  }
 }
 
 void ClientService::handleTTransportException(const char* op,
     const TTransportException& tte) {
-  checkConnection(op);
+  if (this->m_loadBalance){
+        // need to do failover to new server, so get the next one
+        //close the connection explicitly since server may still be alive
+        close();
+        std::set<thrift::HostAddress> failedServers;
+        updateFailedServersForCurrent(failedServers,true,nullptr);
+        thrift::HostAddress hostAddr= m_connHosts.at(0);
+        openConnection(hostAddr,failedServers);
+      }else{
+        checkConnection(op);
 
-  throwSQLExceptionForNodeFailure(op, tte);
+        throwSQLExceptionForNodeFailure(op, tte);
+      }
 }
 
 void ClientService::handleTProtocolException(const char* op,
@@ -235,18 +262,20 @@ void ClientService::handleTProtocolException(const char* op,
 }
 
 void ClientService::handleTException(const char* op, const TException& te) {
-  checkConnection(op);
+    if (this->m_loadBalance){
+      // need to do failover to new server, so get the next one
+      //close the connection explicitly since server may still be alive
+      close();
+      std::set<thrift::HostAddress> failedServers;
+      updateFailedServersForCurrent(failedServers,true,nullptr);
+      thrift::HostAddress hostAddr= m_connHosts.at(0);
+      openConnection(hostAddr,failedServers);
+    }else{
+    checkConnection(op);
 
-  handleStdException(op, te);
+    handleStdException(op, te);
+    }
 }
-/*
-void ClientService::handleException(const TException* te,
-    const std::set<thrift::HostAddress>& failedServers, bool tryFailover, bool ignoreFailOver,
-    bool createNewConnection, const std::string& op)
-{
-
-}*/
-
 void ClientService::throwSQLExceptionForNodeFailure(const char* op,
     const std::exception& se) {
   std::ostringstream hostAddrStr;
@@ -289,14 +318,14 @@ void ClientService::setPendingTransactionAttrs(
 // settings; this could become configurable in future
 ClientService::ClientService(const std::string& host, const int port,
     thrift::OpenConnectionArgs& connArgs) :
-        // default for load-balance is false
-        m_connArgs(initConnectionArgs(connArgs)), m_loadBalance(false),
-        m_reqdServerType(thrift::ServerType::THRIFT_SNAPPY_CP),
-        m_useFramedTransport(false), m_serverGroups(),
-        m_transport(), m_client(createDummyProtocol()),
-        m_connHosts(1), m_connId(0), m_token(), m_isOpen(false),
-        m_pendingTXAttrs(), m_hasPendingTXAttrs(false),
-        m_isolationLevel(IsolationLevel::NONE), m_lock() {
+            // default for load-balance is true
+            m_connArgs(initConnectionArgs(connArgs)), m_loadBalance(true),
+            m_reqdServerType(thrift::ServerType::THRIFT_SNAPPY_CP),
+            m_useFramedTransport(false), m_serverGroups(),
+            m_transport(), m_client(createDummyProtocol()),
+            m_connHosts(0), m_connId(0), m_token(), m_isOpen(false),
+            m_pendingTXAttrs(), m_hasPendingTXAttrs(false),
+            m_isolationLevel(IsolationLevel::NONE), m_lock() {
   std::map<std::string, std::string>& props = connArgs.properties;
   std::map<std::string, std::string>::iterator propValue;
 
@@ -308,7 +337,7 @@ ClientService::ClientService(const std::string& host, const int port,
   if (!props.empty()) {
     if ((propValue = props.find(ClientAttribute::LOAD_BALANCE))
         != props.end()) {
-      m_loadBalance = boost::iequals("true", propValue->second);
+      m_loadBalance = !(boost::iequals("false", propValue->second));
       props.erase(propValue);
     }
 
@@ -1517,4 +1546,40 @@ void ClientService::updateFailedServersForCurrent(
     thrift::HostAddress pHost;
     controlService->searchRandomServer(failedServers, failure, pHost);
   }
+}
+//void ClientService::
+FailoverStatus NetConnection::getFailoverStatus(const std::string& sqlState,const int32_t& errorCode, const TException& snappyEx){
+  if(! std::strcmp(SQLState::SNAPPY_NODE_SHUTDOWN.getSQLState(),sqlState.c_str())
+    || std::strcmp(SQLState::NODE_BUCKET_MOVED.getSQLState(),sqlState.c_str())){
+    return FailoverStatus::RETRY;
+  }
+  /* for 08001 we have to, unfortunately, resort to string search to
+  * determine if failover makes sense or it is due to some problem
+  * with authentication or invalid properties */
+  else if(!sqlState.compare("08001")){
+    std::string msg(snappyEx.what());
+    if(!msg.empty() &&
+        ((msg.find("rror")!=std::string::npos)  // cater to CONNECT_UNABLE_TO_CONNECT_TO_SERVER
+            || (msg.find("xception")!=std::string::npos ) // cater to CONNECT_SOCKET_EXCEPTION
+            ||(msg.find("ocket")!=std::string::npos))// cater to CONNECT_UNABLE_TO_OPEN_SOCKET_STREAM
+      ){
+      return FailoverStatus::NEW_SERVER;
+    }
+  }
+  /* for 08004 we have to, unfortunately, resort to string search to
+   *  determine if failover makes sense or it is due to some problem
+   *  with authentication
+   */
+  else if(!sqlState.compare("08004")){
+      std::string msg(snappyEx.what());
+      if(!msg.empty() &&
+         (msg.find("connection refused") !=std::string::npos)
+         ){
+        return FailoverStatus::NEW_SERVER;
+      }
+    }
+  else if(failoverSQLStateSet.find(sqlState)!= failoverSQLStateSet.end()){
+    return FailoverStatus::NEW_SERVER;
+  }
+  return FailoverStatus::NONE;
 }

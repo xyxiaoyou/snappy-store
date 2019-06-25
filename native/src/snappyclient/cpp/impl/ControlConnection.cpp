@@ -80,6 +80,7 @@ const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlC
   boost::lock_guard<boost::mutex> globalGuard(s_allConnsLock);
 
   signed short index = static_cast<signed short>(s_allConnections.size());
+  signed short allConnSize = index;
   while (--index >= 0) {
     const std::unique_ptr<ControlConnection>& controlConn = s_allConnections.at(index);
 
@@ -87,30 +88,34 @@ const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlC
     std::vector<thrift::HostAddress> _locators = controlConn->m_locators;
     for(thrift::HostAddress hostAddr : hostAddrs){
       auto result = std::find(_locators.begin(),_locators.end(),hostAddr);
-      if(result == _locators.end()){
-        continue;
-      }
-      auto serviceServerType = service->getServerType(true,false,false); // TODO: need to discuss with sumedh about this getServerType method
-      auto contrConnServerType = controlConn->m_snappyServerType;
-      if(contrConnServerType == serviceServerType){
-        return *controlConn;
-      }else{
-        thrift::SnappyException *ex = new thrift::SnappyException();
-        std::string portStr;
-        Utils::convertIntToString(hostAddr.port,portStr);
-        std::string msg= hostAddr.hostName + ":" + portStr +
-            " as registered but having different type " + Utils::getServerTypeString(contrConnServerType) +
-            " than connection " + Utils::getServerTypeString( serviceServerType) ;
-        SnappyExceptionData snappyExData;
-        //  snappyExData.__set_sqlState("08006.C");// TODO: discuss with sumedh about correct SQLState
-        snappyExData.__set_reason(msg);
 
-        ex->__set_exceptionData(snappyExData);
-        ex->__set_serverInfo(hostAddr.hostName + ":" + portStr );
-        throw ex;
-      }
+      if(result ==  _locators.end()){
+          continue;
+        }else{
+            auto serviceServerType = service->getServerType(true,false,false); // TODO: need to discuss with sumedh about this getServerType method
+            auto contrConnServerType = controlConn->m_snappyServerType;
+            if(contrConnServerType == serviceServerType){
+              return *controlConn;
+            }else{
+              thrift::SnappyException *ex = new thrift::SnappyException();
+              std::string portStr;
+              Utils::convertIntToString(hostAddr.port,portStr);
+              std::string msg= hostAddr.hostName + ":" + portStr +
+                  " as registered but having different type " + Utils::getServerTypeString(contrConnServerType) +
+                  " than connection " + Utils::getServerTypeString( serviceServerType) ;
+              SnappyExceptionData snappyExData;
+              snappyExData.__set_sqlState("08006");
+              snappyExData.__set_reason(msg);
+              //snappyExData.__set_errorCode(17002); //TODO:: Need to confirm with sumedh
+              ex->__set_exceptionData(snappyExData);
+              ex->__set_serverInfo(hostAddr.hostName + ":" + portStr );
+              throw ex;
+            }
+        }
     }
   }
+
+  if(allConnSize == 0){ // first attempt of creating connection
   // if we reached here, then need to create a new ControlConnection
   std::unique_ptr<ControlConnection> controlService ( new ControlConnection(service));
   thrift::HostAddress preferredServer;
@@ -128,12 +133,18 @@ const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlC
   }
   s_allConnections.push_back(std::move(controlService));
   return *s_allConnections.back();
+  }else{
+    thrift::SnappyException *ex = new thrift::SnappyException();
+    SnappyExceptionData snappyExData;
+    snappyExData.__set_sqlState(std::string(SQLState::UNKNOWN_EXCEPTION.getSQLState())); //TODO: need to discuss suitable SQLSTATE with sumedh
+    snappyExData.__set_reason("Failed to connect");
+    ex->__set_exceptionData(snappyExData);
+    throw ex;
+  }
 }
 void ControlConnection::getLocatorPreferredServer(thrift::HostAddress& prefHostAddr,std::set<thrift::HostAddress>& failedServers,
     std::set<std::string>serverGroups){
-  // TODO: SanityManager
   m_controlLocator->getPreferredServer(prefHostAddr,m_snappyServerTypeSet,serverGroups,failedServers);
-  //TODO:SanityManager
 }
 void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,std::exception* failure,bool forFailover){
   std::set<thrift::HostAddress> failedServers;
@@ -143,7 +154,6 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
 void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,std::exception* failure,
     std::set<thrift::HostAddress>& failedServers,
     std::set<std::string>& serverGroups,bool forFailover){
-  //boost::lock_guard<boost::mutex> localGuard(m_lock);
   if(m_controlLocator == nullptr)
   {
     failoverToAvailableHost(failedServers, false,failure);
@@ -155,22 +165,18 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
 
     try{
       if(forFailover){
-        //TODO: SanityManager
         //refresh the full host list
         std::vector<HostAddress> prefServerAndAllHosts;
         m_controlLocator->getAllServersWithPreferredServer(prefServerAndAllHosts,m_snappyServerTypeSet,serverGroups,failedServers);
-        //TODO :: refresh new server list--like java do.
         if(! prefServerAndAllHosts.empty())
         {
         std::vector<HostAddress> allHosts(prefServerAndAllHosts.begin() +1,prefServerAndAllHosts.end());
         refreshAllHosts(allHosts);
         preferredServer = prefServerAndAllHosts.at(0);
         }
-        //TODO :SanityManger
       }else{
         getLocatorPreferredServer(preferredServer,failedServers,serverGroups);
       }
-      // TODO: SanityManager
       if(preferredServer.port <=0){
         /*For this case we don't have a locator or locator unable to
          * determine a preferred server, so choose some server randomly
@@ -187,14 +193,16 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
         }
         searchRandomServer(skipServers, failure,preferredServer);
       }
-      //TODO: Sanitymanger
       return;
     }catch(thrift::SnappyException &snEx){
-      // TODO:
-      //Discuss with Sumedh
-      throw unexpectedError(snEx, m_controlHost);
+      FailoverStatus status = NetConnection::getFailoverStatus(snEx.exceptionData.sqlState,snEx.exceptionData.errorCode,snEx);
+      if(status== FailoverStatus::NONE){
+       throw unexpectedError(snEx, m_controlHost);
+      }else if(status== FailoverStatus::RETRY){
+        forFailover = true;
+        continue;
+      }
     }catch(TException &tex){
-      // TODO: SanityManager
       //Search for a new host for locator query
       // for the first call do not mark controlhost as failed but retry(e.g. for a reconnect case)
       if(firstCall){
@@ -205,7 +213,7 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
       m_controlLocator->getOutputProtocol()->getTransport()->close();
       failoverToAvailableHost(failedServers,true,failure);
       if(failure ==nullptr){
-        failure = &(tex);// TODO: need to look again
+        failure = &(tex);
       }
     }catch(std::exception &ex){
       throw unexpectedError(ex, m_controlHost);
@@ -216,8 +224,6 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
 
 void ControlConnection::searchRandomServer(const std::set<thrift::HostAddress>& skipServers,std::exception* failure,
     thrift::HostAddress& hostAddress){
-
-  //TODO: Need to discuss implemetation of this method and also ClientService:: updateFailedServersForCurrent with sumedh
   std::vector<thrift::HostAddress> searchServers;
   // Note: Do not use unordered_set -- reason is http://www.cplusplus.com/forum/general/198319/
   std::copy(m_controlHostSet.begin(),m_controlHostSet.end(),std::inserter(searchServers,searchServers.end()));
@@ -241,7 +247,6 @@ void ControlConnection::failoverToAvailableHost(std::set<thrift::HostAddress>& f
     std::exception* failure){
   boost::lock_guard<boost::mutex> localGuard(m_lock);
   for(auto iterator = m_controlHostSet.begin();iterator!= m_controlHostSet.end(); ++iterator ){
-  // NEXT: for(thrift::HostAddress controlAddr : m_controlHostSet){
     thrift::HostAddress controlAddr = *iterator;
     if(checkFailedControlHosts && ! failedServers.empty() && (failedServers.find(controlAddr) != failedServers.end())){
       continue;
@@ -263,14 +268,13 @@ void ControlConnection::failoverToAvailableHost(std::set<thrift::HostAddress>& f
             m_snappyServerType == thrift::ServerType::THRIFT_LOCATOR_CP_SSL ||
             m_snappyServerType == thrift::ServerType::THRIFT_SNAPPY_BP_SSL ||
             m_snappyServerType==thrift::ServerType::THRIFT_SNAPPY_CP_SSL){
-          // TODO: Find out whether SnappyTSSLSocket is needed or not, or any other thing is required
           TSSLSocketFactory sslSocketFactory;
           tTransport = sslSocketFactory.createSocket(controlAddr.hostName,controlAddr.port);
         }else if(m_snappyServerType == thrift::ServerType::THRIFT_LOCATOR_BP ||
             m_snappyServerType== thrift::ServerType::THRIFT_LOCATOR_CP ||
             m_snappyServerType== thrift::ServerType::THRIFT_SNAPPY_BP ||
             m_snappyServerType== thrift::ServerType::THRIFT_SNAPPY_CP){
-          tTransport = boost::make_shared<TSocket>(controlAddr.hostName,controlAddr.port); // TODO: Find out whether SnappyTSocket is needed or not, or any other thing is required
+          tTransport = boost::make_shared<TSocket>(controlAddr.hostName,controlAddr.port);
         }
         tTransport->open();
         TTransportFactory* transportFactory = nullptr;
@@ -302,13 +306,12 @@ void ControlConnection::failoverToAvailableHost(std::set<thrift::HostAddress>& f
         break;
       }
     }catch(TException &tExp){
-      failure = &tExp;  // TODO: need to look again
+      failure = &tExp;
       failedServers.insert(controlAddr);
       if(outTransport != nullptr){
         outTransport->close();
       }
       continue;
-      //goto NEXT;
     }catch(std::exception &ex){
       throw unexpectedError(ex,controlAddr);
     }
@@ -329,8 +332,9 @@ const thrift::SnappyException* ControlConnection:: unexpectedError(const std::ex
   }
   thrift::SnappyException *snappyEx = new thrift::SnappyException();
   SnappyExceptionData snappyExData;
-  //snappyExData.__set_sqlState(std::string(SQLState::UNKNOWN_EXCEPTION));// TODO: discuss with sumedh about correct SQLState
+  snappyExData.__set_sqlState(std::string(SQLState::UNKNOWN_EXCEPTION.getSQLState()));
   snappyExData.__set_reason(ex.what());
+
   snappyEx->__set_exceptionData(snappyExData);
 
   std::string portNum;
@@ -369,7 +373,6 @@ void  ControlConnection::refreshAllHosts(const std::vector<thrift::HostAddress>&
   m_controlHostSet.insert(allHosts.begin(),allHosts.end());
 }
 
-
 thrift::SnappyException* ControlConnection::failoverExhausted(const std::set<thrift::HostAddress>& failedServers,
     std::exception* failure) {
 
@@ -381,14 +384,11 @@ thrift::SnappyException* ControlConnection::failoverExhausted(const std::set<thr
   }
   thrift::SnappyException *snappyEx = new thrift::SnappyException();
   SnappyExceptionData snappyExData;
-  //snappyExData.__set_sqlState(std::string(SQLState::DATA_CONTAINER_CLOSED));// TODO: discuss with sumedh about correct SQLState
-  std::string reason ="{Failed afer trying all the servers:}" ;
-  snappyExData.__set_reason(reason);
+  snappyExData.__set_sqlState(std::string(SQLState::DATA_CONTAINER_CLOSED.getSQLState()));
+  std::string reason ="{Failed afer trying all available servers:}" ;
+  snappyExData.__set_reason(reason.append(failedServerString));
   snappyEx->__set_exceptionData(snappyExData);
-  //snappyExData.__set_sqlState();//
-  // TODO:  complete this funtion
   snappyEx->__set_serverInfo(failedServerString);
   return snappyEx;
 }
-
 

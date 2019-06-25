@@ -67,7 +67,6 @@ namespace io {
   namespace snappydata {
     namespace client {
       namespace impl {
-
         /**
          * Holds locator, server information to use for failover. Also provides
          * convenience methods to actually search for an appropriate host for
@@ -96,7 +95,6 @@ namespace io {
           static std::vector<std::unique_ptr<ControlConnection> > s_allConnections;
           /** Global lock for {@link allConnections} */
           static boost::mutex s_allConnsLock;
-
           /*********Member functions**************/
           ControlConnection():m_serverGroups(std::set<std::string>()){};
           ControlConnection(ClientService *const &service);
@@ -115,6 +113,7 @@ namespace io {
 
           void getPreferredServer(thrift::HostAddress& preferredServer,std::exception* failure,
               bool forFailover = false);
+
         public:
 
           static const boost::optional<ControlConnection&> getOrCreateControlConnection(
