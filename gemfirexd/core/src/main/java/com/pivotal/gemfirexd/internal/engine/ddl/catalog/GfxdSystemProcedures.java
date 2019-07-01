@@ -1594,9 +1594,10 @@ public class GfxdSystemProcedures extends SystemProcedures {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
             "Executing RECOVER_DDLS");
       }
+      Long connectionId = Misc.getLanguageConnectionContext().getConnectionId();
       GfxdListResultCollector collector = new GfxdListResultCollector();
       GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
-          collector, GetLeadNodeInfoAsStringMessage.DataReqType.RECOVER_DDLS, 0L, exportUri);
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.RECOVER_DDLS, connectionId, exportUri);
       msg.executeFunction();
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
