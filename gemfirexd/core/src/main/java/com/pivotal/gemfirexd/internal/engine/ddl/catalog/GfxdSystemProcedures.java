@@ -1639,7 +1639,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
     }
   }
 
-  public static void DROP_CATALOG_TABLE_UNSAFE(String fqtn) throws SQLException {
+  public static void REMOVE_METASTORE_ENTRY(String fqtn) throws SQLException {
     String schema;
     String table;
     int dotIndex;
