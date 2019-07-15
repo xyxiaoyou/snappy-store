@@ -362,8 +362,9 @@ public abstract class Misc {
     };
   }
 
-  public static <K, V> String getReservoirRegionNameForSampleTable(String schema, String resolvedBaseName) {
-    Region<K, V> regionBase = Misc.getRegionForTable(resolvedBaseName, false);
+  public static <K, V> String getReservoirRegionNameForSampleTable(
+      String schema, String resolvedBaseName) {
+    Region<K, V> regionBase = Misc.getRegionForTable(resolvedBaseName, true);
     return schema + "_SAMPLE_INTERNAL_" + regionBase.getName();
   }
 
@@ -395,19 +396,13 @@ public abstract class Misc {
 
   public static PartitionedRegion getReservoirRegionForSampleTable(String reservoirRegionName) {
     if (reservoirRegionName != null) {
-      GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
+      GemFireCacheImpl cache = GemFireCacheImpl.getExisting();
       Region<?, ?> childRegion = cache.getRegion(reservoirRegionName);
       if (childRegion != null) {
-        return (PartitionedRegion) childRegion;
+        return (PartitionedRegion)childRegion;
       }
     }
     return null;
-  }
-
-  public static void dropReservoirRegionForSampleTable(PartitionedRegion reservoirRegion) {
-    if (reservoirRegion != null) {
-      reservoirRegion.destroyRegion(null);
-    }
   }
 
   public static PartitionedRegion.PRLocalScanIterator

@@ -62,6 +62,9 @@ public class TradeBuyOrdersDMLStmt extends AbstractDMLStmt {
    *   int tid; //for update or delete unique records to the thread
    */
 
+  public static String str_sid = SQLPrms.isSnappyMode()?"SID".toLowerCase():"SID";
+  public static String str_cid = SQLPrms.isSnappyMode()?"CID".toLowerCase():"CID";
+
   protected static String insert = "insert into trade.buyorders values (?,?,?,?,?,?,?,?)";
   protected static String put = "put into trade.buyorders values (?,?,?,?,?,?,?,?)";
   protected static String[] update = { 
@@ -1183,13 +1186,14 @@ public class TradeBuyOrdersDMLStmt extends AbstractDMLStmt {
       
       int i=0;
       int temp = 0;
+
       while (rs.next() && i<size) {
         if (temp ==0 ) {
-          cid[i] = rs.getInt("CID");
-          sid[i] = rs.getInt("SID");
+          cid[i] = rs.getInt(str_cid);
+          sid[i] = rs.getInt(str_sid);
         } else if (n>=temp) {
-          cid[i] = rs.getInt("CID");
-          sid[i] = rs.getInt("SID");
+          cid[i] = rs.getInt(str_cid);
+          sid[i] = rs.getInt(str_sid);
           i++;
         }
         temp++;                         
