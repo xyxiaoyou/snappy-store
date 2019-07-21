@@ -63,11 +63,7 @@ namespace impl {
 
   class ClientTransport;
   class ControlConnection;
-  enum class FailoverStatus :unsigned char{
-                NONE,         /** no failover to be done */
-                NEW_SERVER,   /** failover to a new server */
-                RETRY         /** retry to the same server */
-              };
+
   class SnappyDataClient : public thrift::SnappyDataServiceClient {
   public:
     SnappyDataClient(protocol::TProtocol* prot) :
@@ -98,7 +94,6 @@ namespace impl {
     bool m_loadBalance;
     thrift::ServerType::type m_reqdServerType;
     bool m_useFramedTransport;
-    //const SSLSocketParameters m_sslParams;
     std::set<std::string> m_serverGroups;
 
     boost::shared_ptr<ClientTransport> m_transport;
@@ -139,23 +134,31 @@ namespace impl {
         boost::shared_ptr<ClientTransport>& returnTransport);
 
     void updateFailedServersForCurrent(std::set<thrift::HostAddress>& failedServers,
-        bool checkAllFailed, std::exception* failure);
+        bool checkAllFailed, const std::exception& failure);
 
   protected:
     virtual void checkConnection(const char* op);
 
-    virtual void handleSnappyException(const thrift::SnappyException& se);
+    virtual void handleSnappyException(const char* op,bool tryFailOver,
+        bool ignoreNodeFailure, bool createNewConnection,
+        std::set<thrift::HostAddress>& failedServers,
+        const thrift::SnappyException& se);
 
     virtual void handleStdException(const char* op,
         const std::exception& stde);
 
-    virtual void handleTTransportException(const char* op,
+    virtual void handleTTransportException(const char* op,bool tryFailover,
+        bool ignoreNodeFailure, bool createNewConnection,
+        std::set<thrift::HostAddress>& failedServers,
         const transport::TTransportException& tte);
 
     virtual void handleTProtocolException(const char* op,
         const protocol::TProtocolException& tpe);
 
-    virtual void handleTException(const char* op, const TException& te);
+    virtual void handleTException(const char* op, bool tryFailover,
+        bool ignoreNodeFailure, bool createNewConnection,
+        std::set<thrift::HostAddress>& failedServers,
+        const TException& te);
 
     virtual void handleUnknownException(const char* op);
 
@@ -163,7 +166,8 @@ namespace impl {
         const std::exception& se);
 
     void openConnection(thrift::HostAddress& hostAddr,
-        std::set<thrift::HostAddress>& failedServers);
+        std::set<thrift::HostAddress>& failedServers,
+        const std::exception& te);
 
     void flushPendingTransactionAttrs();
 
@@ -174,9 +178,27 @@ namespace impl {
 
     void destroyTransport() noexcept;
 
-//    void handleException(const TException* te,
-//        const std::set<thrift::HostAddress>& failedServers, bool tryFailover, bool ignoreFailOver,
-//        bool createNewConnection, const std::string& op);
+    void handleException(const std::exception& te,
+        std::set<thrift::HostAddress>& failedServers, bool tryFailover,
+        bool ignoreNodeFailure, bool createNewConnection, const std::string& op);
+
+    void newSnappyExceptionForConnectionClose(const thrift::HostAddress source,
+        std::set<thrift::HostAddress>& failedServers, bool createNewConnection,
+        const thrift::SnappyException& te);
+
+    void newSnappyExceptionForConnectionClose(const thrift::HostAddress& source);
+
+    void tryCreateNewConnection(thrift::HostAddress source,
+        std::set<thrift::HostAddress>& failedServers,
+        const thrift::SnappyException& te);
+
+    BOOST_NORETURN void throwSnappyExceptionForNodeFailure(thrift::HostAddress source,
+        const char* op, std::set<thrift::HostAddress>& failedServers,
+        bool createNewConnection, const thrift::SnappyException& te);
+
+    BOOST_NORETURN void throwSnappyExceptionForNodeFailure(thrift::HostAddress source,
+            const char* op, std::set<thrift::HostAddress>& failedServers,
+            bool createNewConnection, const std::exception& se);
 
   private:
     // the static hostName and hostId used by all connections
@@ -363,14 +385,7 @@ namespace impl {
         }
 
   };
-class NetConnection{
-private:
 
-  /** set of SQLState strings that denote failover should be done */
-    static std::set<std::string> failoverSQLStateSet;
-public:
-  static FailoverStatus getFailoverStatus(const std::string& sqlState,const int32_t& errorCode, const TException& snappyEx);
-  };
 } /* namespace impl */
 } /* namespace client */
 } /* namespace snappydata */

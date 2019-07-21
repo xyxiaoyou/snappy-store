@@ -50,7 +50,7 @@
 #include <boost/range/algorithm.hpp>
 #include <boost/make_shared.hpp>
 #include "ControlConnection.h"
-
+#include "NetConnection.h"
 
 using namespace io::snappydata;
 using namespace io::snappydata::client;
@@ -72,7 +72,7 @@ ControlConnection::ControlConnection(ClientService *const &service) :m_serverGro
 }
 
 const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlConnection(
-    const std::vector<thrift::HostAddress>& hostAddrs, ClientService *const &service, std::exception* failure){
+    const std::vector<thrift::HostAddress>& hostAddrs, ClientService *const &service, const std::exception& failure){
 
   // loop through all ControlConnections since size of this global list is
   // expected to be in single digit (total number of distributed systems)
@@ -142,16 +142,19 @@ const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlC
     throw ex;
   }
 }
-void ControlConnection::getLocatorPreferredServer(thrift::HostAddress& prefHostAddr,std::set<thrift::HostAddress>& failedServers,
+void ControlConnection::getLocatorPreferredServer(thrift::HostAddress& prefHostAddr,
+    std::set<thrift::HostAddress>& failedServers,
     std::set<std::string>serverGroups){
   m_controlLocator->getPreferredServer(prefHostAddr,m_snappyServerTypeSet,serverGroups,failedServers);
 }
-void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,std::exception* failure,bool forFailover){
+void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
+    const std::exception& failure,bool forFailover){
   std::set<thrift::HostAddress> failedServers;
   std::set<std::string> serverGroups;
   return getPreferredServer(preferredServer,failure,failedServers,serverGroups,forFailover);
 }
-void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,std::exception* failure,
+void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
+    const std::exception& failure,
     std::set<thrift::HostAddress>& failedServers,
     std::set<std::string>& serverGroups,bool forFailover){
   if(m_controlLocator == nullptr)
@@ -212,9 +215,9 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
       }
       m_controlLocator->getOutputProtocol()->getTransport()->close();
       failoverToAvailableHost(failedServers,true,failure);
-      if(failure ==nullptr){
-        failure = &(tex);
-      }
+//      if(failure ==nullptr){
+//        failure = &(tex);
+//      }
     }catch(std::exception &ex){
       throw unexpectedError(ex, m_controlHost);
     }
@@ -222,8 +225,8 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
   }
 }
 
-void ControlConnection::searchRandomServer(const std::set<thrift::HostAddress>& skipServers,std::exception* failure,
-    thrift::HostAddress& hostAddress){
+void ControlConnection::searchRandomServer(const std::set<thrift::HostAddress>& skipServers,
+    const std::exception& failure,thrift::HostAddress& hostAddress){
   std::vector<thrift::HostAddress> searchServers;
   // Note: Do not use unordered_set -- reason is http://www.cplusplus.com/forum/general/198319/
   std::copy(m_controlHostSet.begin(),m_controlHostSet.end(),std::inserter(searchServers,searchServers.end()));
@@ -243,8 +246,8 @@ void ControlConnection::searchRandomServer(const std::set<thrift::HostAddress>& 
   if(findIt) return;
   throw failoverExhausted(skipServers,failure);
 }
-void ControlConnection::failoverToAvailableHost(std::set<thrift::HostAddress>& failedServers,bool checkFailedControlHosts,
-    std::exception* failure){
+void ControlConnection::failoverToAvailableHost(std::set<thrift::HostAddress>& failedServers,
+    bool checkFailedControlHosts, const std::exception& failure){
   boost::lock_guard<boost::mutex> localGuard(m_lock);
   for(auto iterator = m_controlHostSet.begin();iterator!= m_controlHostSet.end(); ++iterator ){
     thrift::HostAddress controlAddr = *iterator;
@@ -306,7 +309,7 @@ void ControlConnection::failoverToAvailableHost(std::set<thrift::HostAddress>& f
         break;
       }
     }catch(TException &tExp){
-      failure = &tExp;
+      //failure = &tExp;
       failedServers.insert(controlAddr);
       if(outTransport != nullptr){
         outTransport->close();
@@ -374,7 +377,7 @@ void  ControlConnection::refreshAllHosts(const std::vector<thrift::HostAddress>&
 }
 
 thrift::SnappyException* ControlConnection::failoverExhausted(const std::set<thrift::HostAddress>& failedServers,
-    std::exception* failure) {
+    const std::exception& failure) {
 
   std::string failedServerString;
   for(thrift::HostAddress host : failedServers){

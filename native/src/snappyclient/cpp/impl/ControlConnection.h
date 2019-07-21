@@ -100,32 +100,36 @@ namespace io {
           ControlConnection(ClientService *const &service);
 
           void failoverToAvailableHost(std::set<thrift::HostAddress>& failedServers,
-              bool checkFailedControlHosts,  std::exception* failure);
+              bool checkFailedControlHosts, const std::exception& failure);
 
           void refreshAllHosts(const std::vector<thrift::HostAddress>& allHosts);
 
-          const thrift::SnappyException* unexpectedError(const std::exception& e, const thrift::HostAddress& host);
+          const thrift::SnappyException* unexpectedError(const std::exception& e,
+              const thrift::HostAddress& host);
 
-          thrift::SnappyException* failoverExhausted(const std::set<thrift::HostAddress>& failedServers,std::exception* failure);
+          thrift::SnappyException* failoverExhausted(const std::set<thrift::HostAddress>& failedServers,
+              const std::exception& failure);
 
-          void getLocatorPreferredServer(thrift::HostAddress& prefHostAddr,std::set<thrift::HostAddress>& failedServers,
+          void getLocatorPreferredServer(thrift::HostAddress& prefHostAddr,
+              std::set<thrift::HostAddress>& failedServers,
               std::set<std::string>serverGroups);
 
-          void getPreferredServer(thrift::HostAddress& preferredServer,std::exception* failure,
-              bool forFailover = false);
+          void getPreferredServer(thrift::HostAddress& preferredServer,
+              const std::exception& failure, bool forFailover = false);
 
         public:
 
           static const boost::optional<ControlConnection&> getOrCreateControlConnection(
-              const std::vector<thrift::HostAddress>& hostAddrs, ClientService *const &service, std::exception* failure);
+              const std::vector<thrift::HostAddress>& hostAddrs, ClientService *const &service,
+              const std::exception& failure);
 
-          void getPreferredServer(thrift::HostAddress& preferredServer,std::exception* failure,
+          void getPreferredServer(thrift::HostAddress& preferredServer,const std::exception& failure,
               std::set<thrift::HostAddress>& failedServers,
               std::set<std::string>& serverGroups,bool forFailover = false);
 
 
           void searchRandomServer(const std::set<thrift::HostAddress>& skipServers,
-              std::exception* failure,thrift::HostAddress& hostAddress);
+             const std::exception& failure,thrift::HostAddress& hostAddress);
         };
 
       } /* namespace impl */
