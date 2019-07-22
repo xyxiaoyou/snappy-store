@@ -178,10 +178,6 @@ namespace impl {
 
     void destroyTransport() noexcept;
 
-    void handleException(const std::exception& te,
-        std::set<thrift::HostAddress>& failedServers, bool tryFailover,
-        bool ignoreNodeFailure, bool createNewConnection, const std::string& op);
-
     void newSnappyExceptionForConnectionClose(const thrift::HostAddress source,
         std::set<thrift::HostAddress>& failedServers, bool createNewConnection,
         const thrift::SnappyException& te);

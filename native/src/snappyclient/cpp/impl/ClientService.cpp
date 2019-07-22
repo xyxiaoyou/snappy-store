@@ -257,7 +257,6 @@ void ClientService::handleSnappyException(const char* op, bool tryFailover,
 
   if(createNewConnection){ //failover
     close();
-//    thrift::HostAddress hostAddr= m_connHosts.at(0);
     openConnection(m_currentHostAddr,failedServers,se);
   }
 }
@@ -1732,8 +1731,6 @@ void ClientService::close() {
 void ClientService::updateFailedServersForCurrent(
     std::set<thrift::HostAddress>& failedServers, bool checkAllFailed,
     const std::exception& failure) {
-
-  //TODO:: Need to discuss with sumedh about this method
   thrift::HostAddress host = this->m_currentHostAddr;
 
   auto ret = failedServers.insert(host);
@@ -1745,24 +1742,6 @@ void ClientService::updateFailedServersForCurrent(
   }
 }
 
-void ClientService::handleException(const std::exception& te,
-        std::set<thrift::HostAddress>& failedServers, bool tryFailover,
-        bool ignoreNodeFailure,bool createNewConnection,
-        const std::string& op){
-//  DEFAULT_OUTPUT_FN(std::string("ClientService received exception for").append(op)
-//      .append(". Failed Servers=").append(failedServers.))
-//  if( !m_isOpen && createNewConnection){
-//    newSnappyExceptionForConnectionClose(m_currentHostAddr, failedServers,
-//        createNewConnection, te);
-//  }
-//  if( ! m_loadBalance || m_isolationLevel != IsolationLevel::NONE){
-//    tryFailover = false;
-//  }
-//  if(dynamic_cast<thrift::SnappyException*>(te) != nullptr){
-//    auto snappyEx = dynamic_cast<thrift::SnappyException*>(te);
-//    handleSnappyException(op, tryFailover, &snappyEx,failedServers);
-//  }
-}
 void ClientService::newSnappyExceptionForConnectionClose(const thrift::HostAddress source,
         std::set<thrift::HostAddress>& failedServers, bool createNewConnection,
         const thrift::SnappyException& snappyEx){
@@ -1809,8 +1788,7 @@ void ClientService::tryCreateNewConnection(thrift::HostAddress source,
     if (this->m_loadBalance){
       std::set<thrift::HostAddress> failedServers;
       updateFailedServersForCurrent(failedServers,true,te);
-      thrift::HostAddress hostAddr= m_currentHostAddr;
-      openConnection(hostAddr,failedServers, te);
+      openConnection(m_currentHostAddr,failedServers, te);
     }
   }catch(...){
     throw te;
@@ -1829,7 +1807,6 @@ void ClientService::throwSnappyExceptionForNodeFailure(thrift::HostAddress sourc
   // create a new connection in any case for future operations
   if(createNewConnection && m_loadBalance){
     updateFailedServersForCurrent(failedServers,false,se);
-//    thrift::HostAddress hostAddr= m_connHosts.at(0);
     openConnection(source,failedServers,se);
   }
   throwSQLExceptionForNodeFailure(op,se);
@@ -1846,7 +1823,6 @@ void ClientService::throwSnappyExceptionForNodeFailure(thrift::HostAddress sourc
   // create a new connection in any case for future operations
   if(createNewConnection && m_loadBalance){
     updateFailedServersForCurrent(failedServers,false,se);
-//    thrift::HostAddress hostAddr= m_connHosts.at(0);
     openConnection(source,failedServers,se);
   }
   throwSQLExceptionForNodeFailure(op,se);
