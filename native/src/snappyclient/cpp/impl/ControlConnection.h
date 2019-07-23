@@ -107,7 +107,7 @@ namespace io {
           const thrift::SnappyException* unexpectedError(const std::exception& e,
               const thrift::HostAddress& host);
 
-          thrift::SnappyException* failoverExhausted(const std::set<thrift::HostAddress>& failedServers,
+          void failoverExhausted(const std::set<thrift::HostAddress>& failedServers,
               const std::exception& failure);
 
           void getLocatorPreferredServer(thrift::HostAddress& prefHostAddr,

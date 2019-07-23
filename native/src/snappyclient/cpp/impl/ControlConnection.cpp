@@ -244,7 +244,7 @@ void ControlConnection::searchRandomServer(const std::set<thrift::HostAddress>& 
     }
   }
   if(findIt) return;
-  throw failoverExhausted(skipServers,failure);
+  failoverExhausted(skipServers,failure);
 }
 void ControlConnection::failoverToAvailableHost(std::set<thrift::HostAddress>& failedServers,
     bool checkFailedControlHosts, const std::exception& failure){
@@ -324,7 +324,7 @@ void ControlConnection::failoverToAvailableHost(std::set<thrift::HostAddress>& f
     m_controlLocator.reset (new thrift::LocatorServiceClient(inProtocol,outProtocol));
     return;
   }
-  throw failoverExhausted(failedServers,failure);
+  failoverExhausted(failedServers,failure);
 }
 
 const thrift::SnappyException* ControlConnection:: unexpectedError(const std::exception& ex, const thrift::HostAddress& host){
@@ -376,7 +376,7 @@ void  ControlConnection::refreshAllHosts(const std::vector<thrift::HostAddress>&
   m_controlHostSet.insert(allHosts.begin(),allHosts.end());
 }
 
-thrift::SnappyException* ControlConnection::failoverExhausted(const std::set<thrift::HostAddress>& failedServers,
+void ControlConnection::failoverExhausted(const std::set<thrift::HostAddress>& failedServers,
     const std::exception& failure) {
 
   std::string failedServerString;
@@ -392,6 +392,6 @@ thrift::SnappyException* ControlConnection::failoverExhausted(const std::set<thr
   snappyExData.__set_reason(reason.append(failedServerString));
   snappyEx->__set_exceptionData(snappyExData);
   snappyEx->__set_serverInfo(failedServerString);
-  return snappyEx;
+  throw snappyEx;
 }
 
