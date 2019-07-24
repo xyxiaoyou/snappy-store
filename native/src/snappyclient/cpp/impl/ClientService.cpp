@@ -373,7 +373,7 @@ void ClientService::setPendingTransactionAttrs(
 ClientService::ClientService(const std::string& host, const int port,
     thrift::OpenConnectionArgs& connArgs) :
             // default for load-balance is false
-          m_connArgs(initConnectionArgs(connArgs)), m_loadBalance(false),
+          m_connArgs(initConnectionArgs(connArgs)), m_loadBalance(true),
           m_reqdServerType(thrift::ServerType::THRIFT_SNAPPY_CP),
           m_useFramedTransport(false), m_serverGroups(),
           m_transport(), m_client(createDummyProtocol()),
@@ -391,7 +391,7 @@ ClientService::ClientService(const std::string& host, const int port,
   if (!props.empty()) {
     if ((propValue = props.find(ClientAttribute::LOAD_BALANCE))
         != props.end()) {
-      m_loadBalance = boost::iequals("true", propValue->second);
+      m_loadBalance = !(boost::iequals("false", propValue->second));
       props.erase(propValue);
     }
 

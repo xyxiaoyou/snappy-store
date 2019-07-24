@@ -18,37 +18,36 @@ int main(int argc, char **argv) {
     properties.insert(std::pair<std::string, std::string>("load-balance","true"));
     Connection conn;
     conn.open("localhost", 1527,"app","app",properties);
-    std::cout << "before thread connected to :"<< conn.getCurrentHostAddress() <<std::endl;
-
-    //executing query in table already present-before stopping server
-    //for(int i=0;i <10;i++)
-    auto count = conn.executeQuery("Show databases");
-    
+    std::cout << "before stopping server- connected to :"<< conn.getCurrentHostAddress() <<std::endl;
+    // creating dummy data
+    conn.execute("drop table if exists FailOverTest.test");
+    conn.execute("drop schema if exists  FailOverTest");
+    conn.execute("create schema FailOverTest");
+    conn.execute("create table FailOverTest.test(id int) as select id from range(120000)");
+    auto count = conn.executeQuery("select * from FailOverTest.test");
     if(count > 0 )
-    {
-      std::cout << "Query execute successfully before server stop"<<std::endl;
-    }
+      {
+        std::cout << "Query execute successfully before server stop"<<std::endl;
+      }
+    //choose server -which one to stop-- for this test running only two server with default port configuration
     int connectPort = conn.getCurrentHostAddress().port;
     string serverDir="./work/";
     if(connectPort != 1528){
       serverDir.append("localhost-server-2");
     }else{
-      serverDir.append("localhost-server-1");
+    serverDir.append("localhost-server-1");
     }
     serverStopScript.append(serverDir);
 
-    //stopping the server
+    //stop the server
     std::thread t1(stopServer,serverStopScript);
     t1.join();
-    //executing query in table already present-after stopping server
-    //for(int i=0;i <10;i++)
-    count =  conn.executeQuery("Show databases");
-    if(count > 0 )
-    {
-      std::cout << "Query execute successfully after server stop"<<std::endl;
-    }
-    std::cout << "after thread connected to :"<< conn.getCurrentHostAddress() <<std::endl;
+
+    count = conn.executeQuery("select * from FailOverTest.test");
+
+    conn.close();
     } catch (SQLException& sqle) {
+        std::cout<< "ExecuteQuery failed, throws exception"<<std::endl;
         sqle.printStackTrace(std::cout);
     }
 }
