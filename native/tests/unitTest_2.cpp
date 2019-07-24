@@ -10,13 +10,14 @@ void stopServer(string command){
 }
 
 int main(int argc, char **argv) {
+  Connection conn;
   try {
     string snappyHomeDir(argv[1]);
     string serverStopScript ;
     serverStopScript.append("cd  ").append(snappyHomeDir).append("; ./sbin/snappy-server.sh stop -dir=");
     std::map<std::string, std::string> properties;
     properties.insert(std::pair<std::string, std::string>("load-balance","true"));
-    Connection conn;
+    
     conn.open("localhost", 1527,"app","app",properties);
     std::cout << "before stopping server- connected to :"<< conn.getCurrentHostAddress() <<std::endl;
     // creating dummy data
@@ -47,6 +48,7 @@ int main(int argc, char **argv) {
 
     conn.close();
     } catch (SQLException& sqle) {
+        if(conn.isOpen()) conn.close();
         std::cout<< "ExecuteQuery failed, throws exception"<<std::endl;
         sqle.printStackTrace(std::cout);
     }

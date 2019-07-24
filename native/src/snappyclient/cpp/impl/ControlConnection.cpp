@@ -214,10 +214,7 @@ void ControlConnection::getPreferredServer(thrift::HostAddress& preferredServer,
         failedServers.insert(m_controlHost);
       }
       m_controlLocator->getOutputProtocol()->getTransport()->close();
-      failoverToAvailableHost(failedServers,true,failure);
-//      if(failure ==nullptr){
-//        failure = &(tex);
-//      }
+      failoverToAvailableHost(failedServers,true,tex);
     }catch(std::exception &ex){
       throw unexpectedError(ex, m_controlHost);
     }
@@ -309,7 +306,7 @@ void ControlConnection::failoverToAvailableHost(std::set<thrift::HostAddress>& f
         break;
       }
     }catch(TException &tExp){
-      //failure = &tExp;
+      tExp.what();
       failedServers.insert(controlAddr);
       if(outTransport != nullptr){
         outTransport->close();
