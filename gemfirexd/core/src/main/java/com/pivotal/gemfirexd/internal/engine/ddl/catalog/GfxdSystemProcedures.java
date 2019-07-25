@@ -1639,7 +1639,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
     }
   }
 
-  public static void REMOVE_METASTORE_ENTRY(String fqtn, Boolean ignoreException) throws SQLException {
+  public static void REMOVE_METASTORE_ENTRY(String fqtn, Boolean forceDrop) throws SQLException {
     String schema;
     String table;
     int dotIndex;
@@ -1656,7 +1656,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
       table = fqtn;
     }
     ExternalCatalog catalog = Misc.getMemStore().getExistingExternalCatalog();
-    catalog.removeTableUnsafeIfExists(schema, table, ignoreException);
+    catalog.removeTableUnsafeIfExists(schema, table, forceDrop);
     CallbackFactoryProvider.getStoreCallbacks().registerCatalogSchemaChange();
   }
 

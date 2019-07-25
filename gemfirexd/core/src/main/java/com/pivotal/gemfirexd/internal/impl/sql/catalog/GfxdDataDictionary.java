@@ -2020,7 +2020,7 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
     {
       // REMOVE_METASTORE_ENTRY(String)
       // Note: policies and base tables are not dropped
-      String[] arg_name = new String[] {"FQTN", "IGNORE_EXCEPTION"};
+      String[] arg_name = new String[] {"FQTN", "FORCE_DROP"};
       TypeDescriptor[] arg_types = new TypeDescriptor[] {
           DataTypeDescriptor.getCatalogType(Types.VARCHAR),
           DataTypeDescriptor.getCatalogType(Types.BOOLEAN)
