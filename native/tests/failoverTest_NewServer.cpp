@@ -1,6 +1,5 @@
 #include "Connection.h"
 #include <iostream>
-//#include <fstream>
 #include <thread>
 using namespace io::snappydata::client;
 using namespace std;
@@ -19,14 +18,14 @@ int main(int argc, char **argv) {
     properties.insert(std::pair<std::string, std::string>("load-balance","true"));
     
     conn.open("localhost", 1527,"app","app",properties);
-    std::cout << "before thread connected to :"<< conn.getCurrentHostAddress() <<std::endl;
+    std::cout << "before stopping server connected to :"<< conn.getCurrentHostAddress() <<std::endl;
 
     //executing query in table already present-before stopping server
     auto count = conn.executeQuery("Show databases");
     
     if(count > 0 )
     {
-      std::cout << "Query execute successfully before server stop"<<std::endl;
+      std::cout << "Query execute successfully stopping server"<<std::endl;
     }
     int connectPort = conn.getCurrentHostAddress().port;
     string serverDir="./work/";
@@ -47,7 +46,7 @@ int main(int argc, char **argv) {
     {
       std::cout << "Query execute successfully after server stop"<<std::endl;
     }
-    std::cout << "after thread connected to :"<< conn.getCurrentHostAddress() <<std::endl;
+    std::cout << "Test executed successfully connected to :"<< conn.getCurrentHostAddress() <<std::endl;
     } catch (SQLException& sqle) {
         if(conn.isOpen()) conn.close();
         std::cout<< "ExecuteQuery failed, throws exception"<<std::endl;
