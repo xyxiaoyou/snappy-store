@@ -20,15 +20,17 @@ int main(int argc, char **argv) {
     conn.open(locatorIpAddr, stoi(locatorPort),"app","app",properties);
     std::cout << "before stopping server- connected to :"<< conn.getCurrentHostAddress() <<std::endl;
     
-    while(3){
+    for(int i=0;i<10;++i){
+      try{
       std::this_thread::sleep_for(std::chrono::seconds(stoi(timeDuration)));
-      std::cout << "after restart connected to :"<< conn.getCurrentHostAddress() <<std::endl;
+     
       auto count = conn.executeQuery("select * from app.orders");
-      if(count > 0 )
-        {
-          std::cout << "Query execute successfully with server "<< conn.getCurrentHostAddress()  << std::endl;
-        }
-      else break;
+      
+      std::cout << "Query execute successfully with server "<< conn.getCurrentHostAddress()  << std::endl;
+      }catch(...){
+       continue;
+      }
+      //else break;
     }
     conn.close();
     } catch (SQLException& sqle) {
