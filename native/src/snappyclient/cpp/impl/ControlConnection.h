@@ -36,7 +36,6 @@
 #ifndef CONTROLCONNECTION_H_
 #define CONTROLCONNECTION_H_
 
-
 #include "ClientService.h"
 #include <boost/thread/mutex.hpp>
 #include <boost/optional.hpp>
@@ -96,23 +95,29 @@ namespace io {
           /** Global lock for {@link allConnections} */
           static boost::mutex s_allConnsLock;
           /*********Member functions**************/
-          ControlConnection():m_serverGroups(std::set<std::string>()){};
-          ControlConnection(ClientService *const &service);
+          ControlConnection() :
+              m_serverGroups(std::set<std::string>()) {
+          }
+          ;
+          ControlConnection(ClientService * const &service);
 
-          void failoverToAvailableHost(std::set<thrift::HostAddress>& failedServers,
+          void failoverToAvailableHost(
+              std::set<thrift::HostAddress>& failedServers,
               bool checkFailedControlHosts, const std::exception& failure);
 
-          void refreshAllHosts(const std::vector<thrift::HostAddress>& allHosts);
+          void refreshAllHosts(
+              const std::vector<thrift::HostAddress>& allHosts);
 
-          const thrift::SnappyException* unexpectedError(const std::exception& e,
-              const thrift::HostAddress& host);
+          const thrift::SnappyException* unexpectedError(
+              const std::exception& e, const thrift::HostAddress& host);
 
-          void failoverExhausted(const std::set<thrift::HostAddress>& failedServers,
+          void failoverExhausted(
+              const std::set<thrift::HostAddress>& failedServers,
               const std::exception& failure);
 
           void getLocatorPreferredServer(thrift::HostAddress& prefHostAddr,
               std::set<thrift::HostAddress>& failedServers,
-              std::set<std::string>serverGroups);
+              std::set<std::string> serverGroups);
 
           void getPreferredServer(thrift::HostAddress& preferredServer,
               const std::exception& failure, bool forFailover = false);
@@ -120,16 +125,18 @@ namespace io {
         public:
 
           static const boost::optional<ControlConnection&> getOrCreateControlConnection(
-              const std::vector<thrift::HostAddress>& hostAddrs, ClientService *const &service,
-              const std::exception& failure);
+              const std::vector<thrift::HostAddress>& hostAddrs,
+              ClientService * const &service, const std::exception& failure);
 
-          void getPreferredServer(thrift::HostAddress& preferredServer,const std::exception& failure,
+          void getPreferredServer(thrift::HostAddress& preferredServer,
+              const std::exception& failure,
               std::set<thrift::HostAddress>& failedServers,
-              std::set<std::string>& serverGroups,bool forFailover = false);
+              std::set<std::string>& serverGroups, bool forFailover = false);
 
-
-          void searchRandomServer(const std::set<thrift::HostAddress>& skipServers,
-             const std::exception& failure,thrift::HostAddress& hostAddress);
+          void searchRandomServer(
+              const std::set<thrift::HostAddress>& skipServers,
+              const std::exception& failure,
+              thrift::HostAddress& hostAddress);
         };
 
       } /* namespace impl */
