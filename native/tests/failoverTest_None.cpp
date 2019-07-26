@@ -43,9 +43,12 @@ int main(int argc, char **argv) {
     //stop the server
     std::thread t1(stopServer,serverStopScript);
     t1.join();
-
+    std::this_thread::sleep_for(std::chrono::seconds(30));
     count = conn.executeQuery("select * from FailOverTest.test");
-
+    
+    std::cout << "Test executed successfully, no failover tried:"<< conn.getCurrentHostAddress() <<std::endl;
+    conn.execute("drop table if exists FailOverTest.test");
+    conn.execute("drop schema if exists  FailOverTest");
     conn.close();
     } catch (SQLException& sqle) {
         if(conn.isOpen()) conn.close();
