@@ -8099,6 +8099,10 @@ public class PartitionedRegion extends LocalRegion implements
       this.enableAlerts = enableAlerts;
     }
 
+    public String getLockName() {
+      return this.lockName;
+    }
+
     /**
      * Locks the given name (provided during construction) uninterruptibly or
      * throws an exception.
