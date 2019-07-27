@@ -2299,9 +2299,7 @@ public class SQLTest {
     Connection conn = null;
     if(SQLPrms.isSnappyMode()) {
       try {
-        conn = getSnappyConnection();
-        //conn.createStatement().execute("set snappydata.sql.planCachingAll=false");
-        return conn;
+        return getSnappyConnection();
       } catch (SQLException se) {
         throw new TestException("Got exception while getting snappy data connection.", se);
       }
