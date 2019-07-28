@@ -3228,7 +3228,9 @@ public final class PartitionedRegionDataStore implements HasCachePerfStats
         throw new ForceReattemptException("Bucket moved", rde);
       }
     }
-    throw new InternalGemFireError("Got region destroyed message, but neither bucket nor PR was destroyed", rde);
+    throw new InternalGemFireError("Got region destroyed message, but neither bucket (" +
+        br.getFullPath() + ") nor PR (" + br.getPartitionedRegion().getFullPath() +
+        ") was destroyed for operation on " + getPartitionedRegion().getFullPath(), rde);
   }
 
   /**
