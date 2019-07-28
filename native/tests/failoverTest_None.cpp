@@ -13,11 +13,10 @@ int main(int argc, char **argv) {
   Connection conn;
   try {
     string snappyHomeDir(argv[1]);
-    string serverStopScript ;
-    serverStopScript.append("cd  ").append(snappyHomeDir).append("; ./sbin/snappy-server.sh stop -dir=");
+   
     std::map<std::string, std::string> properties;
     properties.insert(std::pair<std::string, std::string>("load-balance","true"));
-    
+    //std::this_thread::sleep_for(std::chrono::seconds(300));
     conn.open("localhost", 1527,"app","app",properties);
     std::cout << "before stopping server- connected to :"<< conn.getCurrentHostAddress() <<std::endl;
     // creating dummy data
@@ -30,26 +29,45 @@ int main(int argc, char **argv) {
       {
         std::cout << "Query execute successfully before server stop"<<std::endl;
       }
-    //choose server -which one to stop-- for this test running only two server with default port configuration
-    int connectPort = conn.getCurrentHostAddress().port;
-    string serverDir="./work/";
-    if(connectPort != 1528){
-      serverDir.append("localhost-server-2");
-    }else{
-    serverDir.append("localhost-server-1");
-    }
-    serverStopScript.append(serverDir);
-
+    //create directory for a new server 2
+    string createServerDir;
+    createServerDir.append("cd  ").append(snappyHomeDir).append("; mkdir ./work/localhost-server-2");
+    system(createServerDir.c_str());
+    //start a server 2
+    string serverStartScript;
+    serverStartScript.append("cd  ").append(snappyHomeDir).append("; ./sbin/snappy-server.sh start -locators=localhost:10334 -dir=");
+    string startNewServer ;
+    startNewServer.append(serverStartScript).append("./work/localhost-server-2");
+    system(startNewServer.c_str());
+    //put on sleep
+    std::this_thread::sleep_for(std::chrono::seconds(50));
+    // stop the connected server 1
+    string serverStopScript ;
+    serverStopScript.append("cd  ").append(snappyHomeDir).append("; ./sbin/snappy-server.sh stop -dir=");
+    string stopRunningServer;
+    stopRunningServer.append(serverStopScript).append("./work/localhost-server-1");
     //stop the server
-    std::thread t1(stopServer,serverStopScript);
+    std::thread t1(stopServer,stopRunningServer);
     t1.join();
-    std::this_thread::sleep_for(std::chrono::seconds(30));
+
+    //std::this_thread::sleep_for(std::chrono::seconds(60));
+
     count = conn.executeQuery("select * from FailOverTest.test");
     
-    std::cout << "Test executed successfully, no failover tried:"<< conn.getCurrentHostAddress() <<std::endl;
+    std::cout << "Test executed successfully,connected to"<< conn.getCurrentHostAddress() <<std::endl;
     conn.execute("drop table if exists FailOverTest.test");
     conn.execute("drop schema if exists  FailOverTest");
     conn.close();
+    //stop server 2
+    serverStopScript.append("./work/localhost-server-2");
+    system(serverStopScript.c_str());
+    //start the server 1 again
+    serverStartScript.append("./work/localhost-server-1");
+    system(serverStartScript.c_str());
+    //create directory for a new server 2
+    string removeServerDir;
+    removeServerDir.append("cd  ").append(snappyHomeDir).append("; rm -r ./work/localhost-server-2");
+    system(removeServerDir.c_str());
     } catch (SQLException& sqle) {
         if(conn.isOpen()) conn.close();
         std::cout<< "ExecuteQuery failed, throws exception"<<std::endl;

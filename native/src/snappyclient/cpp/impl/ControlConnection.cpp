@@ -335,7 +335,7 @@ void ControlConnection::failoverToAvailableHost(
         protocolFactory = 0;
         break;
       }
-    } catch (const TException& te) {
+    } catch (const TException&) {
       failedServers.insert(controlAddr);
       if (outTransport != nullptr) {
         outTransport->close();
