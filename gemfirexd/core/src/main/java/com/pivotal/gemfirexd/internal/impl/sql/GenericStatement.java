@@ -145,8 +145,11 @@ public class GenericStatement
         //private ProcedureProxy procProxy;
         private final GfxdHeapThresholdListener thresholdListener;
         private THashMap ncjMetaData = null;
-        private static final String MISC_DDL_PREFIX =
-            "(STREAMING|DEPLOY|UNDEPLOY|CACHE|UNCACHE|REFRESH|RESET)";
+
+        // patterns for routing of queries (with/without parse exceptions)
+        private static final String DDL_PREFIX =
+            "(ADD|ALTER|ANALYZE|CACHE|CLEAR|CREATE|DEPLOY|DROP|LOAD|MSCK|REFRESH|" +
+                "RESET|STREAMING|TRUNCATE|UNCACHE|UNDEPLOY)";
         private static final String TABLE_DML_SELECT_PATTERN =
             "((((INSERT|PUT)\\s+INTO)|(DELETE\\s+FROM))\\s+(TABLE)?.*\\s+SELECT)";
 	      private static final String CREATE_OR_DROP_PATTERN = "(FUNCTION|POLICY|SCHEMA)";
@@ -154,19 +157,16 @@ public class GenericStatement
 	      private static final String ALTER_TABLE_COMMANDS = "(ADD|DROP|ENABLE|DISABLE)";
 
 	      // final patterns combining the above patterns and also adding EXPLAIN
-	      private static final String ROUTED_QUERY_BASE_PATTERN =
-            MISC_DDL_PREFIX + '|' + TABLE_DML_SELECT_PATTERN +
-                "|((CREATE|DROP)\\s+" + CREATE_OR_DROP_PATTERN +
-                ")|(" + ALTER_TABLE_PREFIX + ALTER_TABLE_COMMANDS + ')';
-	      private static final String ROUTED_QUERY_PREFIX = "^\\s*(EXPLAIN\\s+)?";
-	      private static final Pattern ROUTED_QUERY_PATTERN =
+        private static final String ROUTED_QUERY_BASE_PATTERN =
+            DDL_PREFIX + '|' + TABLE_DML_SELECT_PATTERN;
+        private static final String EXPLAIN_PREFIX = "^\\s*(EXPLAIN\\s+)";
+        private static final Pattern EXPLAIN_PATTERN = Pattern.compile(EXPLAIN_PREFIX,
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+        private static final String ROUTED_QUERY_PREFIX = EXPLAIN_PREFIX + '?';
+        private static final Pattern ROUTED_QUERY_PATTERN =
             Pattern.compile(ROUTED_QUERY_PREFIX + '(' + ROUTED_QUERY_BASE_PATTERN + ")\\s+",
                 Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
-	      // the pattern below is to be excluded from routing
-	      private static final Pattern ALTER_TABLE_CONSTRAINTS =
-            Pattern.compile(ROUTED_QUERY_PREFIX + ALTER_TABLE_PREFIX +
-                "(ADD|DROP)\\s+CONSTRAINT\\s+", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
         private static final Pattern DML_TABLE_PATTERN =
             Pattern.compile("^\\s*(INSERT|UPDATE|DELETE|PUT)\\s+",
                 Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
@@ -611,10 +611,9 @@ public class GenericStatement
 				try {
 					//Route all "insert/put into tab select .. " queries to spark
 
-					if (routeQuery && prepareIsolationLevel == Connection.TRANSACTION_NONE && (
-						ROUTED_QUERY_PATTERN.matcher(source).find() &&
-						!ALTER_TABLE_CONSTRAINTS.matcher(source).find())) {
-							cc.markAsDDLForSnappyUse(true);
+					if (routeQuery && prepareIsolationLevel == Connection.TRANSACTION_NONE &&
+						ROUTED_QUERY_PATTERN.matcher(source).find()) {
+							cc.markAsDDLForSnappyUse(!EXPLAIN_PATTERN.matcher(source).find());
 							return getPreparedStatementForSnappy(false, statementContext, lcc,
 								cc.isMarkedAsDDLForSnappyUse(), checkCancellation,
 								DML_TABLE_PATTERN.matcher(source).find(), null);
@@ -707,16 +706,19 @@ public class GenericStatement
 						qt.bindStatement();
 					}
 					catch(StandardException | AssertFailure ex) {
-				      boolean routeToSnappy = (ex instanceof StandardException && ((StandardException)ex).
-									getMessageId().equals(SQLState.ROW_LEVEL_SECURITY_ENABLED)) ||
-									(routeQuery && !NON_ROUTED_QUERY.matcher(source).find());
+						  boolean isDML = DML_TABLE_PATTERN.matcher(source).find();
+						  String messageId = ex instanceof StandardException ? ((StandardException)ex).getMessageId() : "";
+						  boolean routeToSnappy = messageId.equals(SQLState.ROW_LEVEL_SECURITY_ENABLED) ||
+									(routeQuery && !NON_ROUTED_QUERY.matcher(source).find()
+									//SNAP-2765 don't route if failure due to error such as invalid column name in prepared statement
+									&& !(isDML && isPrepStmtInvalidColumnError(messageId)));
 
 					  if (routeToSnappy) {
 					    if (observer != null) {
 					      observer.testExecutionEngineDecision(qinfo, ExecutionEngine.SPARK, this.statementText);
 					    }
 							return getPreparedStatementForSnappy(true, statementContext, lcc, false,
-							  checkCancellation, DML_TABLE_PATTERN.matcher(source).find(), ex);
+							  checkCancellation, isDML, ex);
 					  }
 					  throw ex;
 					}
@@ -1308,6 +1310,15 @@ public class GenericStatement
 
 
 		return preparedStmt;
+	}
+
+	private boolean isPrepStmtInvalidColumnError(String messageId) {
+		return this.isPreparedStatement() &&
+				(messageId.equals(SQLState.LANG_COLUMN_NOT_FOUND_IN_TABLE)
+				|| messageId.equals(SQLState.LANG_DB2_INVALID_COLS_SPECIFIED)
+				|| messageId.equals(SQLState.LANG_DUPLICATE_COLUMN_NAME_INSERT)
+				|| messageId.equals(SQLState.LANG_DUPLICATE_COLUMN_NAME_UPDATE)
+				|| messageId.equals(SQLState.LANG_COLUMN_NOT_FOUND));
 	}
 
 	public boolean invalidQueryOnColumnTable(LanguageConnectionContext _lcc,
