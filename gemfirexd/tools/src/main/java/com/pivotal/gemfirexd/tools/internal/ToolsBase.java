@@ -173,6 +173,7 @@ public abstract class ToolsBase {
   protected Options buildCommandOptions(final ProcessCommand processor) {
     final Options opts = new Options();
     addConnectionOptions(opts);
+    addOptionalConnectionOptions(opts);
     addCommonOptions(opts);
     processor.addCommandOptions(opts);
     return opts;
@@ -270,12 +271,6 @@ public abstract class ToolsBase {
     opts.addOption(opt);
 
     opt = new GfxdOptionBuilder().withArgName(LocalizedResource.getMessage(
-        "TOOLS_LOCATORS_ARG")).hasArg().withValueSeparator('=')
-        .withDescription(LocalizedResource.getMessage(
-            "TOOLS_LOCATORS_MESSAGE")).create(LOCATORS);
-    opts.addOption(opt);
-
-    opt = new GfxdOptionBuilder().withArgName(LocalizedResource.getMessage(
         "TOOLS_ADDRESS_ARG")).hasArg().withValueSeparator('=')
         .withDescription(LocalizedResource.getMessage(
             "TOOLS_BIND_ADDRESS_MESSAGE")).create(BIND_ADDRESS);
@@ -303,6 +298,15 @@ public abstract class ToolsBase {
         "TOOLS_EXTRA_CONN_PROPS_ARG")).hasArg().withValueSeparator('=')
         .withDescription(LocalizedResource.getMessage(
             "TOOLS_EXTRA_CONN_PROPS_MESSAGE")).create(EXTRA_CONN_PROPS);
+    opts.addOption(opt);
+  }
+
+  protected void addOptionalConnectionOptions(final Options opts) {
+    GfxdOption opt;
+    opt = new GfxdOptionBuilder().withArgName(LocalizedResource.getMessage(
+        "TOOLS_LOCATORS_ARG")).hasArg().withValueSeparator('=')
+        .withDescription(LocalizedResource.getMessage(
+            "TOOLS_LOCATORS_MESSAGE")).create(LOCATORS);
     opts.addOption(opt);
   }
 
