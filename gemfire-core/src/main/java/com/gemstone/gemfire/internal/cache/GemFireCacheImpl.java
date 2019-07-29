@@ -3858,10 +3858,6 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
   public final Region getRegion(String path) {
     return getRegion(path, false);
   }
-  
-  public final Region getRegionThoughUnInitialized(String path) {
-    return getRegion(path, false, true);
-  }
 
   /**
    * returns a set of all current regions in the cache, including buckets
