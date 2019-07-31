@@ -401,6 +401,7 @@ subprojects {
       include '**/*Test.class'
       exclude '**/*TestUtil*'
       exclude '**/*TestBase.class'
+      exclude '**/*HDFS*.class'
       exclude '**/*DUnit*.class'
       exclude '**/derbyTesting/**'
       exclude '**/pxf/**'
