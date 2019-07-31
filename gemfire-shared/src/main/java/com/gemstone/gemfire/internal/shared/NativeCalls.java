@@ -501,6 +501,12 @@ public abstract class NativeCalls {
   public boolean loadNativeLibrary() {
     return false;
   }
+
+  /**
+   * Try to reinitialize native timer if available.
+   */
+  public void reInitNativeTimer() {
+  }
   
   /**
    * whether o/s supports high resolution clock or equivalent 
@@ -511,7 +517,7 @@ public abstract class NativeCalls {
   public boolean isNativeTimerEnabled() {
     return false;
   }
-  
+
   /**
    * This is fall back for jni based library implementation of NanoTimer which
    * is more efficient than current impl through jna.
