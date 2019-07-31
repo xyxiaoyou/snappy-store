@@ -2073,11 +2073,18 @@ public abstract class EmbedConnection implements EngineConnection
 				throw newSQLException(SQLState.NO_AUTO_COMMIT_ON);
 		}
 
+		LanguageConnectionContext lcc = getLanguageConnection();
+		if (lcc.isAllowExplicitCommitTrue()) {
+			// always set autoCommit to true if "allow-explicit-commit"
+			// connection property is true
+			autoCommit = true;
+		}
+
 		if (this.autoCommit != autoCommit)
 			commit();
 
 		this.autoCommit = autoCommit;
-		getLanguageConnection().setAutoCommit(autoCommit);
+		lcc.setAutoCommit(this.autoCommit);
 	}
 	
 	public void setAutoCommit(boolean autoCommit, boolean isInit) throws SQLException {
