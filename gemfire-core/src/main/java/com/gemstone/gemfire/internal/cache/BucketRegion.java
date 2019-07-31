@@ -2983,11 +2983,8 @@ public class BucketRegion extends DistributedRegion implements Bucket {
   }
 
   public long getSizeInMemory() {
-    return Math.max(this.bytesInMemory.get(), 0L);
-  }
-
-  public long getDirectBufferSizeInMemory() {
-    return this.directBufferBytesInMemory.get();
+    return Math.max(this.bytesInMemory.get(), 0L) +
+        this.directBufferBytesInMemory.get();
   }
 
   public long getInProgressSize() {

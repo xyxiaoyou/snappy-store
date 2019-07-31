@@ -242,8 +242,7 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
               entryOverhead = getEntryOverhead(re, sizer);
             }
           }
-          sizeInMemory += constantOverhead + br.getSizeInMemory() +
-              br.getDirectBufferSizeInMemory();
+          sizeInMemory += constantOverhead + br.getSizeInMemory();
           sizeOfRegion += constantOverhead + br.getTotalBytes();
           entryCount += br.entryCount();
         }
