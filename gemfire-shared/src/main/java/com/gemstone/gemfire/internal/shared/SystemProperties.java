@@ -254,6 +254,11 @@ public final class SystemProperties {
     }
   }
 
+  public static boolean isColumnTable(String fullName) {
+    return fullName.endsWith(SHADOW_TABLE_SUFFIX) &&
+        fullName.contains(SHADOW_SCHEMA_NAME);
+  }
+
   public synchronized void setCallbacks(Callbacks cb) {
     this.callbacks = cb;
   }
