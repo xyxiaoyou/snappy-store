@@ -72,6 +72,7 @@ import com.gemstone.gemfire.internal.cache.locks.LockMode;
 import com.gemstone.gemfire.internal.cache.locks.LockingPolicy.ReadEntryUnderLock;
 import com.gemstone.gemfire.internal.cache.locks.ReentrantReadWriteWriteShareLock;
 import com.gemstone.gemfire.internal.cache.partitioned.*;
+import com.gemstone.gemfire.internal.cache.store.SerializedDiskBuffer;
 import com.gemstone.gemfire.internal.cache.tier.sockets.CacheClientNotifier;
 import com.gemstone.gemfire.internal.cache.tier.sockets.ClientTombstoneMessage;
 import com.gemstone.gemfire.internal.cache.tier.sockets.ClientUpdateMessage;
@@ -120,8 +121,11 @@ public class BucketRegion extends DistributedRegion implements Bucket {
    * in theRealMap. Sizes are tallied during put and remove operations.
    */
   private final AtomicLongWithTerminalState bytesInMemory =
-    new AtomicLongWithTerminalState();
-
+      new AtomicLongWithTerminalState();
+  /**
+   * Contains size in bytes of the direct byte buffers stored in memory.
+   */
+  private final AtomicLong directBufferBytesInMemory = new AtomicLong();
   private final AtomicLong inProgressSize = new AtomicLong();
 
   public static final ReadEntryUnderLock READ_SER_VALUE = new ReadEntryUnderLock() {
@@ -2760,6 +2764,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
       this.partitionedRegion.getPrStats().incDataStoreEntryCount(-sizeBeforeClear);
       prDs.updateMemoryStats(-oldMemValue);
     }
+    this.directBufferBytesInMemory.set(0);
     // explicitly clear overflow counters if no diskRegion is present
     // (for latter the counters are cleared by DiskRegion.statsClear)
     if (getDiskRegion() == null) {
@@ -2981,6 +2986,10 @@ public class BucketRegion extends DistributedRegion implements Bucket {
     return Math.max(this.bytesInMemory.get(), 0L);
   }
 
+  public long getDirectBufferSizeInMemory() {
+    return this.directBufferBytesInMemory.get();
+  }
+
   public long getInProgressSize() {
     return inProgressSize.get();
   }
@@ -2991,9 +3000,10 @@ public class BucketRegion extends DistributedRegion implements Bucket {
 
   public long getTotalBytes() {
     long result = this.bytesInMemory.get();
-    if(result == BUCKET_DESTROYED) {
+    if (result == BUCKET_DESTROYED) {
       return 0;
     }
+    result += this.directBufferBytesInMemory.get();
     result += getNumOverflowBytesOnDisk();
     return result;
   }
@@ -3100,6 +3110,19 @@ public class BucketRegion extends DistributedRegion implements Bucket {
       int oldValueSize = calcMemSize(oldValue);
       int newValueSize = calcMemSize(newValue);
       updateBucketMemoryStats(newValueSize - oldValueSize);
+
+      if (this.cache.getMemorySize() > 0) {
+        int directBufferDelta = 0;
+        if (oldValue instanceof SerializedDiskBuffer) {
+          directBufferDelta -= ((SerializedDiskBuffer)oldValue).getOffHeapSizeInBytes();
+        }
+        if (newValue instanceof SerializedDiskBuffer) {
+          directBufferDelta += ((SerializedDiskBuffer)newValue).getOffHeapSizeInBytes();
+        }
+        if (directBufferDelta != 0) {
+          this.directBufferBytesInMemory.getAndAdd(directBufferDelta);
+        }
+      }
     }
   }
 
