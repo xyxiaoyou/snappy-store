@@ -67,6 +67,7 @@ import com.gemstone.gemfire.internal.ClassPathLoader;
 import com.gemstone.gemfire.internal.GFToSlf4jBridge;
 import com.gemstone.gemfire.internal.LogWriterImpl;
 import com.gemstone.gemfire.internal.cache.*;
+import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.gemstone.gnu.trove.THashMap;
@@ -704,7 +705,7 @@ public final class FabricDatabase implements ModuleControl,
     List<String> internalColumnTablesListPerSchema = new LinkedList<>();
     for (Map.Entry<String, List<String>> e : gfDBTablesMap.entrySet()) {
       for (String t : e.getValue()) {
-        if (SystemProperties.isColumnTable(e.getKey() + "." + t)) {
+        if (ClientSharedUtils.isColumnTable(e.getKey() + "." + t)) {
             internalColumnTablesListPerSchema.add(t);
         }
       }
