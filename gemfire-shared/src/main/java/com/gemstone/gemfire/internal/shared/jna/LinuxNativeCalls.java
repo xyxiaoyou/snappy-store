@@ -126,10 +126,18 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
   private static boolean isJNATimerEnabled = false;
 
   public static class TimeSpec extends Structure {
-    public int tv_sec;
-    public int tv_nsec;
+    int tv_sec;
+    int tv_nsec;
 
     static {
+      init();
+    }
+
+    static void loadClass() {
+      // just to ensure class is loaded
+    }
+
+    static void init() {
       try {
         Native.register("rt");
         TimeSpec res = new TimeSpec();
@@ -146,10 +154,6 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
       }
     }
 
-    static void init() {
-      // just invoke the static block
-    }
-
     public static native int clock_getres(int clkId, TimeSpec time)
         throws LastErrorException;
 
@@ -163,10 +167,18 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
   }
 
   public static class TimeSpec64 extends Structure {
-    public long tv_sec;
-    public long tv_nsec;
+    long tv_sec;
+    long tv_nsec;
 
     static {
+      init();
+    }
+
+    static void loadClass() {
+      // just to ensure class is loaded
+    }
+
+    static void init() {
       try {
         Native.register("rt");
         TimeSpec64 res = new TimeSpec64();
@@ -181,10 +193,6 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
       } catch (Throwable t) {
         isJNATimerEnabled = false;
       }
-    }
-
-    static void init() {
-      // just invoke the static block
     }
 
     public static native int clock_getres(int clkId, TimeSpec64 time)
@@ -207,12 +215,24 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
    * {@inheritDoc}
    */
   @Override
-  public boolean isNativeTimerEnabled() {
-    // initialize static blocks
+  public void reInitNativeTimer() {
     if (NativeCallsJNAImpl.is64BitPlatform) {
       TimeSpec64.init();
     } else {
       TimeSpec.init();
+    }
+  }
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public boolean isNativeTimerEnabled() {
+    // initialization already done in static blocks
+    if (NativeCallsJNAImpl.is64BitPlatform) {
+      TimeSpec64.loadClass();
+    } else {
+      TimeSpec.loadClass();
     }
     return isJNATimerEnabled;
   }

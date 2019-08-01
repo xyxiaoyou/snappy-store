@@ -300,21 +300,22 @@ public abstract class LauncherBase {
     if (maxHeapStr != null && maxHeapStr.equals(this.initialHeapSize)) {
       String criticalHeapStr = (String)map.get(CRITICAL_HEAP_PERCENTAGE);
       if (criticalHeapStr == null) {
-        // for larger heaps, keep critical as 95% and 90% for smaller ones;
+        // for larger heaps, keep critical as 95-99% and 90% for smaller ones;
         // also limit memory remaining beyond critical to 4GB
         double heapSize = ClientSharedUtils.parseMemorySize(maxHeapStr, 0L, 0);
         if (heapSize > (40.0 * 1024.0 * 1024.0 * 1024.0)) {
-          // calculate percent that will leave out at max 4GB
-          criticalPercent = (float)(100.0 * (1.0 - twoGB / heapSize));
-          // don't exceed 98%
-          if (criticalPercent > 98.0f) criticalPercent = 98.0f;
+          // calculate percent that will leave out at max 1GB
+          criticalPercent = (float)(100.0 * (1.0 - oneGB / heapSize));
         } else if (heapSize >= twoGB) {
-          criticalPercent = 95.0f;
+          // leave out max 200MB
+          criticalPercent = (float)(100.0 * (1.0 - (200.0 * 1024.0 * 1024.0) / heapSize));
         } else {
           criticalPercent = 90.0f;
         }
+        // don't exceed 99%
+        if (criticalPercent > 99.0f) criticalPercent = 99.0f;
         map.put(CRITICAL_HEAP_PERCENTAGE, "-" + CRITICAL_HEAP_PERCENTAGE +
-            '=' + criticalPercent);
+            '=' + String.format("%.2f", criticalPercent));
       } else {
         criticalPercent = Float.parseFloat(criticalHeapStr.substring(
             criticalHeapStr.indexOf('=') + 1).trim());
