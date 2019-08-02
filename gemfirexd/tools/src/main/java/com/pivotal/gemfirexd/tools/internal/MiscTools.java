@@ -275,4 +275,8 @@ public class MiscTools extends ToolsBase {
   protected String getUsageString(String cmd, String cmdDescKey) {
     return LocalizedResource.getMessage("TOOLS_COMMON_DESC");
   }
+
+  @Override
+  protected void addOptionalConnectionOptions(final Options opts) {
+  }
 }

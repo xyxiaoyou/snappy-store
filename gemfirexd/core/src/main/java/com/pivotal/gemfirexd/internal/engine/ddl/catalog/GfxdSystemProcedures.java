@@ -1699,6 +1699,27 @@ public class GfxdSystemProcedures extends SystemProcedures {
     }
   }
 
+  public static void REMOVE_METASTORE_ENTRY(String fqtn, Boolean forceDrop) throws SQLException {
+    String schema;
+    String table;
+    int dotIndex;
+    // NULL table name is illegal
+    if (fqtn == null) {
+      throw Util.generateCsSQLException(SQLState.ENTITY_NAME_MISSING);
+    }
+
+    if ((dotIndex = fqtn.indexOf('.')) >= 0) {
+      schema = fqtn.substring(0, dotIndex);
+      table = fqtn.substring(dotIndex + 1);
+    } else {
+      schema = Misc.getDefaultSchemaName(ConnectionUtil.getCurrentLCC());
+      table = fqtn;
+    }
+    ExternalCatalog catalog = Misc.getMemStore().getExistingExternalCatalog();
+    catalog.removeTableUnsafeIfExists(schema, table, forceDrop);
+    CallbackFactoryProvider.getStoreCallbacks().registerCatalogSchemaChange();
+  }
+
   private static void assignBucketsToPartitions(final PartitionedRegion pr) {
     ExecutorService executor = pr.getCache().getDistributionManager()
         .getFunctionExcecutor();
@@ -2430,6 +2451,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
     Region region = Misc.getRegionForTable(tableName, true);
     lcc.setExecuteLocally(bucketSet, region, false, null);
     lcc.setBucketRetentionForLocalExecution(retain);
+
   }
 
   /**
@@ -2503,6 +2525,40 @@ public class GfxdSystemProcedures extends SystemProcedures {
         }
       }
     }
+  }
+
+  public static Boolean ACQUIRE_REGION_LOCK(String lockName)
+          throws SQLException {
+    LanguageConnectionContext lcc = ConnectionUtil.getCurrentLCC();
+    GemFireTransaction tr = (GemFireTransaction) lcc.getTransactionExecute();
+    PartitionedRegion.RegionLock lock = PartitionedRegion.getRegionLock
+            (lockName, GemFireCacheImpl.getExisting());
+    try {
+      lock.lock();
+    } catch (Throwable t) {
+      throw TransactionResourceImpl.wrapInSQLException(t);
+    }
+    if (lock != null)
+      tr.addTableLock(lock);
+
+    return true;
+  }
+
+  public static Boolean RELEASE_REGION_LOCK(String lockName)
+      throws SQLException {
+    LanguageConnectionContext lcc = ConnectionUtil.getCurrentLCC();
+    GemFireTransaction tr = (GemFireTransaction) lcc.getTransactionExecute();
+    PartitionedRegion.RegionLock lock = tr.getRegionLock(lockName);
+    if (lock != null) {
+      try {
+        lock.unlock();
+      } catch (Throwable t) {
+        throw TransactionResourceImpl.wrapInSQLException(t);
+      }
+      tr.removeTableLock(lock);
+    }
+    // we should ignore exceptions.
+    return true;
   }
 
   public static void COMMIT_SNAPSHOT_TXID(String txId, String rolloverTable)
@@ -2746,7 +2802,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
     context.setSnapshotTXState(state);
     tc.setActiveTXState(state, false);
     // If already then throw exception?
-    if (GemFireXDUtils.TraceProcedureExecution) {
+    if (GemFireXDUtils.TraceExecution) {
       SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_EXECUTION,
           "In useSnapshotTXId() for txid " + txId1 +
               " txState : " + state + " connId" + tc.getConnectionID());

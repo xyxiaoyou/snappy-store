@@ -2478,7 +2478,7 @@ public final class GfxdIndexManager implements Dependent, IndexUpdater,
       }      
       
      
-      if (!deleted &&  exceptionToThrow == null) {
+      if (!deleted && exceptionToThrow == null && (rowLocation == null || !rowLocation.isDestroyedOrRemoved())) {
         try {
         handleNotDeleted(event.isPossibleDuplicate(), owner, indexContainer,
             rowLocation, entry, indexKey, firstThrowable);  

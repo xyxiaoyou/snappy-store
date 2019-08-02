@@ -1085,7 +1085,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1103,7 +1103,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1120,7 +1120,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1143,7 +1143,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1167,7 +1167,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
           LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0
               .toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1193,7 +1193,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1216,7 +1216,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1241,7 +1241,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1838,7 +1838,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, false);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     } finally {
@@ -1856,7 +1856,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1895,7 +1895,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1918,7 +1918,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1936,7 +1936,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -1954,7 +1954,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -2162,7 +2162,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, true);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     }
@@ -3007,7 +3007,7 @@ public class DiskInitFile implements DiskInitFileInterpreter {
       DiskAccessException dae
         = new DiskAccessException(LocalizedStrings.DiskInitFile_FAILED_INIT_FILE_WRITE_BECAUSE_0.toLocalizedString(ex), this.parent);
       if (!this.compactInProgress) {
-        this.parent.handleDiskAccessException(dae, false);
+        this.parent.shutdownDiskStoreAndAffiliatedRegions(dae);
       }
       throw dae;
     } finally {
