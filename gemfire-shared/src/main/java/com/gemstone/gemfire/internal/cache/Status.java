@@ -296,4 +296,23 @@ public class Status {
     }
     return buffer.toString();
   }
+
+  public static String getStatus(int state) {
+    switch (state) {
+      case SHUTDOWN:
+        return "stopped";
+      case STARTING:
+        return "starting";
+      case RUNNING:
+        return "running";
+      case SHUTDOWN_PENDING:
+        return "stopping";
+      case WAITING:
+        return "waiting";
+      case STANDBY:
+        return "standby";
+      default:
+        return "unknown";
+    }
+  }
 }

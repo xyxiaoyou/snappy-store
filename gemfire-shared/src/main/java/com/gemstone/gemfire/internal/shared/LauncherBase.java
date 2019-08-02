@@ -101,7 +101,7 @@ public abstract class LauncherBase {
       "The server is still starting. " +
           "{0} seconds have elapsed since the last log message: \n {1}";
   public static final String LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY =
-      "WARN: A {0} is already running in directory \"{1}\"";
+      "WARN: A {0} is already running in directory \"{1}\" in \"{2}\" state";
   private static final String LAUNCHER_EXPECTED_BOOLEAN =
       "Expected true or false for \"{0}=<value>\" but was \"{1}\"";
 
@@ -391,7 +391,7 @@ public abstract class LauncherBase {
     final Status status = getStatus();
     if (status != null && status.state != Status.SHUTDOWN) {
       return MessageFormat.format(LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY,
-          this.baseName, getWorkingDirPath());
+          this.baseName, getWorkingDirPath(), Status.getStatus(status.state));
     }
     deleteStatus();
     return null;
@@ -505,6 +505,9 @@ public abstract class LauncherBase {
       }
       writePidToFile(status);
       System.out.println(status);
+      if (statusWaiting(status)) {
+        return 2;
+      }
       return 0;
     }
   }
@@ -544,6 +547,10 @@ public abstract class LauncherBase {
     // start node even in WAITING state if the "-sync" option is false
     return (status.state == Status.STARTING ||
         (this.waitForData && status.state == Status.WAITING));
+  }
+
+  protected boolean statusWaiting(Status status) {
+    return !this.waitForData && status.state == Status.WAITING;
   }
 
   public static String readPassword(String prompt) {
