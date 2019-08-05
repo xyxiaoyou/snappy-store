@@ -387,14 +387,15 @@ public abstract class LauncherBase {
    * Verify and clear the status. If a server is detected as already running
    * then returns an error string else null.
    */
-  protected String verifyAndClearStatus() throws IOException {
+  protected int verifyAndClearStatus() throws IOException {
     final Status status = getStatus();
     if (status != null && status.state != Status.SHUTDOWN) {
-      return MessageFormat.format(LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY,
-          this.baseName, getWorkingDirPath(), Status.getStatus(status.state));
+      System.err.println(MessageFormat.format(LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY,
+          this.baseName, getWorkingDirPath(), status.getStateString(status.state)));
+      return status.state;
     }
     deleteStatus();
-    return null;
+    return status.state;
   }
 
   protected final void setStatusField(Status s) {
