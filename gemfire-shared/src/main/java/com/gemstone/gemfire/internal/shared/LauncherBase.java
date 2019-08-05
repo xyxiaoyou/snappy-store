@@ -395,7 +395,7 @@ public abstract class LauncherBase {
       return status.state;
     }
     deleteStatus();
-    return status.state;
+    return Status.SHUTDOWN;
   }
 
   protected final void setStatusField(Status s) {
