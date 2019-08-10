@@ -70,6 +70,7 @@ import com.gemstone.gemfire.internal.cache.ControllerAdvisor.ControllerProfile;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
 import com.gemstone.gemfire.internal.cache.GridAdvisor;
 import com.gemstone.gemfire.internal.cache.UpdateAttributesProcessor;
+import com.gemstone.gemfire.internal.cache.control.MemoryThresholds;
 import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.Version;
 import com.gemstone.gemfire.internal.util.concurrent.StoppableReentrantReadWriteLock;
@@ -1294,6 +1295,8 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
     private static final byte F_HAS_PROCESSOR_COUNT = 0x8;
 
     private static final byte F_HAS_LONG_CATALOG_VERSION = 0x10;
+
+    private static final byte F_HAS_USABLE_HEAP = 0x20;
     // end bitmasks
 
     /** OR of various bitmasks above */
@@ -1327,6 +1330,12 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
      */
     private AtomicLong catalogSchemaVersion;
 
+    /**
+     * The usable heap size of this VM in bytes. This includes the memory till
+     * the critical-heap-percentage limit.
+     */
+    private long usableHeap;
+
     /** for deserialization */
     public GfxdProfile() {
       this.initialized = true;
@@ -1342,6 +1351,22 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
       boolean hasURL = sparkDriverUrl != null && !sparkDriverUrl.equals("");
       this.catalogSchemaVersion = new AtomicLong(catalogVersion);
       setHasSparkURL(hasURL);
+      GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
+      if (cache != null) {
+        MemoryThresholds thresholds = cache.getResourceManager()
+            .getHeapMonitor().getThresholds();
+        if (thresholds.isCriticalThresholdEnabled()) {
+          this.usableHeap = thresholds.getCriticalThresholdBytes();
+        }
+      }
+      if (this.usableHeap <= 0L) {
+        long maxMemory = Runtime.getRuntime().maxMemory();
+        if (maxMemory > 0 && maxMemory != Long.MAX_VALUE) {
+          this.usableHeap = maxMemory;
+        } else {
+          this.usableHeap = Runtime.getRuntime().totalMemory();
+        }
+      }
       initFlags();
     }
 
@@ -1349,6 +1374,7 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
       this.flags |= F_HASLOCALE;
       this.flags |= F_HAS_PROCESSOR_COUNT;
       this.flags |= F_HAS_LONG_CATALOG_VERSION;
+      this.flags |= F_HAS_USABLE_HEAP;
     }
 
     public final VMKind getVMKind() {
@@ -1431,6 +1457,10 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
 
     public final int getNumProcessors() {
       return this.numProcessors;
+    }
+
+    public final long getUsableHeap() {
+      return this.usableHeap;
     }
 
     @Override
@@ -1518,6 +1548,7 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
         DataSerializer.writeString(sparkDriverUrl, out);
       }
       out.writeLong(this.catalogSchemaVersion.get());
+      out.writeLong(this.usableHeap);
     }
 
     @Override
@@ -1555,6 +1586,9 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
       } else {
         this.catalogSchemaVersion = new AtomicLong(in.readInt());
       }
+      if ((this.flags & F_HAS_USABLE_HEAP) != 0) {
+        this.usableHeap = in.readLong();
+      }
     }
 
     @Override
@@ -1573,6 +1607,7 @@ public final class GfxdDistributionAdvisor extends DistributionAdvisor {
       sb.append("; dbLocaleStr=").append(this.dbLocaleStr);
       sb.append("; numProcessors=").append(this.numProcessors);
       sb.append("; catalogVersion=").append(this.catalogSchemaVersion.get());
+      sb.append("; usableHeap=").append(this.usableHeap);
     }
   }
 
