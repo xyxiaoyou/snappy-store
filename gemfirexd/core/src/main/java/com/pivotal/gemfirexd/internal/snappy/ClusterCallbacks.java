@@ -45,7 +45,7 @@ public interface ClusterCallbacks {
 
   void recoverData(Long connId, String exportUri, String formatType, String tableNames, Boolean ignoreError);
 
-  void recoverDDLs(String exportUri);
+  void recoverDDLs(Long connId, String exportUri);
 
   Object readDataType(ByteArrayDataInput in);
 

@@ -64,7 +64,7 @@ public abstract class CallbackFactoryProvider {
     }
 
     @Override
-    public void recoverDDLs(String exportUri) {
+    public void recoverDDLs(Long connId, String exportUri) {
 
     }
 
