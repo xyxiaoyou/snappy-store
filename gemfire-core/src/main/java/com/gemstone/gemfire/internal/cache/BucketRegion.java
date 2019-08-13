@@ -3144,7 +3144,7 @@ public class BucketRegion extends DistributedRegion implements Bucket {
             if (newValue instanceof SerializedDiskBuffer) {
               SerializedDiskBuffer newBuffer = (SerializedDiskBuffer)newValue;
               if (hasNewOffHeap) {
-                directBufferDelta -= newBuffer.getOffHeapSizeInBytes();
+                directBufferDelta += newBuffer.getOffHeapSizeInBytes();
               }
               numRowsDelta += batchKey.getColumnBatchRowCount(this, newBuffer);
             }
