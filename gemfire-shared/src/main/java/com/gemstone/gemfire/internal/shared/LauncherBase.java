@@ -46,6 +46,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -101,7 +102,7 @@ public abstract class LauncherBase {
       "The server is still starting. " +
           "{0} seconds have elapsed since the last log message: \n {1}";
   public static final String LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY =
-      "WARN: A {0} is already running in directory \"{1}\"";
+      "WARN: A {0} is already running in directory \"{1}\" in \"{2}\" state";
   private static final String LAUNCHER_EXPECTED_BOOLEAN =
       "Expected true or false for \"{0}=<value>\" but was \"{1}\"";
 
@@ -141,6 +142,7 @@ public abstract class LauncherBase {
   protected boolean waitForData;
 
   protected final String jvmVendor;
+  protected final String jvmName;
   protected String maxHeapSize;
   protected String initialHeapSize;
   @SuppressWarnings("WeakerAccess")
@@ -171,6 +173,7 @@ public abstract class LauncherBase {
     // wait for data sync by default
     this.waitForData = true;
     this.jvmVendor = System.getProperty("java.vendor");
+    this.jvmName = System.getProperty("java.vm.name");
   }
 
   protected String getBaseName(final String name) {
@@ -315,7 +318,7 @@ public abstract class LauncherBase {
         // don't exceed 99%
         if (criticalPercent > 99.0f) criticalPercent = 99.0f;
         map.put(CRITICAL_HEAP_PERCENTAGE, "-" + CRITICAL_HEAP_PERCENTAGE +
-            '=' + String.format("%.2f", criticalPercent));
+            '=' + String.format(Locale.ENGLISH, "%.2f", criticalPercent));
       } else {
         criticalPercent = Float.parseFloat(criticalHeapStr.substring(
             criticalHeapStr.indexOf('=') + 1).trim());
@@ -327,14 +330,14 @@ public abstract class LauncherBase {
         // eviction-heap-percentage
         evictPercent = criticalPercent * 0.9f;
         map.put(EVICTION_HEAP_PERCENTAGE, "-" + EVICTION_HEAP_PERCENTAGE +
-            '=' + evictPercent);
+            '=' + String.format(Locale.ENGLISH, "%.2f", evictPercent));
       } else {
         evictPercent = Float.parseFloat(evictHeapStr.substring(
             evictHeapStr.indexOf('=') + 1).trim());
       }
     }
-    if (jvmVendor != null && (jvmVendor.contains("Sun") ||
-        jvmVendor.contains("Oracle") || jvmVendor.contains("OpenJDK"))) {
+    if (jvmVendor != null && (jvmVendor.contains("Sun") || jvmVendor.contains("Oracle") ||
+        jvmVendor.contains("OpenJDK") || jvmName.contains("OpenJDK"))) {
       vmArgs.add("-XX:+UseParNewGC");
       vmArgs.add("-XX:+UseConcMarkSweepGC");
       vmArgs.add("-XX:CMSInitiatingOccupancyFraction=50");
@@ -387,14 +390,15 @@ public abstract class LauncherBase {
    * Verify and clear the status. If a server is detected as already running
    * then returns an error string else null.
    */
-  protected String verifyAndClearStatus() throws IOException {
+  protected int verifyAndClearStatus() throws IOException {
     final Status status = getStatus();
     if (status != null && status.state != Status.SHUTDOWN) {
-      return MessageFormat.format(LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY,
-          this.baseName, getWorkingDirPath());
+      System.err.println(MessageFormat.format(LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY,
+          this.baseName, getWorkingDirPath(), status.getStateString(status.state)));
+      return status.state;
     }
     deleteStatus();
-    return null;
+    return Status.SHUTDOWN;
   }
 
   protected final void setStatusField(Status s) {
@@ -505,6 +509,9 @@ public abstract class LauncherBase {
       }
       writePidToFile(status);
       System.out.println(status);
+      if (statusWaiting(status)) {
+        return 2;
+      }
       return 0;
     }
   }
@@ -544,6 +551,10 @@ public abstract class LauncherBase {
     // start node even in WAITING state if the "-sync" option is false
     return (status.state == Status.STARTING ||
         (this.waitForData && status.state == Status.WAITING));
+  }
+
+  protected boolean statusWaiting(Status status) {
+    return !this.waitForData && status.state == Status.WAITING;
   }
 
   public static String readPassword(String prompt) {
