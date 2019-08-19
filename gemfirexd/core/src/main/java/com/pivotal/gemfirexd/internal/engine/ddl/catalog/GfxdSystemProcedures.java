@@ -1540,7 +1540,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
       GfxdListResultCollector collector = new GfxdListResultCollector();
       // ConnectionId is not being used for GET_DEPLOYED_JARS; hence passing dummy value(0L)
       GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
-          collector, GetLeadNodeInfoAsStringMessage.DataReqType.GET_JARS, (Object[])null);
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.GET_JARS, null, (Object[])null);
       msg.executeFunction();
       ArrayList<Object> result = collector.getResult();
       String resJarStrings = (String)result.get(0);
