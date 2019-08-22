@@ -4157,6 +4157,8 @@ public final class GenericLanguageConnectionContext
 
 	private static final int METASTORE_IN_DD = 0x20000;
 
+	private static final int ALLOW_EXPLICIT_COMMIT = 0x40000;
+
 	private static final int FLAGS_DEFAULT = METASTORE_IN_DD;
 
   /** flags that cannot be changed via {@link #setFlags(int)} */
@@ -5013,6 +5015,17 @@ public final class GenericLanguageConnectionContext
 	@Override
 	public boolean isSnappyInternalConnection() {
 		return GemFireXDUtils.isSet(this.gfxdFlags, SNAPPY_INTERNAL_CONNECTION);
+	}
+
+	@Override
+	public void setAllowExplicitCommit(boolean allowExplicitCommit) {
+		this.gfxdFlags = GemFireXDUtils.set(this.gfxdFlags, ALLOW_EXPLICIT_COMMIT,
+				allowExplicitCommit);
+	}
+
+	@Override
+	public boolean isAllowExplicitCommitTrue() {
+		return GemFireXDUtils.isSet(this.gfxdFlags, ALLOW_EXPLICIT_COMMIT);
 	}
 
 	@Override

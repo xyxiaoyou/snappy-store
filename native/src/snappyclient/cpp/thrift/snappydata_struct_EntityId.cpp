@@ -144,39 +144,38 @@ uint32_t EntityId::write(::apache::thrift::protocol::TProtocol* oprot) const {
   return xfer;
 }
 
-void swap(EntityId &a, EntityId &b) noexcept {
+void swap(EntityId &a, EntityId &b) {
   using ::std::swap;
-  static_assert(noexcept(swap(a, b)), "throwing swap");
   swap(a.id, b.id);
   swap(a.type, b.type);
   swap(a.connId, b.connId);
   swap(a.token, b.token);
 }
 
-EntityId::EntityId(const EntityId& other302) {
-  id = other302.id;
-  type = other302.type;
-  connId = other302.connId;
-  token = other302.token;
+EntityId::EntityId(const EntityId& other508) {
+  id = other508.id;
+  type = other508.type;
+  connId = other508.connId;
+  token = other508.token;
 }
-EntityId::EntityId( EntityId&& other303) noexcept {
-  id = std::move(other303.id);
-  type = std::move(other303.type);
-  connId = std::move(other303.connId);
-  token = std::move(other303.token);
+EntityId::EntityId( EntityId&& other509) noexcept {
+  id = std::move(other509.id);
+  type = std::move(other509.type);
+  connId = std::move(other509.connId);
+  token = std::move(other509.token);
 }
-EntityId& EntityId::operator=(const EntityId& other304) {
-  id = other304.id;
-  type = other304.type;
-  connId = other304.connId;
-  token = other304.token;
+EntityId& EntityId::operator=(const EntityId& other510) {
+  id = other510.id;
+  type = other510.type;
+  connId = other510.connId;
+  token = other510.token;
   return *this;
 }
-EntityId& EntityId::operator=(EntityId&& other305) noexcept {
-  id = std::move(other305.id);
-  type = std::move(other305.type);
-  connId = std::move(other305.connId);
-  token = std::move(other305.token);
+EntityId& EntityId::operator=(EntityId&& other511) noexcept {
+  id = std::move(other511.id);
+  type = std::move(other511.type);
+  connId = std::move(other511.connId);
+  token = std::move(other511.token);
   return *this;
 }
 void EntityId::printTo(std::ostream& out) const {

@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -51,7 +51,7 @@
 #include <boost/make_shared.hpp>
 #include "ControlConnection.h"
 #include "NetConnection.h"
-
+#include <map>
 using namespace io::snappydata;
 using namespace io::snappydata::client;
 using namespace io::snappydata::client::impl;
@@ -102,7 +102,7 @@ const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlC
         if (contrConnServerType == serviceServerType) {
           return *controlConn;
         } else {
-          thrift::SnappyException *ex = new thrift::SnappyException();
+          thrift::SnappyException ex;
           std::string portStr;
           Utils::convertIntToString(hostAddr.port, portStr);
           std::string msg = hostAddr.hostName + ":" + portStr
@@ -113,9 +113,10 @@ const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlC
           SnappyExceptionData snappyExData;
           snappyExData.__set_sqlState("08006");
           snappyExData.__set_reason(msg);
-          //snappyExData.__set_errorCode(17002); //TODO:: Need to confirm with sumedh
-          ex->__set_exceptionData(snappyExData);
-          ex->__set_serverInfo(hostAddr.hostName + ":" + portStr);
+          // errorCode matches product ExceptionSeverity.SESSION_SEVERITY
+          snappyExData.__set_errorCode(40000);
+          ex.__set_exceptionData(snappyExData);
+          ex.__set_serverInfo(hostAddr.hostName + ":" + portStr);
           throw ex;
         }
       }
@@ -144,15 +145,16 @@ const boost::optional<ControlConnection&> ControlConnection::getOrCreateControlC
     s_allConnections.push_back(std::move(controlService));
     return *s_allConnections.back();
   } else {
-    thrift::SnappyException *ex = new thrift::SnappyException();
+    thrift::SnappyException ex;
     SnappyExceptionData snappyExData;
     snappyExData.__set_sqlState(
         std::string(SQLState::UNKNOWN_EXCEPTION.getSQLState()));
     snappyExData.__set_reason("Failed to connect");
-    ex->__set_exceptionData(snappyExData);
+    ex.__set_exceptionData(snappyExData);
     throw ex;
   }
 }
+
 void ControlConnection::getLocatorPreferredServer(
     thrift::HostAddress& prefHostAddr,
     std::set<thrift::HostAddress>& failedServers,
@@ -160,6 +162,7 @@ void ControlConnection::getLocatorPreferredServer(
   m_controlLocator->getPreferredServer(prefHostAddr, m_snappyServerTypeSet,
       serverGroups, failedServers);
 }
+
 void ControlConnection::getPreferredServer(
     thrift::HostAddress& preferredServer, const std::exception& failure,
     bool forFailover) {
@@ -245,6 +248,7 @@ void ControlConnection::getPreferredServer(
 void ControlConnection::searchRandomServer(
     const std::set<thrift::HostAddress>& skipServers,
     const std::exception& failure, thrift::HostAddress& hostAddress) {
+
   std::vector<thrift::HostAddress> searchServers;
   // Note: Do not use unordered_set -- reason is http://www.cplusplus.com/forum/general/198319/
   std::copy(m_controlHostSet.begin(), m_controlHostSet.end(),
@@ -266,6 +270,7 @@ void ControlConnection::searchRandomServer(
   if (findIt) return;
   failoverExhausted(skipServers, failure);
 }
+
 void ControlConnection::failoverToAvailableHost(
     std::set<thrift::HostAddress>& failedServers,
     bool checkFailedControlHosts, const std::exception& failure) {
@@ -335,7 +340,7 @@ void ControlConnection::failoverToAvailableHost(
         protocolFactory = 0;
         break;
       }
-    } catch (const TException& te) {
+    } catch (const TException&) {
       failedServers.insert(controlAddr);
       if (outTransport != nullptr) {
         outTransport->close();
@@ -352,24 +357,24 @@ void ControlConnection::failoverToAvailableHost(
   failoverExhausted(failedServers, failure);
 }
 
-const thrift::SnappyException* ControlConnection::unexpectedError(
+const thrift::SnappyException ControlConnection::unexpectedError(
     const std::exception& ex, const thrift::HostAddress& host) {
 
   if (m_controlLocator != nullptr) {
     m_controlLocator->getOutputProtocol()->getTransport()->close();
     m_controlLocator.reset(nullptr);
   }
-  thrift::SnappyException *snappyEx = new thrift::SnappyException();
+  thrift::SnappyException snappyEx;
   SnappyExceptionData snappyExData;
   snappyExData.__set_sqlState(
       std::string(SQLState::UNKNOWN_EXCEPTION.getSQLState()));
   snappyExData.__set_reason(ex.what());
 
-  snappyEx->__set_exceptionData(snappyExData);
+  snappyEx.__set_exceptionData(snappyExData);
 
   std::string portNum;
   Utils::convertIntToString(host.port, portNum);
-  snappyEx->__set_serverInfo(
+  snappyEx.__set_serverInfo(
       host.hostName + host.ipAddress + portNum
           + Utils::getServerTypeString(host.serverType));
 
@@ -399,6 +404,7 @@ void ControlConnection::refreshAllHosts(
       newLocators.push_back(host);
     }
   }
+
   m_locators = newLocators;
   // refresh the new server list
 
@@ -418,19 +424,60 @@ void ControlConnection::failoverExhausted(
   for (thrift::HostAddress host : failedServers) {
     std::string portStr;
     Utils::convertIntToString(host.port, portStr);
-    failedServerString.append(host.hostName).append(":").append(portStr).append(
-        ",");
+    if (!failedServerString.empty()) failedServerString.append(",");
+    failedServerString.append(host.hostName).append(":").append(portStr);
   }
-  thrift::SnappyException *snappyEx = new thrift::SnappyException();
+  thrift::SnappyException snappyEx;
   SnappyExceptionData snappyExData;
   snappyExData.__set_sqlState(
       std::string(SQLState::DATA_CONTAINER_CLOSED.getSQLState()));
-  std::string reason = "{Failed afer trying all available servers:}";
-  if (std::string(failure.what()).compare("std::exception") == 0) // failure is not empty exception
-  reason.append(" and ").append(failure.what());
-  snappyExData.__set_reason(reason.append(failedServerString));
-  snappyEx->__set_exceptionData(snappyExData);
-  snappyEx->__set_serverInfo(failedServerString);
+  std::string reason = "Failed after trying all available servers: {";
+  reason.append(failedServerString).append("}");
+  // failure is not empty exception
+  if (std::string(failure.what()).compare("std::exception") != 0) {
+    reason.append(" and ").append(failure.what());
+  }
+  snappyExData.__set_reason(reason);
+  snappyEx.__set_exceptionData(snappyExData);
+  snappyEx.__set_serverInfo(failedServerString);
   throw snappyEx;
 }
 
+void ControlConnection::getConnectedHost(thrift::HostAddress& hostAddr,
+    thrift::HostAddress& connectedHost) {
+  boost::lock_guard<boost::mutex> controlConnLock(this->m_lock);
+
+  auto it = std::find(m_controlHostSet.begin(),m_controlHostSet.end(),hostAddr);//;m_controlHostSet.find(hostAddr);
+  if (it != m_controlHostSet.end()) {
+    connectedHost = *it;
+    return;
+  }
+
+  for (auto iterator = m_controlHostSet.begin();
+      iterator != m_controlHostSet.end(); ++iterator) {
+    auto host = *iterator;
+    if (host.__isset.isCurrent && host.isCurrent) {
+      connectedHost = host;
+    }
+  }
+
+}
+
+void ControlConnection::close(bool clearGlobal) {
+  m_controlHost = thrift::HostAddress();
+  if (m_controlLocator != nullptr) {
+    m_controlLocator->getOutputProtocol()->getTransport()->close();
+    m_controlLocator.reset(nullptr);
+  }
+  if (clearGlobal) {
+    boost::lock_guard<boost::mutex> globalGuard(s_allConnsLock);
+    auto thisPtr = std::unique_ptr<ControlConnection>(this);
+    auto pos = std::find(s_allConnections.begin(), s_allConnections.end(),
+        thisPtr);
+    // don't delete "this" here
+    thisPtr.release();
+    if (pos != s_allConnections.end()) {
+      s_allConnections.erase(pos);
+    }
+  }
+}

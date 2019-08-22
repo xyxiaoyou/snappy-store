@@ -46,6 +46,7 @@ import com.gemstone.gemfire.internal.NanoTimer;
 import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.cache.control.InternalResourceManager;
 import com.gemstone.gemfire.internal.cache.persistence.query.CloseableIterator;
+import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
 import com.gemstone.gemfire.internal.snappy.ColumnTableEntry;
 import com.gemstone.gnu.trove.TIntArrayList;
@@ -1549,7 +1550,14 @@ public class GfxdSystemProcedures extends SystemProcedures {
   }
 
   /**
-   * Create or drop reservoir region for sampler.
+   * Create or drop reservoir region for sampler. Note that the creat and drop operation
+   * are intentionally combined in single procedure here to make conflation of create and
+   * drop operation possible for same region.
+   *
+   * @param reservoirRegionName name of the reservoir region
+   * @param resolvedBaseName base table name with schema
+   * @param isDrop flag to indicate that the stored procedure is being invoked to drop the
+   *               reservoir region
    */
   public static void CREATE_OR_DROP_RESERVOIR_REGION(String reservoirRegionName,
       String resolvedBaseName, Boolean isDrop) throws SQLException {
@@ -1571,7 +1579,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
       if (createOrDropReservoirRegion(reservoirRegionName, resolvedBaseName, isDrop)) {
         // don't send to other nodes or persist if local operation is unsuccessful
         final Object[] args = new Object[] { reservoirRegionName,
-            resolvedBaseName, isDrop };
+            resolvedBaseName, isDrop};
         // send to other nodes
         publishMessage(args, false,
             GfxdSystemProcedureMessage.SysProcMethod.createOrDropReservoirRegion,
@@ -1589,6 +1597,9 @@ public class GfxdSystemProcedures extends SystemProcedures {
     PartitionedRegion existingRegion = Misc.getReservoirRegionForSampleTable(
         reservoirRegionName);
     if (isDrop) {
+      // Cached sampler entry needs to be removed from all the nodes even if reservoir region
+      // does not exist on that node.
+      CallbackFactoryProvider.getStoreCallbacks().removeSampler(resolvedBaseName);
       if (existingRegion != null) {
         existingRegion.destroyRegion(null);
         return true;
@@ -2467,14 +2478,19 @@ public class GfxdSystemProcedures extends SystemProcedures {
     }
   }
 
-  public static Boolean ACQUIRE_REGION_LOCK(String lockName)
+  public static Boolean ACQUIRE_REGION_LOCK(String lockName, int timeout)
           throws SQLException {
     LanguageConnectionContext lcc = ConnectionUtil.getCurrentLCC();
     GemFireTransaction tr = (GemFireTransaction) lcc.getTransactionExecute();
     PartitionedRegion.RegionLock lock = PartitionedRegion.getRegionLock
             (lockName, GemFireCacheImpl.getExisting());
+    if (GemFireXDUtils.TraceLock) {
+      SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_LOCK,
+              "in procedure ACQUIRE_REGION_LOCK() for lockName:  " + lockName
+                      + " timeout=" + timeout);
+    }
     try {
-      lock.lock();
+      lock.lock(timeout);
     } catch (Throwable t) {
       throw TransactionResourceImpl.wrapInSQLException(t);
     }
@@ -2489,6 +2505,10 @@ public class GfxdSystemProcedures extends SystemProcedures {
     LanguageConnectionContext lcc = ConnectionUtil.getCurrentLCC();
     GemFireTransaction tr = (GemFireTransaction) lcc.getTransactionExecute();
     PartitionedRegion.RegionLock lock = tr.getRegionLock(lockName);
+    if (GemFireXDUtils.TraceLock) {
+      SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_LOCK,
+              "in procedure RELEASE_REGION_LOCK() for lockName:  " + lockName);
+    }
     if (lock != null) {
       try {
         lock.unlock();

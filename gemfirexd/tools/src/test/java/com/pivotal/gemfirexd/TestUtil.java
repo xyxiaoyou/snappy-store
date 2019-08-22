@@ -56,8 +56,8 @@ import com.gemstone.gemfire.internal.cache.xmlcache.RegionAttributesCreation;
 import com.gemstone.gemfire.internal.cache.xmlcache.RegionCreation;
 import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.NativeCalls;
-import com.gemstone.gemfire.internal.shared.jna.OSType;
 import com.gemstone.gemfire.internal.shared.StringPrintWriter;
+import com.gemstone.gemfire.internal.shared.jna.OSType;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserver;
 import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserverAdapter;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
@@ -575,6 +575,8 @@ public class TestUtil extends TestCase {
     //Allow HDFS tests to create a standalone file system
     System.setProperty(HDFSStoreImpl.ALLOW_STANDALONE_HDFS_FILESYSTEM_PROP, "true");
 
+    // Do not create extra space for failure handling scenario in tests.
+    System.setProperty("gemfire.DISALLOW_RESERVE_SPACE", "true");
     /*
     boolean nonTXTestMode = Boolean.getBoolean(SanityManager.TEST_MODE_NON_TX)
         || Boolean.parseBoolean(System.getenv(SanityManager.TEST_MODE_NON_TX)); 
@@ -2229,8 +2231,13 @@ public class TestUtil extends TestCase {
   }
 
   public static void assertTimerLibraryLoaded() {
-    final OSType ostype = NativeCalls.getInstance().getOSType();
+    NativeCalls nc = NativeCalls.getInstance();
+    final OSType ostype = nc.getOSType();
     if (ostype == OSType.LINUX) {
+      if (!NanoTimer.isJNINativeTimerEnabled()) {
+        NanoTimer.init();
+        nc.reInitNativeTimer();
+      }
       assertTrue("Couldn't initialize jni native timer for " + ostype,
           NanoTimer.isJNINativeTimerEnabled());
       assertTrue("Couldn't initialize the native timer for " + ostype,

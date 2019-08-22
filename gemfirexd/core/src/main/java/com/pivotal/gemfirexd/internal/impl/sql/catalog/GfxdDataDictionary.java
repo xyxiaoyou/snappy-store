@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -1756,10 +1756,12 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
             tc, GFXD_SYS_PROC_CLASSNAME, false);
       }
       {
-        String[] argNames = new String[] { "lockName" };
+        String[] argNames = new String[] { "lockName", "timeout" };
         TypeDescriptor[] argTypes = new TypeDescriptor[] {
                 DataTypeDescriptor.getBuiltInDataTypeDescriptor(
-                        Types.VARCHAR, false).getCatalogType() };
+                        Types.VARCHAR, false).getCatalogType(),
+                DataTypeDescriptor.getBuiltInDataTypeDescriptor(
+                        Types.INTEGER, false).getCatalogType()};
         super.createSystemProcedureOrFunction("ACQUIRE_REGION_LOCK", sysUUID,
                 argNames, argTypes, 0, 0, RoutineAliasInfo.READS_SQL_DATA,
                 DataTypeDescriptor.getCatalogType(Types.BOOLEAN),

@@ -1599,6 +1599,7 @@ public final class InternalDistributedSystem
         removeSystem(this);
         // Close the config object
         this.config.close();
+        ProcessorKeeper21.cleanupProcessor();
       }
       finally {
         // Finally, mark ourselves as disconnected

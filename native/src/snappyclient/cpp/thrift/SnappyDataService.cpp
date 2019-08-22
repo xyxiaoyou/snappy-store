@@ -38,17 +38,17 @@ uint32_t SnappyDataService_getPreferredServer_args::read(::apache::thrift::proto
         if (ftype == ::apache::thrift::protocol::T_SET) {
           {
             this->serverTypes.clear();
-            uint32_t _size367;
-            ::apache::thrift::protocol::TType _etype370;
-            xfer += iprot->readSetBegin(_etype370, _size367);
-            uint32_t _i371;
-            for (_i371 = 0; _i371 < _size367; ++_i371)
+            uint32_t _size573;
+            ::apache::thrift::protocol::TType _etype576;
+            xfer += iprot->readSetBegin(_etype576, _size573);
+            uint32_t _i577;
+            for (_i577 = 0; _i577 < _size573; ++_i577)
             {
-              ServerType::type _elem372;
-              int32_t ecast373;
-              xfer += iprot->readI32(ecast373);
-              _elem372 = (ServerType::type)ecast373;
-              this->serverTypes.insert(_elem372);
+              ServerType::type _elem578;
+              int32_t ecast579;
+              xfer += iprot->readI32(ecast579);
+              _elem578 = (ServerType::type)ecast579;
+              this->serverTypes.insert(_elem578);
             }
             xfer += iprot->readSetEnd();
           }
@@ -61,15 +61,15 @@ uint32_t SnappyDataService_getPreferredServer_args::read(::apache::thrift::proto
         if (ftype == ::apache::thrift::protocol::T_SET) {
           {
             this->serverGroups.clear();
-            uint32_t _size374;
-            ::apache::thrift::protocol::TType _etype377;
-            xfer += iprot->readSetBegin(_etype377, _size374);
-            uint32_t _i378;
-            for (_i378 = 0; _i378 < _size374; ++_i378)
+            uint32_t _size580;
+            ::apache::thrift::protocol::TType _etype583;
+            xfer += iprot->readSetBegin(_etype583, _size580);
+            uint32_t _i584;
+            for (_i584 = 0; _i584 < _size580; ++_i584)
             {
-              std::string _elem379;
-              xfer += iprot->readString(_elem379);
-              this->serverGroups.insert(_elem379);
+              std::string _elem585;
+              xfer += iprot->readString(_elem585);
+              this->serverGroups.insert(_elem585);
             }
             xfer += iprot->readSetEnd();
           }
@@ -82,15 +82,15 @@ uint32_t SnappyDataService_getPreferredServer_args::read(::apache::thrift::proto
         if (ftype == ::apache::thrift::protocol::T_SET) {
           {
             this->failedServers.clear();
-            uint32_t _size380;
-            ::apache::thrift::protocol::TType _etype383;
-            xfer += iprot->readSetBegin(_etype383, _size380);
-            uint32_t _i384;
-            for (_i384 = 0; _i384 < _size380; ++_i384)
+            uint32_t _size586;
+            ::apache::thrift::protocol::TType _etype589;
+            xfer += iprot->readSetBegin(_etype589, _size586);
+            uint32_t _i590;
+            for (_i590 = 0; _i590 < _size586; ++_i590)
             {
-              HostAddress _elem385;
-              xfer += _elem385.read(iprot);
-              this->failedServers.insert(_elem385);
+              HostAddress _elem591;
+              xfer += _elem591.read(iprot);
+              this->failedServers.insert(_elem591);
             }
             xfer += iprot->readSetEnd();
           }
@@ -118,10 +118,10 @@ uint32_t SnappyDataService_getPreferredServer_args::write(::apache::thrift::prot
   xfer += oprot->writeFieldBegin("serverTypes", ::apache::thrift::protocol::T_SET, 1);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>(this->serverTypes.size()));
-    std::set<ServerType::type> ::const_iterator _iter386;
-    for (_iter386 = this->serverTypes.begin(); _iter386 != this->serverTypes.end(); ++_iter386)
+    std::set<ServerType::type> ::const_iterator _iter592;
+    for (_iter592 = this->serverTypes.begin(); _iter592 != this->serverTypes.end(); ++_iter592)
     {
-      xfer += oprot->writeI32((int32_t)(*_iter386));
+      xfer += oprot->writeI32((int32_t)(*_iter592));
     }
     xfer += oprot->writeSetEnd();
   }
@@ -130,10 +130,10 @@ uint32_t SnappyDataService_getPreferredServer_args::write(::apache::thrift::prot
   xfer += oprot->writeFieldBegin("serverGroups", ::apache::thrift::protocol::T_SET, 2);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->serverGroups.size()));
-    std::set<std::string> ::const_iterator _iter387;
-    for (_iter387 = this->serverGroups.begin(); _iter387 != this->serverGroups.end(); ++_iter387)
+    std::set<std::string> ::const_iterator _iter593;
+    for (_iter593 = this->serverGroups.begin(); _iter593 != this->serverGroups.end(); ++_iter593)
     {
-      xfer += oprot->writeString((*_iter387));
+      xfer += oprot->writeString((*_iter593));
     }
     xfer += oprot->writeSetEnd();
   }
@@ -142,10 +142,10 @@ uint32_t SnappyDataService_getPreferredServer_args::write(::apache::thrift::prot
   xfer += oprot->writeFieldBegin("failedServers", ::apache::thrift::protocol::T_SET, 3);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->failedServers.size()));
-    std::set<HostAddress> ::const_iterator _iter388;
-    for (_iter388 = this->failedServers.begin(); _iter388 != this->failedServers.end(); ++_iter388)
+    std::set<HostAddress> ::const_iterator _iter594;
+    for (_iter594 = this->failedServers.begin(); _iter594 != this->failedServers.end(); ++_iter594)
     {
-      xfer += (*_iter388).write(oprot);
+      xfer += (*_iter594).write(oprot);
     }
     xfer += oprot->writeSetEnd();
   }
@@ -168,10 +168,10 @@ uint32_t SnappyDataService_getPreferredServer_pargs::write(::apache::thrift::pro
   xfer += oprot->writeFieldBegin("serverTypes", ::apache::thrift::protocol::T_SET, 1);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>((*(this->serverTypes)).size()));
-    std::set<ServerType::type> ::const_iterator _iter389;
-    for (_iter389 = (*(this->serverTypes)).begin(); _iter389 != (*(this->serverTypes)).end(); ++_iter389)
+    std::set<ServerType::type> ::const_iterator _iter595;
+    for (_iter595 = (*(this->serverTypes)).begin(); _iter595 != (*(this->serverTypes)).end(); ++_iter595)
     {
-      xfer += oprot->writeI32((int32_t)(*_iter389));
+      xfer += oprot->writeI32((int32_t)(*_iter595));
     }
     xfer += oprot->writeSetEnd();
   }
@@ -180,10 +180,10 @@ uint32_t SnappyDataService_getPreferredServer_pargs::write(::apache::thrift::pro
   xfer += oprot->writeFieldBegin("serverGroups", ::apache::thrift::protocol::T_SET, 2);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_STRING, static_cast<uint32_t>((*(this->serverGroups)).size()));
-    std::set<std::string> ::const_iterator _iter390;
-    for (_iter390 = (*(this->serverGroups)).begin(); _iter390 != (*(this->serverGroups)).end(); ++_iter390)
+    std::set<std::string> ::const_iterator _iter596;
+    for (_iter596 = (*(this->serverGroups)).begin(); _iter596 != (*(this->serverGroups)).end(); ++_iter596)
     {
-      xfer += oprot->writeString((*_iter390));
+      xfer += oprot->writeString((*_iter596));
     }
     xfer += oprot->writeSetEnd();
   }
@@ -192,10 +192,10 @@ uint32_t SnappyDataService_getPreferredServer_pargs::write(::apache::thrift::pro
   xfer += oprot->writeFieldBegin("failedServers", ::apache::thrift::protocol::T_SET, 3);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>((*(this->failedServers)).size()));
-    std::set<HostAddress> ::const_iterator _iter391;
-    for (_iter391 = (*(this->failedServers)).begin(); _iter391 != (*(this->failedServers)).end(); ++_iter391)
+    std::set<HostAddress> ::const_iterator _iter597;
+    for (_iter597 = (*(this->failedServers)).begin(); _iter597 != (*(this->failedServers)).end(); ++_iter597)
     {
-      xfer += (*_iter391).write(oprot);
+      xfer += (*_iter597).write(oprot);
     }
     xfer += oprot->writeSetEnd();
   }
@@ -361,17 +361,17 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_args::read(::apache:
         if (ftype == ::apache::thrift::protocol::T_SET) {
           {
             this->serverTypes.clear();
-            uint32_t _size392;
-            ::apache::thrift::protocol::TType _etype395;
-            xfer += iprot->readSetBegin(_etype395, _size392);
-            uint32_t _i396;
-            for (_i396 = 0; _i396 < _size392; ++_i396)
+            uint32_t _size598;
+            ::apache::thrift::protocol::TType _etype601;
+            xfer += iprot->readSetBegin(_etype601, _size598);
+            uint32_t _i602;
+            for (_i602 = 0; _i602 < _size598; ++_i602)
             {
-              ServerType::type _elem397;
-              int32_t ecast398;
-              xfer += iprot->readI32(ecast398);
-              _elem397 = (ServerType::type)ecast398;
-              this->serverTypes.insert(_elem397);
+              ServerType::type _elem603;
+              int32_t ecast604;
+              xfer += iprot->readI32(ecast604);
+              _elem603 = (ServerType::type)ecast604;
+              this->serverTypes.insert(_elem603);
             }
             xfer += iprot->readSetEnd();
           }
@@ -384,15 +384,15 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_args::read(::apache:
         if (ftype == ::apache::thrift::protocol::T_SET) {
           {
             this->serverGroups.clear();
-            uint32_t _size399;
-            ::apache::thrift::protocol::TType _etype402;
-            xfer += iprot->readSetBegin(_etype402, _size399);
-            uint32_t _i403;
-            for (_i403 = 0; _i403 < _size399; ++_i403)
+            uint32_t _size605;
+            ::apache::thrift::protocol::TType _etype608;
+            xfer += iprot->readSetBegin(_etype608, _size605);
+            uint32_t _i609;
+            for (_i609 = 0; _i609 < _size605; ++_i609)
             {
-              std::string _elem404;
-              xfer += iprot->readString(_elem404);
-              this->serverGroups.insert(_elem404);
+              std::string _elem610;
+              xfer += iprot->readString(_elem610);
+              this->serverGroups.insert(_elem610);
             }
             xfer += iprot->readSetEnd();
           }
@@ -405,15 +405,15 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_args::read(::apache:
         if (ftype == ::apache::thrift::protocol::T_SET) {
           {
             this->failedServers.clear();
-            uint32_t _size405;
-            ::apache::thrift::protocol::TType _etype408;
-            xfer += iprot->readSetBegin(_etype408, _size405);
-            uint32_t _i409;
-            for (_i409 = 0; _i409 < _size405; ++_i409)
+            uint32_t _size611;
+            ::apache::thrift::protocol::TType _etype614;
+            xfer += iprot->readSetBegin(_etype614, _size611);
+            uint32_t _i615;
+            for (_i615 = 0; _i615 < _size611; ++_i615)
             {
-              HostAddress _elem410;
-              xfer += _elem410.read(iprot);
-              this->failedServers.insert(_elem410);
+              HostAddress _elem616;
+              xfer += _elem616.read(iprot);
+              this->failedServers.insert(_elem616);
             }
             xfer += iprot->readSetEnd();
           }
@@ -441,10 +441,10 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_args::write(::apache
   xfer += oprot->writeFieldBegin("serverTypes", ::apache::thrift::protocol::T_SET, 1);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>(this->serverTypes.size()));
-    std::set<ServerType::type> ::const_iterator _iter411;
-    for (_iter411 = this->serverTypes.begin(); _iter411 != this->serverTypes.end(); ++_iter411)
+    std::set<ServerType::type> ::const_iterator _iter617;
+    for (_iter617 = this->serverTypes.begin(); _iter617 != this->serverTypes.end(); ++_iter617)
     {
-      xfer += oprot->writeI32((int32_t)(*_iter411));
+      xfer += oprot->writeI32((int32_t)(*_iter617));
     }
     xfer += oprot->writeSetEnd();
   }
@@ -453,10 +453,10 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_args::write(::apache
   xfer += oprot->writeFieldBegin("serverGroups", ::apache::thrift::protocol::T_SET, 2);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->serverGroups.size()));
-    std::set<std::string> ::const_iterator _iter412;
-    for (_iter412 = this->serverGroups.begin(); _iter412 != this->serverGroups.end(); ++_iter412)
+    std::set<std::string> ::const_iterator _iter618;
+    for (_iter618 = this->serverGroups.begin(); _iter618 != this->serverGroups.end(); ++_iter618)
     {
-      xfer += oprot->writeString((*_iter412));
+      xfer += oprot->writeString((*_iter618));
     }
     xfer += oprot->writeSetEnd();
   }
@@ -465,10 +465,10 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_args::write(::apache
   xfer += oprot->writeFieldBegin("failedServers", ::apache::thrift::protocol::T_SET, 3);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->failedServers.size()));
-    std::set<HostAddress> ::const_iterator _iter413;
-    for (_iter413 = this->failedServers.begin(); _iter413 != this->failedServers.end(); ++_iter413)
+    std::set<HostAddress> ::const_iterator _iter619;
+    for (_iter619 = this->failedServers.begin(); _iter619 != this->failedServers.end(); ++_iter619)
     {
-      xfer += (*_iter413).write(oprot);
+      xfer += (*_iter619).write(oprot);
     }
     xfer += oprot->writeSetEnd();
   }
@@ -491,10 +491,10 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_pargs::write(::apach
   xfer += oprot->writeFieldBegin("serverTypes", ::apache::thrift::protocol::T_SET, 1);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>((*(this->serverTypes)).size()));
-    std::set<ServerType::type> ::const_iterator _iter414;
-    for (_iter414 = (*(this->serverTypes)).begin(); _iter414 != (*(this->serverTypes)).end(); ++_iter414)
+    std::set<ServerType::type> ::const_iterator _iter620;
+    for (_iter620 = (*(this->serverTypes)).begin(); _iter620 != (*(this->serverTypes)).end(); ++_iter620)
     {
-      xfer += oprot->writeI32((int32_t)(*_iter414));
+      xfer += oprot->writeI32((int32_t)(*_iter620));
     }
     xfer += oprot->writeSetEnd();
   }
@@ -503,10 +503,10 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_pargs::write(::apach
   xfer += oprot->writeFieldBegin("serverGroups", ::apache::thrift::protocol::T_SET, 2);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_STRING, static_cast<uint32_t>((*(this->serverGroups)).size()));
-    std::set<std::string> ::const_iterator _iter415;
-    for (_iter415 = (*(this->serverGroups)).begin(); _iter415 != (*(this->serverGroups)).end(); ++_iter415)
+    std::set<std::string> ::const_iterator _iter621;
+    for (_iter621 = (*(this->serverGroups)).begin(); _iter621 != (*(this->serverGroups)).end(); ++_iter621)
     {
-      xfer += oprot->writeString((*_iter415));
+      xfer += oprot->writeString((*_iter621));
     }
     xfer += oprot->writeSetEnd();
   }
@@ -515,10 +515,10 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_pargs::write(::apach
   xfer += oprot->writeFieldBegin("failedServers", ::apache::thrift::protocol::T_SET, 3);
   {
     xfer += oprot->writeSetBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>((*(this->failedServers)).size()));
-    std::set<HostAddress> ::const_iterator _iter416;
-    for (_iter416 = (*(this->failedServers)).begin(); _iter416 != (*(this->failedServers)).end(); ++_iter416)
+    std::set<HostAddress> ::const_iterator _iter622;
+    for (_iter622 = (*(this->failedServers)).begin(); _iter622 != (*(this->failedServers)).end(); ++_iter622)
     {
-      xfer += (*_iter416).write(oprot);
+      xfer += (*_iter622).write(oprot);
     }
     xfer += oprot->writeSetEnd();
   }
@@ -558,14 +558,14 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_result::read(::apach
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->success.clear();
-            uint32_t _size417;
-            ::apache::thrift::protocol::TType _etype420;
-            xfer += iprot->readListBegin(_etype420, _size417);
-            this->success.resize(_size417);
-            uint32_t _i421;
-            for (_i421 = 0; _i421 < _size417; ++_i421)
+            uint32_t _size623;
+            ::apache::thrift::protocol::TType _etype626;
+            xfer += iprot->readListBegin(_etype626, _size623);
+            this->success.resize(_size623);
+            uint32_t _i627;
+            for (_i627 = 0; _i627 < _size623; ++_i627)
             {
-              xfer += this->success[_i421].read(iprot);
+              xfer += this->success[_i627].read(iprot);
             }
             xfer += iprot->readListEnd();
           }
@@ -604,10 +604,10 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_result::write(::apac
     xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_LIST, 0);
     {
       xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->success.size()));
-      std::vector<HostAddress> ::const_iterator _iter422;
-      for (_iter422 = this->success.begin(); _iter422 != this->success.end(); ++_iter422)
+      std::vector<HostAddress> ::const_iterator _iter628;
+      for (_iter628 = this->success.begin(); _iter628 != this->success.end(); ++_iter628)
       {
-        xfer += (*_iter422).write(oprot);
+        xfer += (*_iter628).write(oprot);
       }
       xfer += oprot->writeListEnd();
     }
@@ -651,14 +651,14 @@ uint32_t SnappyDataService_getAllServersWithPreferredServer_presult::read(::apac
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             (*(this->success)).clear();
-            uint32_t _size423;
-            ::apache::thrift::protocol::TType _etype426;
-            xfer += iprot->readListBegin(_etype426, _size423);
-            (*(this->success)).resize(_size423);
-            uint32_t _i427;
-            for (_i427 = 0; _i427 < _size423; ++_i427)
+            uint32_t _size629;
+            ::apache::thrift::protocol::TType _etype632;
+            xfer += iprot->readListBegin(_etype632, _size629);
+            (*(this->success)).resize(_size629);
+            uint32_t _i633;
+            for (_i633 = 0; _i633 < _size629; ++_i633)
             {
-              xfer += (*(this->success))[_i427].read(iprot);
+              xfer += (*(this->success))[_i633].read(iprot);
             }
             xfer += iprot->readListEnd();
           }
@@ -934,17 +934,17 @@ uint32_t SnappyDataService_execute_args::read(::apache::thrift::protocol::TProto
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->outputParams.clear();
-            uint32_t _size428;
-            ::apache::thrift::protocol::TType _ktype429;
-            ::apache::thrift::protocol::TType _vtype430;
-            xfer += iprot->readMapBegin(_ktype429, _vtype430, _size428);
-            uint32_t _i432;
-            for (_i432 = 0; _i432 < _size428; ++_i432)
+            uint32_t _size634;
+            ::apache::thrift::protocol::TType _ktype635;
+            ::apache::thrift::protocol::TType _vtype636;
+            xfer += iprot->readMapBegin(_ktype635, _vtype636, _size634);
+            uint32_t _i638;
+            for (_i638 = 0; _i638 < _size634; ++_i638)
             {
-              int32_t _key433;
-              xfer += iprot->readI32(_key433);
-              OutputParameter& _val434 = this->outputParams[_key433];
-              xfer += _val434.read(iprot);
+              int32_t _key639;
+              xfer += iprot->readI32(_key639);
+              OutputParameter& _val640 = this->outputParams[_key639];
+              xfer += _val640.read(iprot);
             }
             xfer += iprot->readMapEnd();
           }
@@ -996,11 +996,11 @@ uint32_t SnappyDataService_execute_args::write(::apache::thrift::protocol::TProt
   xfer += oprot->writeFieldBegin("outputParams", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->outputParams.size()));
-    std::map<int32_t, OutputParameter> ::const_iterator _iter435;
-    for (_iter435 = this->outputParams.begin(); _iter435 != this->outputParams.end(); ++_iter435)
+    std::map<int32_t, OutputParameter> ::const_iterator _iter641;
+    for (_iter641 = this->outputParams.begin(); _iter641 != this->outputParams.end(); ++_iter641)
     {
-      xfer += oprot->writeI32(_iter435->first);
-      xfer += _iter435->second.write(oprot);
+      xfer += oprot->writeI32(_iter641->first);
+      xfer += _iter641->second.write(oprot);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -1039,11 +1039,11 @@ uint32_t SnappyDataService_execute_pargs::write(::apache::thrift::protocol::TPro
   xfer += oprot->writeFieldBegin("outputParams", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>((*(this->outputParams)).size()));
-    std::map<int32_t, OutputParameter> ::const_iterator _iter436;
-    for (_iter436 = (*(this->outputParams)).begin(); _iter436 != (*(this->outputParams)).end(); ++_iter436)
+    std::map<int32_t, OutputParameter> ::const_iterator _iter642;
+    for (_iter642 = (*(this->outputParams)).begin(); _iter642 != (*(this->outputParams)).end(); ++_iter642)
     {
-      xfer += oprot->writeI32(_iter436->first);
-      xfer += _iter436->second.write(oprot);
+      xfer += oprot->writeI32(_iter642->first);
+      xfer += _iter642->second.write(oprot);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -1225,14 +1225,14 @@ uint32_t SnappyDataService_executeUpdate_args::read(::apache::thrift::protocol::
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->sqls.clear();
-            uint32_t _size437;
-            ::apache::thrift::protocol::TType _etype440;
-            xfer += iprot->readListBegin(_etype440, _size437);
-            this->sqls.resize(_size437);
-            uint32_t _i441;
-            for (_i441 = 0; _i441 < _size437; ++_i441)
+            uint32_t _size643;
+            ::apache::thrift::protocol::TType _etype646;
+            xfer += iprot->readListBegin(_etype646, _size643);
+            this->sqls.resize(_size643);
+            uint32_t _i647;
+            for (_i647 = 0; _i647 < _size643; ++_i647)
             {
-              xfer += iprot->readString(this->sqls[_i441]);
+              xfer += iprot->readString(this->sqls[_i647]);
             }
             xfer += iprot->readListEnd();
           }
@@ -1280,10 +1280,10 @@ uint32_t SnappyDataService_executeUpdate_args::write(::apache::thrift::protocol:
   xfer += oprot->writeFieldBegin("sqls", ::apache::thrift::protocol::T_LIST, 2);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->sqls.size()));
-    std::vector<std::string> ::const_iterator _iter442;
-    for (_iter442 = this->sqls.begin(); _iter442 != this->sqls.end(); ++_iter442)
+    std::vector<std::string> ::const_iterator _iter648;
+    for (_iter648 = this->sqls.begin(); _iter648 != this->sqls.end(); ++_iter648)
     {
-      xfer += oprot->writeString((*_iter442));
+      xfer += oprot->writeString((*_iter648));
     }
     xfer += oprot->writeListEnd();
   }
@@ -1318,10 +1318,10 @@ uint32_t SnappyDataService_executeUpdate_pargs::write(::apache::thrift::protocol
   xfer += oprot->writeFieldBegin("sqls", ::apache::thrift::protocol::T_LIST, 2);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRING, static_cast<uint32_t>((*(this->sqls)).size()));
-    std::vector<std::string> ::const_iterator _iter443;
-    for (_iter443 = (*(this->sqls)).begin(); _iter443 != (*(this->sqls)).end(); ++_iter443)
+    std::vector<std::string> ::const_iterator _iter649;
+    for (_iter649 = (*(this->sqls)).begin(); _iter649 != (*(this->sqls)).end(); ++_iter649)
     {
-      xfer += oprot->writeString((*_iter443));
+      xfer += oprot->writeString((*_iter649));
     }
     xfer += oprot->writeListEnd();
   }
@@ -1761,17 +1761,17 @@ uint32_t SnappyDataService_prepareStatement_args::read(::apache::thrift::protoco
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->outputParams.clear();
-            uint32_t _size444;
-            ::apache::thrift::protocol::TType _ktype445;
-            ::apache::thrift::protocol::TType _vtype446;
-            xfer += iprot->readMapBegin(_ktype445, _vtype446, _size444);
-            uint32_t _i448;
-            for (_i448 = 0; _i448 < _size444; ++_i448)
+            uint32_t _size650;
+            ::apache::thrift::protocol::TType _ktype651;
+            ::apache::thrift::protocol::TType _vtype652;
+            xfer += iprot->readMapBegin(_ktype651, _vtype652, _size650);
+            uint32_t _i654;
+            for (_i654 = 0; _i654 < _size650; ++_i654)
             {
-              int32_t _key449;
-              xfer += iprot->readI32(_key449);
-              OutputParameter& _val450 = this->outputParams[_key449];
-              xfer += _val450.read(iprot);
+              int32_t _key655;
+              xfer += iprot->readI32(_key655);
+              OutputParameter& _val656 = this->outputParams[_key655];
+              xfer += _val656.read(iprot);
             }
             xfer += iprot->readMapEnd();
           }
@@ -1823,11 +1823,11 @@ uint32_t SnappyDataService_prepareStatement_args::write(::apache::thrift::protoc
   xfer += oprot->writeFieldBegin("outputParams", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->outputParams.size()));
-    std::map<int32_t, OutputParameter> ::const_iterator _iter451;
-    for (_iter451 = this->outputParams.begin(); _iter451 != this->outputParams.end(); ++_iter451)
+    std::map<int32_t, OutputParameter> ::const_iterator _iter657;
+    for (_iter657 = this->outputParams.begin(); _iter657 != this->outputParams.end(); ++_iter657)
     {
-      xfer += oprot->writeI32(_iter451->first);
-      xfer += _iter451->second.write(oprot);
+      xfer += oprot->writeI32(_iter657->first);
+      xfer += _iter657->second.write(oprot);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -1866,11 +1866,11 @@ uint32_t SnappyDataService_prepareStatement_pargs::write(::apache::thrift::proto
   xfer += oprot->writeFieldBegin("outputParams", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>((*(this->outputParams)).size()));
-    std::map<int32_t, OutputParameter> ::const_iterator _iter452;
-    for (_iter452 = (*(this->outputParams)).begin(); _iter452 != (*(this->outputParams)).end(); ++_iter452)
+    std::map<int32_t, OutputParameter> ::const_iterator _iter658;
+    for (_iter658 = (*(this->outputParams)).begin(); _iter658 != (*(this->outputParams)).end(); ++_iter658)
     {
-      xfer += oprot->writeI32(_iter452->first);
-      xfer += _iter452->second.write(oprot);
+      xfer += oprot->writeI32(_iter658->first);
+      xfer += _iter658->second.write(oprot);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -2060,17 +2060,17 @@ uint32_t SnappyDataService_executePrepared_args::read(::apache::thrift::protocol
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->outputParams.clear();
-            uint32_t _size453;
-            ::apache::thrift::protocol::TType _ktype454;
-            ::apache::thrift::protocol::TType _vtype455;
-            xfer += iprot->readMapBegin(_ktype454, _vtype455, _size453);
-            uint32_t _i457;
-            for (_i457 = 0; _i457 < _size453; ++_i457)
+            uint32_t _size659;
+            ::apache::thrift::protocol::TType _ktype660;
+            ::apache::thrift::protocol::TType _vtype661;
+            xfer += iprot->readMapBegin(_ktype660, _vtype661, _size659);
+            uint32_t _i663;
+            for (_i663 = 0; _i663 < _size659; ++_i663)
             {
-              int32_t _key458;
-              xfer += iprot->readI32(_key458);
-              OutputParameter& _val459 = this->outputParams[_key458];
-              xfer += _val459.read(iprot);
+              int32_t _key664;
+              xfer += iprot->readI32(_key664);
+              OutputParameter& _val665 = this->outputParams[_key664];
+              xfer += _val665.read(iprot);
             }
             xfer += iprot->readMapEnd();
           }
@@ -2122,11 +2122,11 @@ uint32_t SnappyDataService_executePrepared_args::write(::apache::thrift::protoco
   xfer += oprot->writeFieldBegin("outputParams", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->outputParams.size()));
-    std::map<int32_t, OutputParameter> ::const_iterator _iter460;
-    for (_iter460 = this->outputParams.begin(); _iter460 != this->outputParams.end(); ++_iter460)
+    std::map<int32_t, OutputParameter> ::const_iterator _iter666;
+    for (_iter666 = this->outputParams.begin(); _iter666 != this->outputParams.end(); ++_iter666)
     {
-      xfer += oprot->writeI32(_iter460->first);
-      xfer += _iter460->second.write(oprot);
+      xfer += oprot->writeI32(_iter666->first);
+      xfer += _iter666->second.write(oprot);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -2165,11 +2165,11 @@ uint32_t SnappyDataService_executePrepared_pargs::write(::apache::thrift::protoc
   xfer += oprot->writeFieldBegin("outputParams", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>((*(this->outputParams)).size()));
-    std::map<int32_t, OutputParameter> ::const_iterator _iter461;
-    for (_iter461 = (*(this->outputParams)).begin(); _iter461 != (*(this->outputParams)).end(); ++_iter461)
+    std::map<int32_t, OutputParameter> ::const_iterator _iter667;
+    for (_iter667 = (*(this->outputParams)).begin(); _iter667 != (*(this->outputParams)).end(); ++_iter667)
     {
-      xfer += oprot->writeI32(_iter461->first);
-      xfer += _iter461->second.write(oprot);
+      xfer += oprot->writeI32(_iter667->first);
+      xfer += _iter667->second.write(oprot);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -2851,14 +2851,14 @@ uint32_t SnappyDataService_executePreparedBatch_args::read(::apache::thrift::pro
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->paramsBatch.clear();
-            uint32_t _size462;
-            ::apache::thrift::protocol::TType _etype465;
-            xfer += iprot->readListBegin(_etype465, _size462);
-            this->paramsBatch.resize(_size462);
-            uint32_t _i466;
-            for (_i466 = 0; _i466 < _size462; ++_i466)
+            uint32_t _size668;
+            ::apache::thrift::protocol::TType _etype671;
+            xfer += iprot->readListBegin(_etype671, _size668);
+            this->paramsBatch.resize(_size668);
+            uint32_t _i672;
+            for (_i672 = 0; _i672 < _size668; ++_i672)
             {
-              xfer += this->paramsBatch[_i466].read(iprot);
+              xfer += this->paramsBatch[_i672].read(iprot);
             }
             xfer += iprot->readListEnd();
           }
@@ -2906,10 +2906,10 @@ uint32_t SnappyDataService_executePreparedBatch_args::write(::apache::thrift::pr
   xfer += oprot->writeFieldBegin("paramsBatch", ::apache::thrift::protocol::T_LIST, 2);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->paramsBatch.size()));
-    std::vector<Row> ::const_iterator _iter467;
-    for (_iter467 = this->paramsBatch.begin(); _iter467 != this->paramsBatch.end(); ++_iter467)
+    std::vector<Row> ::const_iterator _iter673;
+    for (_iter673 = this->paramsBatch.begin(); _iter673 != this->paramsBatch.end(); ++_iter673)
     {
-      xfer += (*_iter467).write(oprot);
+      xfer += (*_iter673).write(oprot);
     }
     xfer += oprot->writeListEnd();
   }
@@ -2944,10 +2944,10 @@ uint32_t SnappyDataService_executePreparedBatch_pargs::write(::apache::thrift::p
   xfer += oprot->writeFieldBegin("paramsBatch", ::apache::thrift::protocol::T_LIST, 2);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>((*(this->paramsBatch)).size()));
-    std::vector<Row> ::const_iterator _iter468;
-    for (_iter468 = (*(this->paramsBatch)).begin(); _iter468 != (*(this->paramsBatch)).end(); ++_iter468)
+    std::vector<Row> ::const_iterator _iter674;
+    for (_iter674 = (*(this->paramsBatch)).begin(); _iter674 != (*(this->paramsBatch)).end(); ++_iter674)
     {
-      xfer += (*_iter468).write(oprot);
+      xfer += (*_iter674).write(oprot);
     }
     xfer += oprot->writeListEnd();
   }
@@ -3137,14 +3137,14 @@ uint32_t SnappyDataService_prepareAndExecute_args::read(::apache::thrift::protoc
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->paramsBatch.clear();
-            uint32_t _size469;
-            ::apache::thrift::protocol::TType _etype472;
-            xfer += iprot->readListBegin(_etype472, _size469);
-            this->paramsBatch.resize(_size469);
-            uint32_t _i473;
-            for (_i473 = 0; _i473 < _size469; ++_i473)
+            uint32_t _size675;
+            ::apache::thrift::protocol::TType _etype678;
+            xfer += iprot->readListBegin(_etype678, _size675);
+            this->paramsBatch.resize(_size675);
+            uint32_t _i679;
+            for (_i679 = 0; _i679 < _size675; ++_i679)
             {
-              xfer += this->paramsBatch[_i473].read(iprot);
+              xfer += this->paramsBatch[_i679].read(iprot);
             }
             xfer += iprot->readListEnd();
           }
@@ -3157,17 +3157,17 @@ uint32_t SnappyDataService_prepareAndExecute_args::read(::apache::thrift::protoc
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->outputParams.clear();
-            uint32_t _size474;
-            ::apache::thrift::protocol::TType _ktype475;
-            ::apache::thrift::protocol::TType _vtype476;
-            xfer += iprot->readMapBegin(_ktype475, _vtype476, _size474);
-            uint32_t _i478;
-            for (_i478 = 0; _i478 < _size474; ++_i478)
+            uint32_t _size680;
+            ::apache::thrift::protocol::TType _ktype681;
+            ::apache::thrift::protocol::TType _vtype682;
+            xfer += iprot->readMapBegin(_ktype681, _vtype682, _size680);
+            uint32_t _i684;
+            for (_i684 = 0; _i684 < _size680; ++_i684)
             {
-              int32_t _key479;
-              xfer += iprot->readI32(_key479);
-              OutputParameter& _val480 = this->outputParams[_key479];
-              xfer += _val480.read(iprot);
+              int32_t _key685;
+              xfer += iprot->readI32(_key685);
+              OutputParameter& _val686 = this->outputParams[_key685];
+              xfer += _val686.read(iprot);
             }
             xfer += iprot->readMapEnd();
           }
@@ -3219,10 +3219,10 @@ uint32_t SnappyDataService_prepareAndExecute_args::write(::apache::thrift::proto
   xfer += oprot->writeFieldBegin("paramsBatch", ::apache::thrift::protocol::T_LIST, 3);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->paramsBatch.size()));
-    std::vector<Row> ::const_iterator _iter481;
-    for (_iter481 = this->paramsBatch.begin(); _iter481 != this->paramsBatch.end(); ++_iter481)
+    std::vector<Row> ::const_iterator _iter687;
+    for (_iter687 = this->paramsBatch.begin(); _iter687 != this->paramsBatch.end(); ++_iter687)
     {
-      xfer += (*_iter481).write(oprot);
+      xfer += (*_iter687).write(oprot);
     }
     xfer += oprot->writeListEnd();
   }
@@ -3231,11 +3231,11 @@ uint32_t SnappyDataService_prepareAndExecute_args::write(::apache::thrift::proto
   xfer += oprot->writeFieldBegin("outputParams", ::apache::thrift::protocol::T_MAP, 4);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->outputParams.size()));
-    std::map<int32_t, OutputParameter> ::const_iterator _iter482;
-    for (_iter482 = this->outputParams.begin(); _iter482 != this->outputParams.end(); ++_iter482)
+    std::map<int32_t, OutputParameter> ::const_iterator _iter688;
+    for (_iter688 = this->outputParams.begin(); _iter688 != this->outputParams.end(); ++_iter688)
     {
-      xfer += oprot->writeI32(_iter482->first);
-      xfer += _iter482->second.write(oprot);
+      xfer += oprot->writeI32(_iter688->first);
+      xfer += _iter688->second.write(oprot);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -3274,10 +3274,10 @@ uint32_t SnappyDataService_prepareAndExecute_pargs::write(::apache::thrift::prot
   xfer += oprot->writeFieldBegin("paramsBatch", ::apache::thrift::protocol::T_LIST, 3);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>((*(this->paramsBatch)).size()));
-    std::vector<Row> ::const_iterator _iter483;
-    for (_iter483 = (*(this->paramsBatch)).begin(); _iter483 != (*(this->paramsBatch)).end(); ++_iter483)
+    std::vector<Row> ::const_iterator _iter689;
+    for (_iter689 = (*(this->paramsBatch)).begin(); _iter689 != (*(this->paramsBatch)).end(); ++_iter689)
     {
-      xfer += (*_iter483).write(oprot);
+      xfer += (*_iter689).write(oprot);
     }
     xfer += oprot->writeListEnd();
   }
@@ -3286,11 +3286,11 @@ uint32_t SnappyDataService_prepareAndExecute_pargs::write(::apache::thrift::prot
   xfer += oprot->writeFieldBegin("outputParams", ::apache::thrift::protocol::T_MAP, 4);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>((*(this->outputParams)).size()));
-    std::map<int32_t, OutputParameter> ::const_iterator _iter484;
-    for (_iter484 = (*(this->outputParams)).begin(); _iter484 != (*(this->outputParams)).end(); ++_iter484)
+    std::map<int32_t, OutputParameter> ::const_iterator _iter690;
+    for (_iter690 = (*(this->outputParams)).begin(); _iter690 != (*(this->outputParams)).end(); ++_iter690)
     {
-      xfer += oprot->writeI32(_iter484->first);
-      xfer += _iter484->second.write(oprot);
+      xfer += oprot->writeI32(_iter690->first);
+      xfer += _iter690->second.write(oprot);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -3480,19 +3480,19 @@ uint32_t SnappyDataService_beginTransaction_args::read(::apache::thrift::protoco
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->flags.clear();
-            uint32_t _size485;
-            ::apache::thrift::protocol::TType _ktype486;
-            ::apache::thrift::protocol::TType _vtype487;
-            xfer += iprot->readMapBegin(_ktype486, _vtype487, _size485);
-            uint32_t _i489;
-            for (_i489 = 0; _i489 < _size485; ++_i489)
+            uint32_t _size691;
+            ::apache::thrift::protocol::TType _ktype692;
+            ::apache::thrift::protocol::TType _vtype693;
+            xfer += iprot->readMapBegin(_ktype692, _vtype693, _size691);
+            uint32_t _i695;
+            for (_i695 = 0; _i695 < _size691; ++_i695)
             {
-              TransactionAttribute::type _key490;
-              int32_t ecast492;
-              xfer += iprot->readI32(ecast492);
-              _key490 = (TransactionAttribute::type)ecast492;
-              bool& _val491 = this->flags[_key490];
-              xfer += iprot->readBool(_val491);
+              TransactionAttribute::type _key696;
+              int32_t ecast698;
+              xfer += iprot->readI32(ecast698);
+              _key696 = (TransactionAttribute::type)ecast698;
+              bool& _val697 = this->flags[_key696];
+              xfer += iprot->readBool(_val697);
             }
             xfer += iprot->readMapEnd();
           }
@@ -3536,11 +3536,11 @@ uint32_t SnappyDataService_beginTransaction_args::write(::apache::thrift::protoc
   xfer += oprot->writeFieldBegin("flags", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_BOOL, static_cast<uint32_t>(this->flags.size()));
-    std::map<TransactionAttribute::type, bool> ::const_iterator _iter493;
-    for (_iter493 = this->flags.begin(); _iter493 != this->flags.end(); ++_iter493)
+    std::map<TransactionAttribute::type, bool> ::const_iterator _iter699;
+    for (_iter699 = this->flags.begin(); _iter699 != this->flags.end(); ++_iter699)
     {
-      xfer += oprot->writeI32((int32_t)_iter493->first);
-      xfer += oprot->writeBool(_iter493->second);
+      xfer += oprot->writeI32((int32_t)_iter699->first);
+      xfer += oprot->writeBool(_iter699->second);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -3575,11 +3575,11 @@ uint32_t SnappyDataService_beginTransaction_pargs::write(::apache::thrift::proto
   xfer += oprot->writeFieldBegin("flags", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_BOOL, static_cast<uint32_t>((*(this->flags)).size()));
-    std::map<TransactionAttribute::type, bool> ::const_iterator _iter494;
-    for (_iter494 = (*(this->flags)).begin(); _iter494 != (*(this->flags)).end(); ++_iter494)
+    std::map<TransactionAttribute::type, bool> ::const_iterator _iter700;
+    for (_iter700 = (*(this->flags)).begin(); _iter700 != (*(this->flags)).end(); ++_iter700)
     {
-      xfer += oprot->writeI32((int32_t)_iter494->first);
-      xfer += oprot->writeBool(_iter494->second);
+      xfer += oprot->writeI32((int32_t)_iter700->first);
+      xfer += oprot->writeBool(_iter700->second);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -3757,19 +3757,19 @@ uint32_t SnappyDataService_setTransactionAttributes_args::read(::apache::thrift:
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->flags.clear();
-            uint32_t _size495;
-            ::apache::thrift::protocol::TType _ktype496;
-            ::apache::thrift::protocol::TType _vtype497;
-            xfer += iprot->readMapBegin(_ktype496, _vtype497, _size495);
-            uint32_t _i499;
-            for (_i499 = 0; _i499 < _size495; ++_i499)
+            uint32_t _size701;
+            ::apache::thrift::protocol::TType _ktype702;
+            ::apache::thrift::protocol::TType _vtype703;
+            xfer += iprot->readMapBegin(_ktype702, _vtype703, _size701);
+            uint32_t _i705;
+            for (_i705 = 0; _i705 < _size701; ++_i705)
             {
-              TransactionAttribute::type _key500;
-              int32_t ecast502;
-              xfer += iprot->readI32(ecast502);
-              _key500 = (TransactionAttribute::type)ecast502;
-              bool& _val501 = this->flags[_key500];
-              xfer += iprot->readBool(_val501);
+              TransactionAttribute::type _key706;
+              int32_t ecast708;
+              xfer += iprot->readI32(ecast708);
+              _key706 = (TransactionAttribute::type)ecast708;
+              bool& _val707 = this->flags[_key706];
+              xfer += iprot->readBool(_val707);
             }
             xfer += iprot->readMapEnd();
           }
@@ -3809,11 +3809,11 @@ uint32_t SnappyDataService_setTransactionAttributes_args::write(::apache::thrift
   xfer += oprot->writeFieldBegin("flags", ::apache::thrift::protocol::T_MAP, 2);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_BOOL, static_cast<uint32_t>(this->flags.size()));
-    std::map<TransactionAttribute::type, bool> ::const_iterator _iter503;
-    for (_iter503 = this->flags.begin(); _iter503 != this->flags.end(); ++_iter503)
+    std::map<TransactionAttribute::type, bool> ::const_iterator _iter709;
+    for (_iter709 = this->flags.begin(); _iter709 != this->flags.end(); ++_iter709)
     {
-      xfer += oprot->writeI32((int32_t)_iter503->first);
-      xfer += oprot->writeBool(_iter503->second);
+      xfer += oprot->writeI32((int32_t)_iter709->first);
+      xfer += oprot->writeBool(_iter709->second);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -3844,11 +3844,11 @@ uint32_t SnappyDataService_setTransactionAttributes_pargs::write(::apache::thrif
   xfer += oprot->writeFieldBegin("flags", ::apache::thrift::protocol::T_MAP, 2);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_BOOL, static_cast<uint32_t>((*(this->flags)).size()));
-    std::map<TransactionAttribute::type, bool> ::const_iterator _iter504;
-    for (_iter504 = (*(this->flags)).begin(); _iter504 != (*(this->flags)).end(); ++_iter504)
+    std::map<TransactionAttribute::type, bool> ::const_iterator _iter710;
+    for (_iter710 = (*(this->flags)).begin(); _iter710 != (*(this->flags)).end(); ++_iter710)
     {
-      xfer += oprot->writeI32((int32_t)_iter504->first);
-      xfer += oprot->writeBool(_iter504->second);
+      xfer += oprot->writeI32((int32_t)_iter710->first);
+      xfer += oprot->writeBool(_iter710->second);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -4090,19 +4090,19 @@ uint32_t SnappyDataService_getTransactionAttributes_result::read(::apache::thrif
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->success.clear();
-            uint32_t _size505;
-            ::apache::thrift::protocol::TType _ktype506;
-            ::apache::thrift::protocol::TType _vtype507;
-            xfer += iprot->readMapBegin(_ktype506, _vtype507, _size505);
-            uint32_t _i509;
-            for (_i509 = 0; _i509 < _size505; ++_i509)
+            uint32_t _size711;
+            ::apache::thrift::protocol::TType _ktype712;
+            ::apache::thrift::protocol::TType _vtype713;
+            xfer += iprot->readMapBegin(_ktype712, _vtype713, _size711);
+            uint32_t _i715;
+            for (_i715 = 0; _i715 < _size711; ++_i715)
             {
-              TransactionAttribute::type _key510;
-              int32_t ecast512;
-              xfer += iprot->readI32(ecast512);
-              _key510 = (TransactionAttribute::type)ecast512;
-              bool& _val511 = this->success[_key510];
-              xfer += iprot->readBool(_val511);
+              TransactionAttribute::type _key716;
+              int32_t ecast718;
+              xfer += iprot->readI32(ecast718);
+              _key716 = (TransactionAttribute::type)ecast718;
+              bool& _val717 = this->success[_key716];
+              xfer += iprot->readBool(_val717);
             }
             xfer += iprot->readMapEnd();
           }
@@ -4141,11 +4141,11 @@ uint32_t SnappyDataService_getTransactionAttributes_result::write(::apache::thri
     xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_MAP, 0);
     {
       xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_BOOL, static_cast<uint32_t>(this->success.size()));
-      std::map<TransactionAttribute::type, bool> ::const_iterator _iter513;
-      for (_iter513 = this->success.begin(); _iter513 != this->success.end(); ++_iter513)
+      std::map<TransactionAttribute::type, bool> ::const_iterator _iter719;
+      for (_iter719 = this->success.begin(); _iter719 != this->success.end(); ++_iter719)
       {
-        xfer += oprot->writeI32((int32_t)_iter513->first);
-        xfer += oprot->writeBool(_iter513->second);
+        xfer += oprot->writeI32((int32_t)_iter719->first);
+        xfer += oprot->writeBool(_iter719->second);
       }
       xfer += oprot->writeMapEnd();
     }
@@ -4189,19 +4189,19 @@ uint32_t SnappyDataService_getTransactionAttributes_presult::read(::apache::thri
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             (*(this->success)).clear();
-            uint32_t _size514;
-            ::apache::thrift::protocol::TType _ktype515;
-            ::apache::thrift::protocol::TType _vtype516;
-            xfer += iprot->readMapBegin(_ktype515, _vtype516, _size514);
-            uint32_t _i518;
-            for (_i518 = 0; _i518 < _size514; ++_i518)
+            uint32_t _size720;
+            ::apache::thrift::protocol::TType _ktype721;
+            ::apache::thrift::protocol::TType _vtype722;
+            xfer += iprot->readMapBegin(_ktype721, _vtype722, _size720);
+            uint32_t _i724;
+            for (_i724 = 0; _i724 < _size720; ++_i724)
             {
-              TransactionAttribute::type _key519;
-              int32_t ecast521;
-              xfer += iprot->readI32(ecast521);
-              _key519 = (TransactionAttribute::type)ecast521;
-              bool& _val520 = (*(this->success))[_key519];
-              xfer += iprot->readBool(_val520);
+              TransactionAttribute::type _key725;
+              int32_t ecast727;
+              xfer += iprot->readI32(ecast727);
+              _key725 = (TransactionAttribute::type)ecast727;
+              bool& _val726 = (*(this->success))[_key725];
+              xfer += iprot->readBool(_val726);
             }
             xfer += iprot->readMapEnd();
           }
@@ -4275,19 +4275,19 @@ uint32_t SnappyDataService_commitTransaction_args::read(::apache::thrift::protoc
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->flags.clear();
-            uint32_t _size522;
-            ::apache::thrift::protocol::TType _ktype523;
-            ::apache::thrift::protocol::TType _vtype524;
-            xfer += iprot->readMapBegin(_ktype523, _vtype524, _size522);
-            uint32_t _i526;
-            for (_i526 = 0; _i526 < _size522; ++_i526)
+            uint32_t _size728;
+            ::apache::thrift::protocol::TType _ktype729;
+            ::apache::thrift::protocol::TType _vtype730;
+            xfer += iprot->readMapBegin(_ktype729, _vtype730, _size728);
+            uint32_t _i732;
+            for (_i732 = 0; _i732 < _size728; ++_i732)
             {
-              TransactionAttribute::type _key527;
-              int32_t ecast529;
-              xfer += iprot->readI32(ecast529);
-              _key527 = (TransactionAttribute::type)ecast529;
-              bool& _val528 = this->flags[_key527];
-              xfer += iprot->readBool(_val528);
+              TransactionAttribute::type _key733;
+              int32_t ecast735;
+              xfer += iprot->readI32(ecast735);
+              _key733 = (TransactionAttribute::type)ecast735;
+              bool& _val734 = this->flags[_key733];
+              xfer += iprot->readBool(_val734);
             }
             xfer += iprot->readMapEnd();
           }
@@ -4331,11 +4331,11 @@ uint32_t SnappyDataService_commitTransaction_args::write(::apache::thrift::proto
   xfer += oprot->writeFieldBegin("flags", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_BOOL, static_cast<uint32_t>(this->flags.size()));
-    std::map<TransactionAttribute::type, bool> ::const_iterator _iter530;
-    for (_iter530 = this->flags.begin(); _iter530 != this->flags.end(); ++_iter530)
+    std::map<TransactionAttribute::type, bool> ::const_iterator _iter736;
+    for (_iter736 = this->flags.begin(); _iter736 != this->flags.end(); ++_iter736)
     {
-      xfer += oprot->writeI32((int32_t)_iter530->first);
-      xfer += oprot->writeBool(_iter530->second);
+      xfer += oprot->writeI32((int32_t)_iter736->first);
+      xfer += oprot->writeBool(_iter736->second);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -4370,11 +4370,11 @@ uint32_t SnappyDataService_commitTransaction_pargs::write(::apache::thrift::prot
   xfer += oprot->writeFieldBegin("flags", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_BOOL, static_cast<uint32_t>((*(this->flags)).size()));
-    std::map<TransactionAttribute::type, bool> ::const_iterator _iter531;
-    for (_iter531 = (*(this->flags)).begin(); _iter531 != (*(this->flags)).end(); ++_iter531)
+    std::map<TransactionAttribute::type, bool> ::const_iterator _iter737;
+    for (_iter737 = (*(this->flags)).begin(); _iter737 != (*(this->flags)).end(); ++_iter737)
     {
-      xfer += oprot->writeI32((int32_t)_iter531->first);
-      xfer += oprot->writeBool(_iter531->second);
+      xfer += oprot->writeI32((int32_t)_iter737->first);
+      xfer += oprot->writeBool(_iter737->second);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -4540,19 +4540,19 @@ uint32_t SnappyDataService_rollbackTransaction_args::read(::apache::thrift::prot
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->flags.clear();
-            uint32_t _size532;
-            ::apache::thrift::protocol::TType _ktype533;
-            ::apache::thrift::protocol::TType _vtype534;
-            xfer += iprot->readMapBegin(_ktype533, _vtype534, _size532);
-            uint32_t _i536;
-            for (_i536 = 0; _i536 < _size532; ++_i536)
+            uint32_t _size738;
+            ::apache::thrift::protocol::TType _ktype739;
+            ::apache::thrift::protocol::TType _vtype740;
+            xfer += iprot->readMapBegin(_ktype739, _vtype740, _size738);
+            uint32_t _i742;
+            for (_i742 = 0; _i742 < _size738; ++_i742)
             {
-              TransactionAttribute::type _key537;
-              int32_t ecast539;
-              xfer += iprot->readI32(ecast539);
-              _key537 = (TransactionAttribute::type)ecast539;
-              bool& _val538 = this->flags[_key537];
-              xfer += iprot->readBool(_val538);
+              TransactionAttribute::type _key743;
+              int32_t ecast745;
+              xfer += iprot->readI32(ecast745);
+              _key743 = (TransactionAttribute::type)ecast745;
+              bool& _val744 = this->flags[_key743];
+              xfer += iprot->readBool(_val744);
             }
             xfer += iprot->readMapEnd();
           }
@@ -4596,11 +4596,11 @@ uint32_t SnappyDataService_rollbackTransaction_args::write(::apache::thrift::pro
   xfer += oprot->writeFieldBegin("flags", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_BOOL, static_cast<uint32_t>(this->flags.size()));
-    std::map<TransactionAttribute::type, bool> ::const_iterator _iter540;
-    for (_iter540 = this->flags.begin(); _iter540 != this->flags.end(); ++_iter540)
+    std::map<TransactionAttribute::type, bool> ::const_iterator _iter746;
+    for (_iter746 = this->flags.begin(); _iter746 != this->flags.end(); ++_iter746)
     {
-      xfer += oprot->writeI32((int32_t)_iter540->first);
-      xfer += oprot->writeBool(_iter540->second);
+      xfer += oprot->writeI32((int32_t)_iter746->first);
+      xfer += oprot->writeBool(_iter746->second);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -4635,11 +4635,11 @@ uint32_t SnappyDataService_rollbackTransaction_pargs::write(::apache::thrift::pr
   xfer += oprot->writeFieldBegin("flags", ::apache::thrift::protocol::T_MAP, 3);
   {
     xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I32, ::apache::thrift::protocol::T_BOOL, static_cast<uint32_t>((*(this->flags)).size()));
-    std::map<TransactionAttribute::type, bool> ::const_iterator _iter541;
-    for (_iter541 = (*(this->flags)).begin(); _iter541 != (*(this->flags)).end(); ++_iter541)
+    std::map<TransactionAttribute::type, bool> ::const_iterator _iter747;
+    for (_iter747 = (*(this->flags)).begin(); _iter747 != (*(this->flags)).end(); ++_iter747)
     {
-      xfer += oprot->writeI32((int32_t)_iter541->first);
-      xfer += oprot->writeBool(_iter541->second);
+      xfer += oprot->writeI32((int32_t)_iter747->first);
+      xfer += oprot->writeBool(_iter747->second);
     }
     xfer += oprot->writeMapEnd();
   }
@@ -6559,16 +6559,16 @@ uint32_t SnappyDataService_executeCursorUpdate_args::read(::apache::thrift::prot
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->operations.clear();
-            uint32_t _size542;
-            ::apache::thrift::protocol::TType _etype545;
-            xfer += iprot->readListBegin(_etype545, _size542);
-            this->operations.resize(_size542);
-            uint32_t _i546;
-            for (_i546 = 0; _i546 < _size542; ++_i546)
+            uint32_t _size748;
+            ::apache::thrift::protocol::TType _etype751;
+            xfer += iprot->readListBegin(_etype751, _size748);
+            this->operations.resize(_size748);
+            uint32_t _i752;
+            for (_i752 = 0; _i752 < _size748; ++_i752)
             {
-              int32_t ecast547;
-              xfer += iprot->readI32(ecast547);
-              this->operations[_i546] = (CursorUpdateOperation::type)ecast547;
+              int32_t ecast753;
+              xfer += iprot->readI32(ecast753);
+              this->operations[_i752] = (CursorUpdateOperation::type)ecast753;
             }
             xfer += iprot->readListEnd();
           }
@@ -6581,14 +6581,14 @@ uint32_t SnappyDataService_executeCursorUpdate_args::read(::apache::thrift::prot
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->changedRows.clear();
-            uint32_t _size548;
-            ::apache::thrift::protocol::TType _etype551;
-            xfer += iprot->readListBegin(_etype551, _size548);
-            this->changedRows.resize(_size548);
-            uint32_t _i552;
-            for (_i552 = 0; _i552 < _size548; ++_i552)
+            uint32_t _size754;
+            ::apache::thrift::protocol::TType _etype757;
+            xfer += iprot->readListBegin(_etype757, _size754);
+            this->changedRows.resize(_size754);
+            uint32_t _i758;
+            for (_i758 = 0; _i758 < _size754; ++_i758)
             {
-              xfer += this->changedRows[_i552].read(iprot);
+              xfer += this->changedRows[_i758].read(iprot);
             }
             xfer += iprot->readListEnd();
           }
@@ -6601,23 +6601,23 @@ uint32_t SnappyDataService_executeCursorUpdate_args::read(::apache::thrift::prot
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->changedColumnsList.clear();
-            uint32_t _size553;
-            ::apache::thrift::protocol::TType _etype556;
-            xfer += iprot->readListBegin(_etype556, _size553);
-            this->changedColumnsList.resize(_size553);
-            uint32_t _i557;
-            for (_i557 = 0; _i557 < _size553; ++_i557)
+            uint32_t _size759;
+            ::apache::thrift::protocol::TType _etype762;
+            xfer += iprot->readListBegin(_etype762, _size759);
+            this->changedColumnsList.resize(_size759);
+            uint32_t _i763;
+            for (_i763 = 0; _i763 < _size759; ++_i763)
             {
               {
-                this->changedColumnsList[_i557].clear();
-                uint32_t _size558;
-                ::apache::thrift::protocol::TType _etype561;
-                xfer += iprot->readListBegin(_etype561, _size558);
-                this->changedColumnsList[_i557].resize(_size558);
-                uint32_t _i562;
-                for (_i562 = 0; _i562 < _size558; ++_i562)
+                this->changedColumnsList[_i763].clear();
+                uint32_t _size764;
+                ::apache::thrift::protocol::TType _etype767;
+                xfer += iprot->readListBegin(_etype767, _size764);
+                this->changedColumnsList[_i763].resize(_size764);
+                uint32_t _i768;
+                for (_i768 = 0; _i768 < _size764; ++_i768)
                 {
-                  xfer += iprot->readI32(this->changedColumnsList[_i557][_i562]);
+                  xfer += iprot->readI32(this->changedColumnsList[_i763][_i768]);
                 }
                 xfer += iprot->readListEnd();
               }
@@ -6633,14 +6633,14 @@ uint32_t SnappyDataService_executeCursorUpdate_args::read(::apache::thrift::prot
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->changedRowIndexes.clear();
-            uint32_t _size563;
-            ::apache::thrift::protocol::TType _etype566;
-            xfer += iprot->readListBegin(_etype566, _size563);
-            this->changedRowIndexes.resize(_size563);
-            uint32_t _i567;
-            for (_i567 = 0; _i567 < _size563; ++_i567)
+            uint32_t _size769;
+            ::apache::thrift::protocol::TType _etype772;
+            xfer += iprot->readListBegin(_etype772, _size769);
+            this->changedRowIndexes.resize(_size769);
+            uint32_t _i773;
+            for (_i773 = 0; _i773 < _size769; ++_i773)
             {
-              xfer += iprot->readI32(this->changedRowIndexes[_i567]);
+              xfer += iprot->readI32(this->changedRowIndexes[_i773]);
             }
             xfer += iprot->readListEnd();
           }
@@ -6680,10 +6680,10 @@ uint32_t SnappyDataService_executeCursorUpdate_args::write(::apache::thrift::pro
   xfer += oprot->writeFieldBegin("operations", ::apache::thrift::protocol::T_LIST, 2);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>(this->operations.size()));
-    std::vector<CursorUpdateOperation::type> ::const_iterator _iter568;
-    for (_iter568 = this->operations.begin(); _iter568 != this->operations.end(); ++_iter568)
+    std::vector<CursorUpdateOperation::type> ::const_iterator _iter774;
+    for (_iter774 = this->operations.begin(); _iter774 != this->operations.end(); ++_iter774)
     {
-      xfer += oprot->writeI32((int32_t)(*_iter568));
+      xfer += oprot->writeI32((int32_t)(*_iter774));
     }
     xfer += oprot->writeListEnd();
   }
@@ -6692,10 +6692,10 @@ uint32_t SnappyDataService_executeCursorUpdate_args::write(::apache::thrift::pro
   xfer += oprot->writeFieldBegin("changedRows", ::apache::thrift::protocol::T_LIST, 3);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->changedRows.size()));
-    std::vector<Row> ::const_iterator _iter569;
-    for (_iter569 = this->changedRows.begin(); _iter569 != this->changedRows.end(); ++_iter569)
+    std::vector<Row> ::const_iterator _iter775;
+    for (_iter775 = this->changedRows.begin(); _iter775 != this->changedRows.end(); ++_iter775)
     {
-      xfer += (*_iter569).write(oprot);
+      xfer += (*_iter775).write(oprot);
     }
     xfer += oprot->writeListEnd();
   }
@@ -6704,15 +6704,15 @@ uint32_t SnappyDataService_executeCursorUpdate_args::write(::apache::thrift::pro
   xfer += oprot->writeFieldBegin("changedColumnsList", ::apache::thrift::protocol::T_LIST, 4);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_LIST, static_cast<uint32_t>(this->changedColumnsList.size()));
-    std::vector<std::vector<int32_t> > ::const_iterator _iter570;
-    for (_iter570 = this->changedColumnsList.begin(); _iter570 != this->changedColumnsList.end(); ++_iter570)
+    std::vector<std::vector<int32_t> > ::const_iterator _iter776;
+    for (_iter776 = this->changedColumnsList.begin(); _iter776 != this->changedColumnsList.end(); ++_iter776)
     {
       {
-        xfer += oprot->writeListBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>((*_iter570).size()));
-        std::vector<int32_t> ::const_iterator _iter571;
-        for (_iter571 = (*_iter570).begin(); _iter571 != (*_iter570).end(); ++_iter571)
+        xfer += oprot->writeListBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>((*_iter776).size()));
+        std::vector<int32_t> ::const_iterator _iter777;
+        for (_iter777 = (*_iter776).begin(); _iter777 != (*_iter776).end(); ++_iter777)
         {
-          xfer += oprot->writeI32((*_iter571));
+          xfer += oprot->writeI32((*_iter777));
         }
         xfer += oprot->writeListEnd();
       }
@@ -6724,10 +6724,10 @@ uint32_t SnappyDataService_executeCursorUpdate_args::write(::apache::thrift::pro
   xfer += oprot->writeFieldBegin("changedRowIndexes", ::apache::thrift::protocol::T_LIST, 5);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>(this->changedRowIndexes.size()));
-    std::vector<int32_t> ::const_iterator _iter572;
-    for (_iter572 = this->changedRowIndexes.begin(); _iter572 != this->changedRowIndexes.end(); ++_iter572)
+    std::vector<int32_t> ::const_iterator _iter778;
+    for (_iter778 = this->changedRowIndexes.begin(); _iter778 != this->changedRowIndexes.end(); ++_iter778)
     {
-      xfer += oprot->writeI32((*_iter572));
+      xfer += oprot->writeI32((*_iter778));
     }
     xfer += oprot->writeListEnd();
   }
@@ -6758,10 +6758,10 @@ uint32_t SnappyDataService_executeCursorUpdate_pargs::write(::apache::thrift::pr
   xfer += oprot->writeFieldBegin("operations", ::apache::thrift::protocol::T_LIST, 2);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>((*(this->operations)).size()));
-    std::vector<CursorUpdateOperation::type> ::const_iterator _iter573;
-    for (_iter573 = (*(this->operations)).begin(); _iter573 != (*(this->operations)).end(); ++_iter573)
+    std::vector<CursorUpdateOperation::type> ::const_iterator _iter779;
+    for (_iter779 = (*(this->operations)).begin(); _iter779 != (*(this->operations)).end(); ++_iter779)
     {
-      xfer += oprot->writeI32((int32_t)(*_iter573));
+      xfer += oprot->writeI32((int32_t)(*_iter779));
     }
     xfer += oprot->writeListEnd();
   }
@@ -6770,10 +6770,10 @@ uint32_t SnappyDataService_executeCursorUpdate_pargs::write(::apache::thrift::pr
   xfer += oprot->writeFieldBegin("changedRows", ::apache::thrift::protocol::T_LIST, 3);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>((*(this->changedRows)).size()));
-    std::vector<Row> ::const_iterator _iter574;
-    for (_iter574 = (*(this->changedRows)).begin(); _iter574 != (*(this->changedRows)).end(); ++_iter574)
+    std::vector<Row> ::const_iterator _iter780;
+    for (_iter780 = (*(this->changedRows)).begin(); _iter780 != (*(this->changedRows)).end(); ++_iter780)
     {
-      xfer += (*_iter574).write(oprot);
+      xfer += (*_iter780).write(oprot);
     }
     xfer += oprot->writeListEnd();
   }
@@ -6782,15 +6782,15 @@ uint32_t SnappyDataService_executeCursorUpdate_pargs::write(::apache::thrift::pr
   xfer += oprot->writeFieldBegin("changedColumnsList", ::apache::thrift::protocol::T_LIST, 4);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_LIST, static_cast<uint32_t>((*(this->changedColumnsList)).size()));
-    std::vector<std::vector<int32_t> > ::const_iterator _iter575;
-    for (_iter575 = (*(this->changedColumnsList)).begin(); _iter575 != (*(this->changedColumnsList)).end(); ++_iter575)
+    std::vector<std::vector<int32_t> > ::const_iterator _iter781;
+    for (_iter781 = (*(this->changedColumnsList)).begin(); _iter781 != (*(this->changedColumnsList)).end(); ++_iter781)
     {
       {
-        xfer += oprot->writeListBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>((*_iter575).size()));
-        std::vector<int32_t> ::const_iterator _iter576;
-        for (_iter576 = (*_iter575).begin(); _iter576 != (*_iter575).end(); ++_iter576)
+        xfer += oprot->writeListBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>((*_iter781).size()));
+        std::vector<int32_t> ::const_iterator _iter782;
+        for (_iter782 = (*_iter781).begin(); _iter782 != (*_iter781).end(); ++_iter782)
         {
-          xfer += oprot->writeI32((*_iter576));
+          xfer += oprot->writeI32((*_iter782));
         }
         xfer += oprot->writeListEnd();
       }
@@ -6802,10 +6802,10 @@ uint32_t SnappyDataService_executeCursorUpdate_pargs::write(::apache::thrift::pr
   xfer += oprot->writeFieldBegin("changedRowIndexes", ::apache::thrift::protocol::T_LIST, 5);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>((*(this->changedRowIndexes)).size()));
-    std::vector<int32_t> ::const_iterator _iter577;
-    for (_iter577 = (*(this->changedRowIndexes)).begin(); _iter577 != (*(this->changedRowIndexes)).end(); ++_iter577)
+    std::vector<int32_t> ::const_iterator _iter783;
+    for (_iter783 = (*(this->changedRowIndexes)).begin(); _iter783 != (*(this->changedRowIndexes)).end(); ++_iter783)
     {
-      xfer += oprot->writeI32((*_iter577));
+      xfer += oprot->writeI32((*_iter783));
     }
     xfer += oprot->writeListEnd();
   }
@@ -8431,14 +8431,14 @@ uint32_t SnappyDataService_recoverXATransaction_result::read(::apache::thrift::p
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->success.clear();
-            uint32_t _size578;
-            ::apache::thrift::protocol::TType _etype581;
-            xfer += iprot->readListBegin(_etype581, _size578);
-            this->success.resize(_size578);
-            uint32_t _i582;
-            for (_i582 = 0; _i582 < _size578; ++_i582)
+            uint32_t _size784;
+            ::apache::thrift::protocol::TType _etype787;
+            xfer += iprot->readListBegin(_etype787, _size784);
+            this->success.resize(_size784);
+            uint32_t _i788;
+            for (_i788 = 0; _i788 < _size784; ++_i788)
             {
-              xfer += this->success[_i582].read(iprot);
+              xfer += this->success[_i788].read(iprot);
             }
             xfer += iprot->readListEnd();
           }
@@ -8477,10 +8477,10 @@ uint32_t SnappyDataService_recoverXATransaction_result::write(::apache::thrift::
     xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_LIST, 0);
     {
       xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->success.size()));
-      std::vector<TransactionXid> ::const_iterator _iter583;
-      for (_iter583 = this->success.begin(); _iter583 != this->success.end(); ++_iter583)
+      std::vector<TransactionXid> ::const_iterator _iter789;
+      for (_iter789 = this->success.begin(); _iter789 != this->success.end(); ++_iter789)
       {
-        xfer += (*_iter583).write(oprot);
+        xfer += (*_iter789).write(oprot);
       }
       xfer += oprot->writeListEnd();
     }
@@ -8524,14 +8524,14 @@ uint32_t SnappyDataService_recoverXATransaction_presult::read(::apache::thrift::
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             (*(this->success)).clear();
-            uint32_t _size584;
-            ::apache::thrift::protocol::TType _etype587;
-            xfer += iprot->readListBegin(_etype587, _size584);
-            (*(this->success)).resize(_size584);
-            uint32_t _i588;
-            for (_i588 = 0; _i588 < _size584; ++_i588)
+            uint32_t _size790;
+            ::apache::thrift::protocol::TType _etype793;
+            xfer += iprot->readListBegin(_etype793, _size790);
+            (*(this->success)).resize(_size790);
+            uint32_t _i794;
+            for (_i794 = 0; _i794 < _size790; ++_i794)
             {
-              xfer += (*(this->success))[_i588].read(iprot);
+              xfer += (*(this->success))[_i794].read(iprot);
             }
             xfer += iprot->readListEnd();
           }
@@ -8805,9 +8805,9 @@ uint32_t SnappyDataService_getSchemaMetaData_args::read(::apache::thrift::protoc
     {
       case 1:
         if (ftype == ::apache::thrift::protocol::T_I32) {
-          int32_t ecast589;
-          xfer += iprot->readI32(ecast589);
-          this->schemaCall = (ServiceMetaDataCall::type)ecast589;
+          int32_t ecast795;
+          xfer += iprot->readI32(ecast795);
+          this->schemaCall = (ServiceMetaDataCall::type)ecast795;
           this->__isset.schemaCall = true;
         } else {
           xfer += iprot->skip(ftype);
@@ -9269,16 +9269,16 @@ uint32_t SnappyDataService_getUDTs_args::read(::apache::thrift::protocol::TProto
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->types.clear();
-            uint32_t _size590;
-            ::apache::thrift::protocol::TType _etype593;
-            xfer += iprot->readListBegin(_etype593, _size590);
-            this->types.resize(_size590);
-            uint32_t _i594;
-            for (_i594 = 0; _i594 < _size590; ++_i594)
+            uint32_t _size796;
+            ::apache::thrift::protocol::TType _etype799;
+            xfer += iprot->readListBegin(_etype799, _size796);
+            this->types.resize(_size796);
+            uint32_t _i800;
+            for (_i800 = 0; _i800 < _size796; ++_i800)
             {
-              int32_t ecast595;
-              xfer += iprot->readI32(ecast595);
-              this->types[_i594] = (SnappyType::type)ecast595;
+              int32_t ecast801;
+              xfer += iprot->readI32(ecast801);
+              this->types[_i800] = (SnappyType::type)ecast801;
             }
             xfer += iprot->readListEnd();
           }
@@ -9310,10 +9310,10 @@ uint32_t SnappyDataService_getUDTs_args::write(::apache::thrift::protocol::TProt
   xfer += oprot->writeFieldBegin("types", ::apache::thrift::protocol::T_LIST, 2);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>(this->types.size()));
-    std::vector<SnappyType::type> ::const_iterator _iter596;
-    for (_iter596 = this->types.begin(); _iter596 != this->types.end(); ++_iter596)
+    std::vector<SnappyType::type> ::const_iterator _iter802;
+    for (_iter802 = this->types.begin(); _iter802 != this->types.end(); ++_iter802)
     {
-      xfer += oprot->writeI32((int32_t)(*_iter596));
+      xfer += oprot->writeI32((int32_t)(*_iter802));
     }
     xfer += oprot->writeListEnd();
   }
@@ -9340,10 +9340,10 @@ uint32_t SnappyDataService_getUDTs_pargs::write(::apache::thrift::protocol::TPro
   xfer += oprot->writeFieldBegin("types", ::apache::thrift::protocol::T_LIST, 2);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>((*(this->types)).size()));
-    std::vector<SnappyType::type> ::const_iterator _iter597;
-    for (_iter597 = (*(this->types)).begin(); _iter597 != (*(this->types)).end(); ++_iter597)
+    std::vector<SnappyType::type> ::const_iterator _iter803;
+    for (_iter803 = (*(this->types)).begin(); _iter803 != (*(this->types)).end(); ++_iter803)
     {
-      xfer += oprot->writeI32((int32_t)(*_iter597));
+      xfer += oprot->writeI32((int32_t)(*_iter803));
     }
     xfer += oprot->writeListEnd();
   }
@@ -9835,14 +9835,14 @@ uint32_t SnappyDataService_fetchActiveConnections_result::read(::apache::thrift:
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->success.clear();
-            uint32_t _size598;
-            ::apache::thrift::protocol::TType _etype601;
-            xfer += iprot->readListBegin(_etype601, _size598);
-            this->success.resize(_size598);
-            uint32_t _i602;
-            for (_i602 = 0; _i602 < _size598; ++_i602)
+            uint32_t _size804;
+            ::apache::thrift::protocol::TType _etype807;
+            xfer += iprot->readListBegin(_etype807, _size804);
+            this->success.resize(_size804);
+            uint32_t _i808;
+            for (_i808 = 0; _i808 < _size804; ++_i808)
             {
-              xfer += this->success[_i602].read(iprot);
+              xfer += this->success[_i808].read(iprot);
             }
             xfer += iprot->readListEnd();
           }
@@ -9881,10 +9881,10 @@ uint32_t SnappyDataService_fetchActiveConnections_result::write(::apache::thrift
     xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_LIST, 0);
     {
       xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->success.size()));
-      std::vector<ConnectionProperties> ::const_iterator _iter603;
-      for (_iter603 = this->success.begin(); _iter603 != this->success.end(); ++_iter603)
+      std::vector<ConnectionProperties> ::const_iterator _iter809;
+      for (_iter809 = this->success.begin(); _iter809 != this->success.end(); ++_iter809)
       {
-        xfer += (*_iter603).write(oprot);
+        xfer += (*_iter809).write(oprot);
       }
       xfer += oprot->writeListEnd();
     }
@@ -9928,14 +9928,14 @@ uint32_t SnappyDataService_fetchActiveConnections_presult::read(::apache::thrift
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             (*(this->success)).clear();
-            uint32_t _size604;
-            ::apache::thrift::protocol::TType _etype607;
-            xfer += iprot->readListBegin(_etype607, _size604);
-            (*(this->success)).resize(_size604);
-            uint32_t _i608;
-            for (_i608 = 0; _i608 < _size604; ++_i608)
+            uint32_t _size810;
+            ::apache::thrift::protocol::TType _etype813;
+            xfer += iprot->readListBegin(_etype813, _size810);
+            (*(this->success)).resize(_size810);
+            uint32_t _i814;
+            for (_i814 = 0; _i814 < _size810; ++_i814)
             {
-              xfer += (*(this->success))[_i608].read(iprot);
+              xfer += (*(this->success))[_i814].read(iprot);
             }
             xfer += iprot->readListEnd();
           }
@@ -10085,17 +10085,17 @@ uint32_t SnappyDataService_fetchActiveStatements_result::read(::apache::thrift::
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             this->success.clear();
-            uint32_t _size609;
-            ::apache::thrift::protocol::TType _ktype610;
-            ::apache::thrift::protocol::TType _vtype611;
-            xfer += iprot->readMapBegin(_ktype610, _vtype611, _size609);
-            uint32_t _i613;
-            for (_i613 = 0; _i613 < _size609; ++_i613)
+            uint32_t _size815;
+            ::apache::thrift::protocol::TType _ktype816;
+            ::apache::thrift::protocol::TType _vtype817;
+            xfer += iprot->readMapBegin(_ktype816, _vtype817, _size815);
+            uint32_t _i819;
+            for (_i819 = 0; _i819 < _size815; ++_i819)
             {
-              int64_t _key614;
-              xfer += iprot->readI64(_key614);
-              std::string& _val615 = this->success[_key614];
-              xfer += iprot->readString(_val615);
+              int64_t _key820;
+              xfer += iprot->readI64(_key820);
+              std::string& _val821 = this->success[_key820];
+              xfer += iprot->readString(_val821);
             }
             xfer += iprot->readMapEnd();
           }
@@ -10134,11 +10134,11 @@ uint32_t SnappyDataService_fetchActiveStatements_result::write(::apache::thrift:
     xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_MAP, 0);
     {
       xfer += oprot->writeMapBegin(::apache::thrift::protocol::T_I64, ::apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->success.size()));
-      std::map<int64_t, std::string> ::const_iterator _iter616;
-      for (_iter616 = this->success.begin(); _iter616 != this->success.end(); ++_iter616)
+      std::map<int64_t, std::string> ::const_iterator _iter822;
+      for (_iter822 = this->success.begin(); _iter822 != this->success.end(); ++_iter822)
       {
-        xfer += oprot->writeI64(_iter616->first);
-        xfer += oprot->writeString(_iter616->second);
+        xfer += oprot->writeI64(_iter822->first);
+        xfer += oprot->writeString(_iter822->second);
       }
       xfer += oprot->writeMapEnd();
     }
@@ -10182,17 +10182,17 @@ uint32_t SnappyDataService_fetchActiveStatements_presult::read(::apache::thrift:
         if (ftype == ::apache::thrift::protocol::T_MAP) {
           {
             (*(this->success)).clear();
-            uint32_t _size617;
-            ::apache::thrift::protocol::TType _ktype618;
-            ::apache::thrift::protocol::TType _vtype619;
-            xfer += iprot->readMapBegin(_ktype618, _vtype619, _size617);
-            uint32_t _i621;
-            for (_i621 = 0; _i621 < _size617; ++_i621)
+            uint32_t _size823;
+            ::apache::thrift::protocol::TType _ktype824;
+            ::apache::thrift::protocol::TType _vtype825;
+            xfer += iprot->readMapBegin(_ktype824, _vtype825, _size823);
+            uint32_t _i827;
+            for (_i827 = 0; _i827 < _size823; ++_i827)
             {
-              int64_t _key622;
-              xfer += iprot->readI64(_key622);
-              std::string& _val623 = (*(this->success))[_key622];
-              xfer += iprot->readString(_val623);
+              int64_t _key828;
+              xfer += iprot->readI64(_key828);
+              std::string& _val829 = (*(this->success))[_key828];
+              xfer += iprot->readString(_val829);
             }
             xfer += iprot->readMapEnd();
           }
@@ -11150,14 +11150,14 @@ uint32_t SnappyDataService_bulkClose_args::read(::apache::thrift::protocol::TPro
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->entities.clear();
-            uint32_t _size624;
-            ::apache::thrift::protocol::TType _etype627;
-            xfer += iprot->readListBegin(_etype627, _size624);
-            this->entities.resize(_size624);
-            uint32_t _i628;
-            for (_i628 = 0; _i628 < _size624; ++_i628)
+            uint32_t _size830;
+            ::apache::thrift::protocol::TType _etype833;
+            xfer += iprot->readListBegin(_etype833, _size830);
+            this->entities.resize(_size830);
+            uint32_t _i834;
+            for (_i834 = 0; _i834 < _size830; ++_i834)
             {
-              xfer += this->entities[_i628].read(iprot);
+              xfer += this->entities[_i834].read(iprot);
             }
             xfer += iprot->readListEnd();
           }
@@ -11185,10 +11185,10 @@ uint32_t SnappyDataService_bulkClose_args::write(::apache::thrift::protocol::TPr
   xfer += oprot->writeFieldBegin("entities", ::apache::thrift::protocol::T_LIST, 1);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->entities.size()));
-    std::vector<EntityId> ::const_iterator _iter629;
-    for (_iter629 = this->entities.begin(); _iter629 != this->entities.end(); ++_iter629)
+    std::vector<EntityId> ::const_iterator _iter835;
+    for (_iter835 = this->entities.begin(); _iter835 != this->entities.end(); ++_iter835)
     {
-      xfer += (*_iter629).write(oprot);
+      xfer += (*_iter835).write(oprot);
     }
     xfer += oprot->writeListEnd();
   }
@@ -11211,10 +11211,10 @@ uint32_t SnappyDataService_bulkClose_pargs::write(::apache::thrift::protocol::TP
   xfer += oprot->writeFieldBegin("entities", ::apache::thrift::protocol::T_LIST, 1);
   {
     xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>((*(this->entities)).size()));
-    std::vector<EntityId> ::const_iterator _iter630;
-    for (_iter630 = (*(this->entities)).begin(); _iter630 != (*(this->entities)).end(); ++_iter630)
+    std::vector<EntityId> ::const_iterator _iter836;
+    for (_iter836 = (*(this->entities)).begin(); _iter836 != (*(this->entities)).end(); ++_iter836)
     {
-      xfer += (*_iter630).write(oprot);
+      xfer += (*_iter836).write(oprot);
     }
     xfer += oprot->writeListEnd();
   }

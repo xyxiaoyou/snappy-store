@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -228,7 +228,6 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
       PartitionedRegionDataStore datastore = pr.getDataStore();
       long sizeInMemory = 0L;
       long sizeOfRegion = 0L;
-      long offHeapBytes = 0L;
       long entryOverhead = 0L;
       long entryCount = 0L;
       if (datastore != null) {
@@ -247,14 +246,13 @@ public class SnappyRegionStatsCollectorFunction implements Function, Declarable 
           sizeOfRegion += constantOverhead + br.getTotalBytes();
           entryCount += br.entryCount();
         }
-        offHeapBytes = pr.getPrStats().getOffHeapSizeInBytes();
       }
       if (entryOverhead > 0) {
         entryOverhead *= entryCount;
       }
 
-      tableStats.setSizeInMemory(sizeInMemory + offHeapBytes + entryOverhead);
-      tableStats.setTotalSize(sizeOfRegion + offHeapBytes + entryOverhead);
+      tableStats.setSizeInMemory(sizeInMemory + entryOverhead);
+      tableStats.setTotalSize(sizeOfRegion + entryOverhead);
       tableStats.setSizeSpillToDisk(tableStats.getTotalSize() - tableStats.getSizeInMemory());
     }
     return tableStats;

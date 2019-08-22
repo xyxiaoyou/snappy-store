@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -1494,8 +1494,8 @@ public class GemFireCacheImpl implements InternalCache, ClientCache, HasCachePer
           if (usingDefaultMemorySize) {
             memorySize = 0;
             bufferAllocator = HeapBufferAllocator.instance();
-            // log a warning
-            getLogger().warning("DISABLED off-heap because default memory-size = " +
+            // log an error
+            getLogger().error("DISABLED off-heap because default memory-size = " +
                 memorySize + " cannot be allocated: " + oome);
           } else {
             throw new IllegalStateException("Provided memory-size = " + memorySize +

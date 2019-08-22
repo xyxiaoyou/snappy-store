@@ -64,7 +64,7 @@ allprojects {
     kryoVersion = '4.0.2'
     thriftVersion = '0.9.3'
     jnaVersion = '4.5.2'
-    jerseyVersion = '2.27'
+    jerseyVersion = '2.22.2'
     jsr305Version = '3.0.2'
     servletAPIVersion = '3.1.0'
     derbyVersion = '10.14.2.0'
@@ -130,7 +130,7 @@ allprojects {
 
     PRODUCT_MAJOR = '1'
     PRODUCT_MINOR = '6'
-    PRODUCT_MAINT = '3'
+    PRODUCT_MAINT = '4'
     PRODUCT_CLASSIFIER = ''
     PRODUCT_RELEASE_STAGE = ''
     PRODUCT_VERSION = "${PRODUCT_MAJOR}.${PRODUCT_MINOR}.${PRODUCT_MAINT}${PRODUCT_CLASSIFIER}"
@@ -401,6 +401,7 @@ subprojects {
       include '**/*Test.class'
       exclude '**/*TestUtil*'
       exclude '**/*TestBase.class'
+      exclude '**/*HDFS*.class'
       exclude '**/*DUnit*.class'
       exclude '**/derbyTesting/**'
       exclude '**/pxf/**'
