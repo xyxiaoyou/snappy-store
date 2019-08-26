@@ -266,7 +266,9 @@ public final class ByteBufferDataOutput extends SerializedDiskBuffer
   }
 
   @Override
-  public void close() throws IOException {
+  public synchronized void close() throws IOException {
+    this.refCount = 0;
+    releaseBuffer();
   }
 
   @Override
