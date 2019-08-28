@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -29,15 +29,15 @@ public class SnappyActivationClass implements GeneratedClass {
   private final boolean returnRows;
   private final int classLoaderVersion;
   boolean isPrepStmt;
-  boolean isUpdateOrDelete;
+  boolean isUpdateOrDeleteOrPut;
 
   public SnappyActivationClass(LanguageConnectionContext lcc, boolean returnRows,
-      boolean isPrepStmt, boolean isUpdateOrDelete) {
+      boolean isPrepStmt, boolean isUpdateOrDeleteOrPut) {
     this.returnRows = returnRows;
     this.classLoaderVersion = lcc.getLanguageConnectionFactory()
         .getClassFactory().getClassLoaderVersion();
     this.isPrepStmt = isPrepStmt;
-    this.isUpdateOrDelete = isUpdateOrDelete;
+    this.isUpdateOrDeleteOrPut = isUpdateOrDeleteOrPut;
   }
 
   public int getClassLoaderVersion() {
@@ -55,7 +55,7 @@ public class SnappyActivationClass implements GeneratedClass {
   public final Object newInstance(final LanguageConnectionContext lcc, final boolean addToLCC,
       final ExecPreparedStatement eps) throws StandardException {
     SnappyActivation sa = new SnappyActivation(lcc, eps, this.returnRows, this.isPrepStmt,
-        this.isUpdateOrDelete);
+        this.isUpdateOrDeleteOrPut);
     if (isPrepStmt) {
       sa.initialize_pvs();
     }

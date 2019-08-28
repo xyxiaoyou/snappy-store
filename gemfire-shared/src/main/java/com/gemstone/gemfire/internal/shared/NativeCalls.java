@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -501,6 +501,12 @@ public abstract class NativeCalls {
   public boolean loadNativeLibrary() {
     return false;
   }
+
+  /**
+   * Try to reinitialize native timer if available.
+   */
+  public void reInitNativeTimer() {
+  }
   
   /**
    * whether o/s supports high resolution clock or equivalent 
@@ -511,7 +517,7 @@ public abstract class NativeCalls {
   public boolean isNativeTimerEnabled() {
     return false;
   }
-  
+
   /**
    * This is fall back for jni based library implementation of NanoTimer which
    * is more efficient than current impl through jna.

@@ -1725,6 +1725,7 @@ public final class TXManagerImpl implements CacheTransactionManager,
       P removeParams) {
     final TXStateProxy tx = this.hostedTXStates.remove(txId, condition,
         context, removeParams);
+    getCache().removeTXId(txId);
     if (tx != null) {
       if (TXStateProxy.LOG_FINE) {
         getLogger().info(LocalizedStrings.DEBUG, "TX removed: " + tx);
@@ -2017,6 +2018,8 @@ public final class TXManagerImpl implements CacheTransactionManager,
   public boolean isHostedTxInProgress(TransactionId txId) {
     return this.hostedTXStates.containsKey(txId);
   }
+
+  public boolean hasHostedTransactions() {return !this.hostedTXStates.isEmpty();}
 
   public TXStateProxy getHostedTXState(TXId txId) {
     return this.hostedTXStates.get(txId);

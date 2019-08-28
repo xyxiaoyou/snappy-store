@@ -82,6 +82,7 @@ import com.pivotal.gemfirexd.internal.engine.access.GemFireTransaction;
 import com.pivotal.gemfirexd.internal.engine.access.index.GfxdIndexManager;
 import com.pivotal.gemfirexd.internal.engine.access.index.MemIndex;
 import com.pivotal.gemfirexd.internal.engine.ddl.*;
+import com.pivotal.gemfirexd.internal.engine.ddl.catalog.GfxdSystemProcedures;
 import com.pivotal.gemfirexd.internal.engine.ddl.catalog.messages.GfxdSystemProcedureMessage;
 import com.pivotal.gemfirexd.internal.engine.ddl.wan.messages.AbstractGfxdReplayableMessage;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdMessage;
@@ -440,11 +441,12 @@ public final class FabricDatabase implements ModuleControl,
       notifyRunning();
       return;
     }
+    final GemFireCacheImpl cache = GemFireCacheImpl.getExisting();
+    final LogWriter logger = cache.getLogger();
+    final EmbedConnection embedConn = (EmbedConnection)conn;
 
+    List<GfxdSystemProcedureMessage> postMsgs = null;
     try {
-      final EmbedConnection embedConn = (EmbedConnection)conn;
-      final GemFireCacheImpl cache = GemFireCacheImpl.getExisting();
-      final LogWriter logger = cache.getLogger();
       final LanguageConnectionContext lcc = embedConn.getLanguageConnection();
       final GemFireTransaction tc = (GemFireTransaction)lcc
           .getTransactionExecute();
@@ -488,7 +490,7 @@ public final class FabricDatabase implements ModuleControl,
         else {
           this.memStore.getDDLStmtQueue().initializeQueue(this.dd);
         }
-        postCreateDDLReplay(embedConn, bootProps, lcc, tc, logger);
+        postMsgs =  postCreateDDLReplay(embedConn, bootProps, lcc, tc, logger);
       } finally {
         if (ddReadLockAcquired) {
           this.dd.unlockAfterReading(null);
@@ -508,7 +510,7 @@ public final class FabricDatabase implements ModuleControl,
       initializeCatalog();
     } catch (Throwable t) {
       try {
-        LogWriter logger = Misc.getCacheLogWriter();
+
         if (logger != null) {
           logger.warning("got throwable: " + t.getMessage() + " calling shut down", t);
         }
@@ -539,6 +541,30 @@ public final class FabricDatabase implements ModuleControl,
       throw StandardException.newException(SQLState.BOOT_DATABASE_FAILED, t,
           Attribute.GFXD_DBNAME);
     }
+
+
+    for (GfxdSystemProcedureMessage msg : postMsgs) {
+      if (msg.getSysProcMethod().isOffHeapMethod()
+        && this.memStore.getGemFireCache().getOffHeapStore() == null) {
+        if (logger.severeEnabled()) {
+          logger.severe("FabricDatabase: aborted initial replay "
+            + "for message " + msg + " method "
+            + msg.getSysProcMethod().name());
+        }
+        continue;
+      }
+      try {
+        msg.execute();
+      } catch (Exception ex) {
+        if (logger.severeEnabled()) {
+          logger.severe("FabricDatabase: failed initial replay "
+            + "for message " + msg + " due to exception", ex);
+        }
+        throw StandardException.newException(SQLState.BOOT_DATABASE_FAILED, ex,
+          Attribute.GFXD_DBNAME);
+      }
+    }
+
   }
 
   private Region createSnappySpecificGlobalCmdRegion(boolean isLead) throws IOException, ClassNotFoundException {
@@ -658,7 +684,7 @@ public final class FabricDatabase implements ModuleControl,
 
     try {
       lcc.getDataDictionary().lockForReading(tc);
-      hiveDBTablesMap = externalCatalog.getAllStoreTablesInCatalog();
+      hiveDBTablesMap = externalCatalog.getAllStoreTablesInCatalogUppercase();
       gfDBTablesMap = getAllGFXDTables();
     } finally {
       lcc.getDataDictionary().unlockAfterReading(tc);
@@ -832,8 +858,18 @@ public final class FabricDatabase implements ModuleControl,
           // make sure that corresponding row buffer also does not contain data
           final Region<?, ?> rowBuffer =
               Misc.getRegionForTable(tableName, false);
-          boolean tableContainsData = (columnBuffer.size() != 0) || (rowBuffer != null && rowBuffer.size() != 0);
-          if (!tableContainsData || (tableContainsData && removeTablesWithData)) {
+          String reservoirRegionName = Misc.getReservoirRegionNameForSampleTable(schema, tableName);
+          Region<Object, Object> reservoirRegion = Misc.getRegionForTable(reservoirRegionName,
+              false);
+          boolean tableContainsData = (columnBuffer.size() != 0) || (rowBuffer != null && rowBuffer.size() != 0)
+              || (reservoirRegion != null && reservoirRegion.size() != 0);
+          if (!tableContainsData || removeTablesWithData) {
+            if (reservoirRegion != null) {
+              SanityManager.DEBUG_PRINT("warning:CATALOG", "Dropping reservoir region " +
+                  reservoirRegionName);
+              GfxdSystemProcedures.CREATE_OR_DROP_RESERVOIR_REGION(reservoirRegionName, tableName,
+                  true);
+            }
             SanityManager.DEBUG_PRINT("warning:CATALOG", "Dropping table " +
                 columnBatchTableName);
             embedConn.createStatement().execute(
@@ -889,7 +925,7 @@ public final class FabricDatabase implements ModuleControl,
    * Replays the initial DDL received by GII from other nodes or recovered from
    * disc.
    */
-  private void postCreateDDLReplay(final EmbedConnection embedConn,
+  private List<GfxdSystemProcedureMessage> postCreateDDLReplay(final EmbedConnection embedConn,
       final Properties bootProps, final LanguageConnectionContext lcc,
       final GemFireTransaction tc, final LogWriter logger) throws Exception {
 
@@ -970,7 +1006,7 @@ public final class FabricDatabase implements ModuleControl,
     final LinkedHashSet<GemFireContainer> uninitializedTables =
         new LinkedHashSet<GemFireContainer>();
     final Statement stmt = embedConn.createStatement();
-
+    List<GfxdSystemProcedureMessage> postMessages = new ArrayList<>();
     try {
       // commenting out for snap-585
       /*
@@ -1067,6 +1103,7 @@ public final class FabricDatabase implements ModuleControl,
             .getPreprocessedDDLQueue(currentQueue, skipRegionInit,
                 lastCurrentSchema, pre11TableSchemaVer, traceConflation);
 
+
         for (GfxdDDLQueueEntry entry : preprocessedQueue) {
           qEntry = entry;
           Object qVal = qEntry.getValue();
@@ -1083,6 +1120,10 @@ public final class FabricDatabase implements ModuleControl,
           if (qVal instanceof GfxdSystemProcedureMessage) {
             final GfxdSystemProcedureMessage msg =
                 (GfxdSystemProcedureMessage)qVal;
+            if (msg.postprocess()) {
+              postMessages.add(msg);
+              continue;
+            }
             if (msg.getSysProcMethod().isOffHeapMethod()
                 && this.memStore.getGemFireCache().getOffHeapStore() == null) {
               if (logger.severeEnabled()) {
@@ -1500,12 +1541,13 @@ public final class FabricDatabase implements ModuleControl,
       stmt.close();
       // Setting this to false so that the waiting compactor thread finishes
       this.memStore.setInitialDDLReplayInProgress(false);
-    }
+      // restore the original schema if required
+      if (!ArrayUtils.objectEquals(initSchema, lcc.getCurrentSchemaName())) {
+        FabricDatabase.setupDefaultSchema(dd, lcc, tc, initSchema, true);
+      }
 
-    // restore the original schema if required
-    if (!ArrayUtils.objectEquals(initSchema, lcc.getCurrentSchemaName())) {
-      FabricDatabase.setupDefaultSchema(dd, lcc, tc, initSchema, true);
     }
+    return  postMessages;
   }
 
   private void checkRecoveredIndex(ArrayList<GemFireContainer> uninitializedContainers,
@@ -1863,8 +1905,12 @@ public final class FabricDatabase implements ModuleControl,
     // Clean up GemFireXD MBeans if management was not disabled
     //GfxdManagementService.handleEvent(GfxdResourceEvent.FABRIC_DB__STOP, this.memStore);
     active = false;
-    tempDir.deleteAll();
-    tempDir = null;
+    final DirFile tempDir = this.tempDir;
+    if (tempDir != null) {
+      // noinspection ResultOfMethodCallIgnored
+      tempDir.deleteAll();
+      this.tempDir = null;
+    }
     runtimeStatisticsOn = false;
   }
 
@@ -2545,8 +2591,8 @@ public final class FabricDatabase implements ModuleControl,
                     .nextInt(Integer.MAX_VALUE);
                 final DirFile df = new DirFile(tDir, TEMP_DIR_PREFIX
                     + Integer.toString(rl) + ".d");
-                df.deleteOnExit();
                 if (df.mkdirs()) {
+                  df.deleteOnExit();
                   assert df.canWrite();
                   return df;
                 }

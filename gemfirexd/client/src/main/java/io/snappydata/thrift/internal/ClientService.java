@@ -75,8 +75,10 @@ public final class ClientService extends ReentrantLock implements LobService {
   private HostAddress currentHostAddress;
   private String currentDefaultSchema;
   final OpenConnectionArgs connArgs;
+  final Map<String, String> connectionProps;
   final List<HostAddress> connHosts;
-  final boolean loadBalance;
+  private boolean loadBalance;
+  private boolean loadBalanceInitialized;
   final SocketParameters socketParams;
   final boolean framedTransport;
   final boolean useDirectBuffers;
@@ -316,7 +318,7 @@ public final class ClientService extends ReentrantLock implements LobService {
       throws SnappyException {
 
     ClientConfiguration config = ClientConfiguration.getInstance();
-    ClientSharedUtils.getLogger().info("Starting client on '" + hostName +
+    ClientSharedUtils.getLogger(getClass()).info("Starting client on '" + hostName +
         "' with ID='" + hostId + "' Source-Revision=" +
         config.getSourceRevision());
 
@@ -327,10 +329,18 @@ public final class ClientService extends ReentrantLock implements LobService {
     this.connArgs = connArgs;
 
     Map<String, String> props = connArgs.getProperties();
+    this.connectionProps = props != null ? new HashMap<>(props) : new HashMap<>();
+
     String propValue;
-    // default for load-balance is true
-    this.loadBalance = (props == null || !"false".equalsIgnoreCase(props
-        .remove(ClientAttribute.LOAD_BALANCE)));
+    boolean hasLoadBalance = props != null &&
+        props.containsKey(ClientAttribute.LOAD_BALANCE);
+    // default for load-balance is true on locators and false on servers so if not
+    // set explicitly, it is initialized when first ControlConnection is created
+    if (hasLoadBalance) {
+      this.loadBalance = "true".equalsIgnoreCase(
+          props.remove(ClientAttribute.LOAD_BALANCE));
+      this.loadBalanceInitialized = true;
+    }
 
     // setup the original host list
     if (props != null && (propValue = props.remove(
@@ -439,13 +449,26 @@ public final class ClientService extends ReentrantLock implements LobService {
       super.lock();
       try {
         this.currentHostAddress = hostAddr;
-        if (this.loadBalance) {
-          ControlConnection controlService = ControlConnection
+        if (this.loadBalance || !this.loadBalanceInitialized) {
+          final ControlConnection controlService = ControlConnection
               .getOrCreateControlConnection(connHosts, this, failure);
-          // at this point query the control service for preferred server
-          this.currentHostAddress = hostAddr = controlService.getPreferredServer(
-              failedServers, this.serverGroups, false, failure);
+          // if connected to server then disable load-balance by default
+          if (!this.loadBalanceInitialized) {
+            // set default load-balance to false for servers and true for locators
+            HostAddress connectedHost = controlService.getConnectedHost(hostAddr);
+            this.loadBalance = connectedHost == null ||
+                connectedHost.getServerType() == null ||
+                connectedHost.getServerType().isThriftLocator();
+            this.loadBalanceInitialized = true;
+          }
+          if (this.loadBalance) {
+            // at this point query the control service for preferred server
+            this.currentHostAddress = hostAddr = controlService.getPreferredServer(
+                failedServers, this.serverGroups, false, failure);
+          }
         }
+        this.connectionProps.put(ClientAttribute.LOAD_BALANCE,
+            Boolean.toString(this.loadBalance));
 
         final TTransport currentTransport;
         int readTimeout;

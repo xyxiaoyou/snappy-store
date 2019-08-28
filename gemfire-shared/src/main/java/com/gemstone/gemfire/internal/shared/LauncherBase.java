@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -46,6 +46,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -103,7 +104,7 @@ public abstract class LauncherBase {
       "The server is still starting. " +
           "{0} seconds have elapsed since the last log message: \n {1}";
   public static final String LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY =
-      "WARN: A {0} is already running in directory \"{1}\"";
+      "WARN: A {0} is already running in directory \"{1}\" in \"{2}\" state";
   private static final String LAUNCHER_EXPECTED_BOOLEAN =
       "Expected true or false for \"{0}=<value>\" but was \"{1}\"";
 
@@ -143,6 +144,7 @@ public abstract class LauncherBase {
   protected boolean waitForData;
 
   protected final String jvmVendor;
+  protected final String jvmName;
   protected String maxHeapSize;
   protected String initialHeapSize;
   @SuppressWarnings("WeakerAccess")
@@ -173,6 +175,7 @@ public abstract class LauncherBase {
     // wait for data sync by default
     this.waitForData = true;
     this.jvmVendor = System.getProperty("java.vendor");
+    this.jvmName = System.getProperty("java.vm.name");
   }
 
   protected String getBaseName(final String name) {
@@ -302,21 +305,22 @@ public abstract class LauncherBase {
     if (maxHeapStr != null && maxHeapStr.equals(this.initialHeapSize)) {
       String criticalHeapStr = (String)map.get(CRITICAL_HEAP_PERCENTAGE);
       if (criticalHeapStr == null) {
-        // for larger heaps, keep critical as 95% and 90% for smaller ones;
+        // for larger heaps, keep critical as 95-99% and 90% for smaller ones;
         // also limit memory remaining beyond critical to 4GB
         double heapSize = ClientSharedUtils.parseMemorySize(maxHeapStr, 0L, 0);
         if (heapSize > (40.0 * 1024.0 * 1024.0 * 1024.0)) {
-          // calculate percent that will leave out at max 4GB
-          criticalPercent = (float)(100.0 * (1.0 - twoGB / heapSize));
-          // don't exceed 98%
-          if (criticalPercent > 98.0f) criticalPercent = 98.0f;
+          // calculate percent that will leave out at max 1GB
+          criticalPercent = (float)(100.0 * (1.0 - oneGB / heapSize));
         } else if (heapSize >= twoGB) {
-          criticalPercent = 95.0f;
+          // leave out max 200MB
+          criticalPercent = (float)(100.0 * (1.0 - (200.0 * 1024.0 * 1024.0) / heapSize));
         } else {
           criticalPercent = 90.0f;
         }
+        // don't exceed 99%
+        if (criticalPercent > 99.0f) criticalPercent = 99.0f;
         map.put(CRITICAL_HEAP_PERCENTAGE, "-" + CRITICAL_HEAP_PERCENTAGE +
-            '=' + criticalPercent);
+            '=' + String.format(Locale.ENGLISH, "%.2f", criticalPercent));
       } else {
         criticalPercent = Float.parseFloat(criticalHeapStr.substring(
             criticalHeapStr.indexOf('=') + 1).trim());
@@ -328,14 +332,14 @@ public abstract class LauncherBase {
         // eviction-heap-percentage
         evictPercent = criticalPercent * 0.9f;
         map.put(EVICTION_HEAP_PERCENTAGE, "-" + EVICTION_HEAP_PERCENTAGE +
-            '=' + evictPercent);
+            '=' + String.format(Locale.ENGLISH, "%.2f", evictPercent));
       } else {
         evictPercent = Float.parseFloat(evictHeapStr.substring(
             evictHeapStr.indexOf('=') + 1).trim());
       }
     }
-    if (jvmVendor != null &&
-        (jvmVendor.contains("Sun") || jvmVendor.contains("Oracle"))) {
+    if (jvmVendor != null && (jvmVendor.contains("Sun") || jvmVendor.contains("Oracle") ||
+        jvmVendor.contains("OpenJDK") || jvmName.contains("OpenJDK"))) {
       vmArgs.add("-XX:+UseParNewGC");
       vmArgs.add("-XX:+UseConcMarkSweepGC");
       vmArgs.add("-XX:CMSInitiatingOccupancyFraction=50");
@@ -369,7 +373,6 @@ public abstract class LauncherBase {
       vmArgs.add("-D" + EVICT_HIGH_ENTRY_COUNT_BUCKETS_FIRST_PROP + "=false");
       vmArgs.add("-D" + EVICT_HIGH_ENTRY_COUNT_BUCKETS_FIRST_FOR_EVICTOR_PROP + "=true");
     }
-    vmArgs.add("-Dorg.codehaus.janino.source_debugging.enable=true");
   }
 
   /**
@@ -389,14 +392,15 @@ public abstract class LauncherBase {
    * Verify and clear the status. If a server is detected as already running
    * then returns an error string else null.
    */
-  protected String verifyAndClearStatus() throws IOException {
+  protected int verifyAndClearStatus() throws IOException {
     final Status status = getStatus();
     if (status != null && status.state != Status.SHUTDOWN) {
-      return MessageFormat.format(LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY,
-          this.baseName, getWorkingDirPath());
+      System.err.println(MessageFormat.format(LAUNCHER_IS_ALREADY_RUNNING_IN_DIRECTORY,
+          this.baseName, getWorkingDirPath(), status.getStateString(status.state)));
+      return status.state;
     }
     deleteStatus();
-    return null;
+    return Status.SHUTDOWN;
   }
 
   protected final void setStatusField(Status s) {
@@ -507,6 +511,9 @@ public abstract class LauncherBase {
       }
       writePidToFile(status);
       System.out.println(status);
+      if (statusWaiting(status)) {
+        return 2;
+      }
       return 0;
     }
   }
@@ -546,6 +553,10 @@ public abstract class LauncherBase {
     // start node even in WAITING state if the "-sync" option is false
     return (status.state == Status.STARTING ||
         (this.waitForData && status.state == Status.WAITING));
+  }
+
+  protected boolean statusWaiting(Status status) {
+    return !this.waitForData && status.state == Status.WAITING;
   }
 
   public static String readPassword(String prompt) {

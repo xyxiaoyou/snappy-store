@@ -18,7 +18,7 @@
 // ----------------------------------------------------------------
 // Changes for SnappyData data platform.
 //
-// Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+// Portions Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"); you
 // may not use this file except in compliance with the License. You
@@ -440,6 +440,8 @@ struct HostAddress {
   3: optional string                                       ipAddress
   // optional since "failedServers" may not have this
   4: optional ServerType                                   serverType
+  // set to true if this is the currently connected host
+  5: optional bool                                         isCurrent
 }
 
 // exceptions

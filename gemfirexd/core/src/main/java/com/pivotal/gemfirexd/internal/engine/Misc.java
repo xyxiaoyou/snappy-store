@@ -362,8 +362,9 @@ public abstract class Misc {
     };
   }
 
-  public static <K, V> String getReservoirRegionNameForSampleTable(String schema, String resolvedBaseName) {
-    Region<K, V> regionBase = Misc.getRegionForTable(resolvedBaseName, false);
+  public static <K, V> String getReservoirRegionNameForSampleTable(
+      String schema, String resolvedBaseName) {
+    Region<K, V> regionBase = Misc.getRegionForTable(resolvedBaseName, true);
     return schema + "_SAMPLE_INTERNAL_" + regionBase.getName();
   }
 
@@ -455,22 +456,20 @@ public abstract class Misc {
   public static <K, V> Region<K, V> getRegion(String regionPath,
       boolean throwIfNotFound, final boolean returnUnInitialized) throws RegionDestroyedException {
     if (throwIfNotFound) {
-      final Region<K, V> region = returnUnInitialized ? getGemFireCache()
-          .getRegionThoughUnInitialized(regionPath) : getGemFireCache()
-          .getRegion(regionPath);
+      final Region<K, V> region = getGemFireCache().getRegion(
+          regionPath, false, returnUnInitialized);
       if (region != null) {
         return region;
       }
       else {
         throw new RegionDestroyedException(
             LocalizedStrings.Region_CLOSED_OR_DESTROYED
-                .toLocalizedString(regionPath),
-            regionPath);
+                .toLocalizedString(regionPath), regionPath);
       }
     }
     else {
-      return returnUnInitialized ? getGemFireCache()
-          .getRegionThoughUnInitialized(regionPath) : getGemFireCache().getRegion(regionPath);
+      return getGemFireCache().getRegion(
+          regionPath, false, returnUnInitialized);
     }
   }
 

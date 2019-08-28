@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -35,10 +35,11 @@
 
 package io.snappydata.thrift.internal;
 
+
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -76,7 +77,7 @@ final class ControlConnection {
   private ArrayList<HostAddress> locators;
   private HostAddress controlHost;
   private LocatorService.Client controlLocator;
-  private final LinkedHashSet<HostAddress> controlHostSet;
+  private final LinkedHashMap<HostAddress, HostAddress> controlHostSet;
 
   private final Random rand = new Random();
 
@@ -92,7 +93,16 @@ final class ControlConnection {
     this.framedTransport = service.framedTransport;
     this.snappyServerTypeSet = Collections.singleton(getServerType());
     this.locators = new ArrayList<>(service.connHosts);
-    this.controlHostSet = new LinkedHashSet<>(service.connHosts);
+    this.controlHostSet = new LinkedHashMap<>(service.connHosts.size());
+    addHosts(service.connHosts);
+  }
+
+  private void addHosts(Collection<HostAddress> hosts) {
+    if (!hosts.isEmpty()) {
+      for (HostAddress host : hosts) {
+        this.controlHostSet.put(host, host);
+      }
+    }
   }
 
   final ServerType getServerType() {
@@ -239,7 +249,9 @@ final class ControlConnection {
               failedServers.contains(this.controlHost)) {
             // don't change the original failure list since that is proper
             // for the current operation but change for random server search
-            skipServers = new HashSet<>(failedServers);
+            @SuppressWarnings("unchecked")
+            Set<HostAddress> servers = new THashSet(failedServers);
+            skipServers = servers;
             skipServers.remove(this.controlHost);
           }
           preferredServer = searchRandomServer(skipServers, failure);
@@ -296,7 +308,7 @@ final class ControlConnection {
   HostAddress searchRandomServer(Set<HostAddress> failedServers,
       Throwable failure) throws SnappyException {
     ServerType searchServerType = getServerType();
-    ArrayList<HostAddress> searchServers = new ArrayList<>(this.controlHostSet);
+    ArrayList<HostAddress> searchServers = new ArrayList<>(this.controlHostSet.keySet());
     if (searchServers.size() > 2) {
       Collections.shuffle(searchServers, rand);
     }
@@ -310,11 +322,24 @@ final class ControlConnection {
     throw failoverExhausted(failedServers, failure);
   }
 
+  synchronized HostAddress getConnectedHost(HostAddress hostAddr) {
+    // search the HostAddress in full host list or return "isCurrent"
+    HostAddress mapHost = this.controlHostSet.get(hostAddr);
+    if (mapHost != null) return mapHost;
+
+    for (HostAddress host : this.controlHostSet.keySet()) {
+      if (host.isSetIsCurrent() && host.isIsCurrent()) {
+        return host;
+      }
+    }
+    return null;
+  }
+
   private synchronized Set<HostAddress> failoverToAvailableHost(
       Set<HostAddress> failedServers, boolean checkFailedControlHosts,
       Throwable failure) throws SnappyException {
 
-    NEXT_SERVER: for (HostAddress controlAddr : this.controlHostSet) {
+    NEXT_SERVER: for (HostAddress controlAddr : this.controlHostSet.keySet()) {
       if (checkFailedControlHosts && failedServers != null &&
           failedServers.contains(controlAddr)) {
         continue;
@@ -427,16 +452,25 @@ final class ControlConnection {
     // to prefer the ones coming as "allServers" with "isServer" flag
     // correctly set rather than the ones in "secondary-locators"
     this.controlHostSet.clear();
-    this.controlHostSet.addAll(newLocators);
-    this.controlHostSet.addAll(allHosts);
+    addHosts(newLocators);
+    addHosts(allHosts);
   }
 
-  private SnappyException unexpectedError(Throwable t, HostAddress host) {
+  void close(boolean clearGlobal) {
     this.controlHost = null;
     if (this.controlLocator != null) {
       this.controlLocator.getOutputProtocol().getTransport().close();
       this.controlLocator = null;
     }
+    if (clearGlobal) {
+      synchronized (allControlConnections) {
+        allControlConnections.remove(this);
+      }
+    }
+  }
+
+  private SnappyException unexpectedError(Throwable t, HostAddress host) {
+    close(false);
     return ThriftExceptionUtil.newSnappyException(SQLState.JAVA_EXCEPTION, t,
         host != null ? host.toString() : null, t.getClass(), t.getMessage());
   }

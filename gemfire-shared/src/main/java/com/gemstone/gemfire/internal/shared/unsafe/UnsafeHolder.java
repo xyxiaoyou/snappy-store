@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData distributed computational and data platform.
  *
- * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -44,6 +44,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiConsumer;
 
@@ -68,6 +69,8 @@ public abstract class UnsafeHolder {
 
     static final sun.misc.Unsafe unsafe;
     static final boolean unaligned;
+    // reserved memory by ByteBuffer.allocateDirect in java.nio.Bits
+    static final AtomicLong directReservedMemory;
     static final Constructor<?> directBufferConstructor;
     static final Field cleanerField;
     static final Field cleanerRunnableField;
@@ -112,6 +115,15 @@ public abstract class UnsafeHolder {
         Method m = bitsClass.getDeclaredMethod("unaligned");
         m.setAccessible(true);
         unaligned = Boolean.TRUE.equals(m.invoke(null));
+
+        AtomicLong reserved = null;
+        try {
+          Field f = bitsClass.getDeclaredField("reservedMemory");
+          f.setAccessible(true);
+          reserved = (AtomicLong)f.get(null);
+        } catch (Throwable ignored) {
+        }
+        directReservedMemory = reserved;
 
       } catch (LinkageError le) {
         throw le;
@@ -184,11 +196,23 @@ public abstract class UnsafeHolder {
     else throw new BufferOverflowException();
   }
 
+  private static long allocateMemoryUnsafe(long size) throws OutOfMemoryError {
+    try {
+      return getUnsafe().allocateMemory(size);
+    } catch (OutOfMemoryError oome) {
+      if (oome.getMessage().contains("Direct buffer")) {
+        throw oome;
+      } else {
+        throw new OutOfMemoryError("Direct buffer allocation of size = " + size + " failed");
+      }
+    }
+  }
+
   public static ByteBuffer allocateDirectBuffer(int size,
       FreeMemory.Factory factory) {
     final int allocSize = getAllocationSize(size);
     final ByteBuffer buffer = allocateDirectBuffer(
-        getUnsafe().allocateMemory(allocSize), allocSize, factory);
+        allocateMemoryUnsafe(allocSize), allocSize, factory);
     buffer.limit(size);
     return buffer;
   }
@@ -215,17 +239,17 @@ public abstract class UnsafeHolder {
   }
 
   public static ByteBuffer reallocateDirectBuffer(ByteBuffer buffer,
-      int newSize, Class<?> expectedClass, FreeMemory.Factory factory) {
+      final int newLength, Class<?> expectedClass, FreeMemory.Factory factory) {
     sun.nio.ch.DirectBuffer directBuffer = (sun.nio.ch.DirectBuffer)buffer;
-    final long address = directBuffer.address();
     long newAddress = 0L;
 
-    newSize = getAllocationSize(newSize);
+    final int newSize = getAllocationSize(newLength);
     final sun.misc.Cleaner cleaner = directBuffer.cleaner();
     if (cleaner != null) {
       // reset the runnable to not free the memory and clean it up
       try {
         Object freeMemory = Wrapper.cleanerRunnableField.get(cleaner);
+        long address;
         if (expectedClass != null && (freeMemory == null ||
             !expectedClass.isInstance(freeMemory))) {
           throw new IllegalStateException("Expected class to be " +
@@ -233,9 +257,10 @@ public abstract class UnsafeHolder {
               (freeMemory != null ? freeMemory.getClass().getName() : "null"));
         }
         // use the efficient realloc call if possible
+        // and clear address so that cleaner.clean() below does nothing
         if ((freeMemory instanceof FreeMemory) &&
-            ((FreeMemory)freeMemory).tryFree() != 0L) {
-          newAddress = Wrapper.unsafe.reallocateMemory(address, newSize);
+            (address = ((FreeMemory)freeMemory).tryFree()) != 0L) {
+          newAddress = getUnsafe().reallocateMemory(address, newSize);
         }
       } catch (IllegalAccessException e) {
         // fallback to full copy
@@ -246,17 +271,19 @@ public abstract class UnsafeHolder {
         throw new IllegalStateException("Expected class to be " +
             expectedClass.getName() + " in reallocate but was non-runnable");
       }
-      newAddress = getUnsafe().allocateMemory(newSize);
-      Platform.copyMemory(null, address, null, newAddress,
-          Math.min(newSize, buffer.limit()));
+      newAddress = allocateMemoryUnsafe(newSize);
+      Platform.copyMemory(null, directBuffer.address(), null, newAddress,
+          Math.min(newLength, buffer.limit()));
     }
     // clean only after copying is done
     if (cleaner != null) {
       cleaner.clean();
       cleaner.clear();
     }
-    return allocateDirectBuffer(newAddress, newSize, factory)
+    ByteBuffer newBuffer = allocateDirectBuffer(newAddress, newSize, factory)
         .order(buffer.order());
+    newBuffer.limit(newLength);
+    return newBuffer;
   }
 
   /**
@@ -327,6 +354,11 @@ public abstract class UnsafeHolder {
         // ignore any exceptions in releasing pending references
       }
     }
+  }
+
+  public static long getDirectReservedMemory() {
+    final AtomicLong reserved = Wrapper.directReservedMemory;
+    return reserved != null ? reserved.get() : 0L;
   }
 
   public static sun.misc.Unsafe getUnsafe() {

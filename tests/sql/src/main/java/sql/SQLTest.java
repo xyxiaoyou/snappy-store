@@ -2299,9 +2299,7 @@ public class SQLTest {
     Connection conn = null;
     if(SQLPrms.isSnappyMode()) {
       try {
-        conn = getSnappyConnection();
-        //conn.createStatement().execute("set snappydata.sql.planCachingAll=false");
-        return conn;
+        return getSnappyConnection();
       } catch (SQLException se) {
         throw new TestException("Got exception while getting snappy data connection.", se);
       }
@@ -6666,6 +6664,7 @@ public class SQLTest {
   throws SQLException{
     String dropColumn = "alter table trade." + tableName 
     + " drop" + (random.nextBoolean()? " column ": " ") + columnName + " RESTRICT ";
+    Log.getLogWriter().info("Executing : " + dropColumn );
     Log.getLogWriter().info("in " +
         (SQLHelper.isDerbyConn(conn)? "derby " : "gfxd ") +
         "dropping the column " + columnName + " in table " + tableName);
@@ -6919,7 +6918,11 @@ public class SQLTest {
     try {
       rs = gConn.createStatement().executeQuery(sql);
     } catch (SQLException se) {
-      if (se.getSQLState().equalsIgnoreCase("42X04") && alterTableDropColumn)
+      if(SQLTest.isSnappyMode){
+        if (se.getSQLState().equalsIgnoreCase("42000") && alterTableDropColumn)
+          log().info(se.getMessage());
+          log().info("Got expected exception for dropped column");
+      } else if (se.getSQLState().equalsIgnoreCase("42X04") && alterTableDropColumn)
         log().info("Got expected exception for dropped column");
       else
         SQLHelper.handleSQLException(se);

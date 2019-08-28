@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -19,6 +19,7 @@ package com.gemstone.gemfire.internal.shared;
 import java.io.Closeable;
 import java.nio.ByteBuffer;
 
+import com.gemstone.gemfire.internal.shared.unsafe.DirectBufferAllocator;
 import com.gemstone.gemfire.internal.shared.unsafe.FreeMemory;
 import com.gemstone.gemfire.internal.shared.unsafe.UnsafeHolder;
 import org.apache.spark.unsafe.Platform;
@@ -196,8 +197,12 @@ public abstract class BufferAllocator implements Closeable {
   protected static int expandedSize(int currentUsed, int required) {
     final long minRequired = (long)currentUsed + required;
     // increase the size by 50%
+    //// max word boundary is not taken as 2147483640 but
+    // 2147483632, because 8 bytes of overhead is added in FreeMemory reference cleaner
+    // which would otherwise make it 2147483648 , overflowing to Long
+    int maxSize = ((Integer.MAX_VALUE - DirectBufferAllocator.DIRECT_OBJECT_OVERHEAD - 7) >>> 3) << 3;
     final int newLength = (int)Math.min(Math.max((currentUsed * 3) >>> 1L,
-        minRequired), Integer.MAX_VALUE - 1);
+        minRequired), maxSize);
     if (newLength >= minRequired) {
       return newLength;
     } else {

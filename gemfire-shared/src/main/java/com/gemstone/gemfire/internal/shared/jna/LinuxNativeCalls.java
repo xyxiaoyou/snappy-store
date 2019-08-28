@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -37,8 +37,6 @@ package com.gemstone.gemfire.internal.shared.jna;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.gemstone.gemfire.internal.shared.NativeCalls;
@@ -47,6 +45,7 @@ import com.sun.jna.LastErrorException;
 import com.sun.jna.Native;
 import com.sun.jna.Platform;
 import com.sun.jna.Structure;
+import org.slf4j.Logger;
 
 /**
  * Implementation of {@link NativeCalls} for Linux platform.
@@ -127,10 +126,18 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
   private static boolean isJNATimerEnabled = false;
 
   public static class TimeSpec extends Structure {
-    public int tv_sec;
-    public int tv_nsec;
+    int tv_sec;
+    int tv_nsec;
 
     static {
+      init();
+    }
+
+    static void loadClass() {
+      // just to ensure class is loaded
+    }
+
+    static void init() {
       try {
         Native.register("rt");
         TimeSpec res = new TimeSpec();
@@ -147,10 +154,6 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
       }
     }
 
-    static void init() {
-      // just invoke the static block
-    }
-
     public static native int clock_getres(int clkId, TimeSpec time)
         throws LastErrorException;
 
@@ -164,10 +167,18 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
   }
 
   public static class TimeSpec64 extends Structure {
-    public long tv_sec;
-    public long tv_nsec;
+    long tv_sec;
+    long tv_nsec;
 
     static {
+      init();
+    }
+
+    static void loadClass() {
+      // just to ensure class is loaded
+    }
+
+    static void init() {
       try {
         Native.register("rt");
         TimeSpec64 res = new TimeSpec64();
@@ -182,10 +193,6 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
       } catch (Throwable t) {
         isJNATimerEnabled = false;
       }
-    }
-
-    static void init() {
-      // just invoke the static block
     }
 
     public static native int clock_getres(int clkId, TimeSpec64 time)
@@ -208,12 +215,24 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
    * {@inheritDoc}
    */
   @Override
-  public boolean isNativeTimerEnabled() {
-    // initialize static blocks
+  public void reInitNativeTimer() {
     if (NativeCallsJNAImpl.is64BitPlatform) {
       TimeSpec64.init();
     } else {
       TimeSpec.init();
+    }
+  }
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public boolean isNativeTimerEnabled() {
+    // initialization already done in static blocks
+    if (NativeCallsJNAImpl.is64BitPlatform) {
+      TimeSpec64.loadClass();
+    } else {
+      TimeSpec.loadClass();
     }
     return isJNATimerEnabled;
   }
@@ -453,7 +472,7 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
    * return false even if it on local file system for now.
    */
   public synchronized boolean isOnLocalFileSystem(final String path) {
-    final Logger logger = ClientSharedUtils.getLogger();
+    final Logger logger = ClientSharedUtils.getLogger(getClass());
     if (!isStatFSEnabled) {
       return false;
     }
@@ -474,8 +493,8 @@ final class LinuxNativeCalls extends POSIXNativeCalls {
       } catch (LastErrorException le) {
         // ignoring it as NFS mounted can give this exception
         // and we just want to retry to remove transient problem.
-        if (logger != null && logger.isLoggable(Level.FINE)) {
-          logger.fine("DEBUG isOnLocalFileSystem got ex = " + le + " msg = "
+        if (logger.isDebugEnabled()) {
+          logger.debug("DEBUG isOnLocalFileSystem got ex = " + le + " msg = "
               + le.getMessage());
         }
       }

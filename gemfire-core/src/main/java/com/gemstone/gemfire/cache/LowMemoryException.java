@@ -18,7 +18,6 @@
 package com.gemstone.gemfire.cache;
 
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Set;
 
 import com.gemstone.gemfire.cache.control.ResourceManager;
@@ -56,6 +55,18 @@ public class LowMemoryException extends ResourceException {
     super(msg);
     this.critMems = Collections.unmodifiableSet(criticalMembers);
     CallbackFactoryProvider.getStoreCallbacks().logMemoryStats();
+  }
+
+  /**
+   * Constructs an instance of <code>LowMemoryException</code> with the specified cause.
+   */
+  public LowMemoryException(Throwable cause) {
+    super(cause);
+    this.critMems = Collections.emptySet();
+    // don't try any logging in case of OOMEs
+    if (!(cause instanceof OutOfMemoryError)) {
+      CallbackFactoryProvider.getStoreCallbacks().logMemoryStats();
+    }
   }
 
   /**

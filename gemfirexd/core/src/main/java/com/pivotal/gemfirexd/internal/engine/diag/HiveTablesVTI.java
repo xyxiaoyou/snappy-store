@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -37,6 +37,7 @@ import com.pivotal.gemfirexd.internal.iapi.types.HarmonySerialClob;
 import com.pivotal.gemfirexd.internal.impl.jdbc.EmbedResultSetMetaData;
 import com.pivotal.gemfirexd.internal.impl.jdbc.Util;
 import com.pivotal.gemfirexd.internal.impl.sql.catalog.GfxdDataDictionary;
+import com.pivotal.gemfirexd.internal.shared.common.SharedUtils;
 import com.pivotal.gemfirexd.internal.shared.common.reference.Limits;
 import com.pivotal.gemfirexd.internal.shared.common.reference.SQLState;
 import org.slf4j.Logger;
@@ -100,9 +101,9 @@ public class HiveTablesVTI extends GfxdVTITemplate
     String provider = this.currentTableMeta.shortProvider;
     switch (columnNumber) {
       case 1: // SCHEMA
-        return this.currentTableMeta.schema;
+        return SharedUtils.SQLToUpperCase(this.currentTableMeta.schema.toString());
       case 2: // TABLE
-        return this.currentTableMeta.entityName;
+        return SharedUtils.SQLToUpperCase(this.currentTableMeta.entityName);
       case 3: // TYPE
         return this.currentTableMeta.tableType;
       case 4: // PROVIDER

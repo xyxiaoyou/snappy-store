@@ -17,7 +17,7 @@
 /*
  * Changes for SnappyData data platform.
  *
- * Portions Copyright (c) 2018 SnappyData, Inc. All rights reserved.
+ * Portions Copyright (c) 2017-2019 TIBCO Software Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You
@@ -131,6 +131,8 @@ const SQLState SQLState::DATA_CONTAINER_CLOSED("40XD0",
     ExceptionSeverity::TRANSACTION_SEVERITY);
 const SQLState SQLState::THRIFT_PROTOCOL_ERROR("58015",
     ExceptionSeverity::SESSION_SEVERITY);
+const SQLState SQLState::NODE_BUCKET_MOVED("X0Z18",
+    ExceptionSeverity::TRANSACTION_SEVERITY);
 
 void SQLState::staticInitialize() {
 }

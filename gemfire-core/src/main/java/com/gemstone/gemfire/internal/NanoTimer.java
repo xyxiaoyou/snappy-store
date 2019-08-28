@@ -55,7 +55,7 @@ public final class NanoTimer {
 
   private static final NativeCalls nativeCall = NativeCalls.getInstance();
 
-  public static final int CLOCKID_BEST;
+  public static int CLOCKID_BEST;
   public static boolean CLOCKID_USE_SYSNANOTIME;
 
   public final static String NATIVETIMER_TYPE_PROPERTY =
@@ -64,6 +64,10 @@ public final class NanoTimer {
   public static int nativeTimerType;
 
   static {
+    init();
+  }
+
+  public static void init() {
     /*
      * currently _nanoTime(..) isn't implemented in gemfire lib.
      * for gemfirexd, its implemented only for Linux/Solaris as of now.
