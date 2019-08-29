@@ -332,12 +332,10 @@ public final class SnappyDataServiceImpl extends LocatorServiceImpl implements
         final long connId = getNextId(this.currentConnectionId);
         connHolder = new ConnectionHolder(conn, xaConn, arguments, connId,
             props, this.rand);
-
-        // NOTE: while doing testing, comment the 3 lines below if security is not enabled
-        if (Misc.getGemFireCache().isSnappyRecoveryMode() && Misc.isSecurityEnabled()) {
-          checkDBOwner(connId, connHolder.getToken(), "dummystring");
-        }
         if (this.connectionMap.putIfAbsent(connId, connHolder) == null) {
+          if (Misc.getGemFireCache().isSnappyRecoveryMode() && Misc.isSecurityEnabled()) {
+            checkDBOwner(connId, connHolder.getToken(), "openConnection");
+          }
           ConnectionProperties connProps = new ConnectionProperties(connId,
               clientHost, clientId);
           connProps.setToken(connHolder.getToken());
@@ -3282,9 +3280,6 @@ public final class SnappyDataServiceImpl extends LocatorServiceImpl implements
     } catch (Exception e) {
       throw SnappyException(e);
     }
-    System.out.println("PP:SnappyDataServiceImpl:checkDBowner: actualDB owner " + Misc.getMemStore().getDatabase().getDataDictionary()
-        .getAuthorizationDatabaseOwner());
-    System.out.println("PP:SnappyDataServiceImpl:checkDBowner: authId: " + authId);
     if (!Misc.getMemStore().getDatabase().getDataDictionary()
         .getAuthorizationDatabaseOwner().equals(authId)) {
       throw newSnappyException(SQLState.LOGIN_FAILED,
