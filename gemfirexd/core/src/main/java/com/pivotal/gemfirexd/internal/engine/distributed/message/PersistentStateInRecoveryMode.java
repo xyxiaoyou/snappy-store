@@ -53,7 +53,7 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
   private final ArrayList<Object> catalogObjects = new ArrayList<>();
   private ArrayList<String> otherExtractedDDLText = new ArrayList<>();
   private final HashMap<String, Integer> prToNumBuckets = new HashMap<>();
-  HashSet replicatedRegions = new HashSet<String>();
+  private HashSet replicatedRegions = new HashSet<String>();
 
   public PersistentStateInRecoveryMode(
       List<Object> allEntries,
@@ -93,8 +93,6 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
         Map<String, PRPersistentConfig> prConfigs = dif.getAllPRs();
 
         for (Map.Entry<String, PRPersistentConfig> e : prConfigs.entrySet()) {
-          System.out.println("1891: adding prtonumbuckets: " +
-              e.getKey() + " -> " + e.getValue().getTotalNumBuckets());
           this.prToNumBuckets.put(e.getKey(), e.getValue().getTotalNumBuckets());
         }
 
@@ -106,8 +104,6 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
         }
 
         replicatedRegions.addAll(diskRegionNames);
-        System.out.println("1891: srmapkeys = " + ArrayUtils.toString(diskRegionNames));
-        System.out.println("1891: done writing to prnumbuckets for " + getMember() + ". size of prconfigs=" + prConfigs.size());
       }
     }
   }
@@ -132,7 +128,7 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     return this.prToNumBuckets;
   }
 
-  public Set<String> getreplicatedRegions() {
+  public Set<String> getReplicatedRegions() {
     return this.replicatedRegions;
   }
 

@@ -1715,7 +1715,7 @@ public final class FabricDatabase implements ModuleControl,
             logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath());
           }
           long mostRecentModifiedTime = 0;
-          if (! (adr.getRecoveredEntryMap().size() == 0)) {
+          if (!(adr.getRecoveredEntryMap().size() == 0)) {
             mostRecentModifiedTime =
                 PersistentStateInRecoveryMode.getLatestModifiedTime(adr, logger);
           }
