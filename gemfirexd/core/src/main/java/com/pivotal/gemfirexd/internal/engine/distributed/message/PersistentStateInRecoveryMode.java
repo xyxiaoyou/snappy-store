@@ -247,9 +247,6 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     if (logger.infoEnabled()) {
       logger.info("getLatestModifiedTime: map = " + adr.getRecoveredEntryMap());
     }
-    if (logger.infoEnabled()) {
-      logger.info("getLatestModifiedTime: map entries = " + adr.getRecoveredEntryMap().regionEntries());
-    }
     Optional<RegionEntry> rmax = adr.getRecoveredEntryMap()
         .regionEntries().stream().max((t1, t2) -> {
           if (t1.getLastModified() <= t2.getLastModified()) return -1;
