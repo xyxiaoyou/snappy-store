@@ -46,7 +46,6 @@ import com.gemstone.gemfire.internal.NanoTimer;
 import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.cache.control.InternalResourceManager;
 import com.gemstone.gemfire.internal.cache.persistence.query.CloseableIterator;
-import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
 import com.gemstone.gemfire.internal.snappy.ColumnTableEntry;
 import com.gemstone.gnu.trove.TIntArrayList;
@@ -1561,22 +1560,22 @@ public class GfxdSystemProcedures extends SystemProcedures {
    * @throws SQLException
    */
   // comma separated table names
-  public static void RECOVER_DATA(String exportUri, String formatType, String tableNames, Boolean ignoreError) throws SQLException {
+  public static void DUMP_DATA(String exportUri, String formatType, String tableNames, Boolean ignoreError) throws SQLException {
     try {
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
-            "Executing RECOVER_DATA");
+            "Executing DUMP_DATA");
       }
       Long connectionId = Misc.getLanguageConnectionContext().getConnectionId();
 
       GfxdListResultCollector collector = new GfxdListResultCollector();
       GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
-          collector, GetLeadNodeInfoAsStringMessage.DataReqType.RECOVER_DATA, connectionId, exportUri, formatType, tableNames, ignoreError);
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.DUMP_DATA, connectionId, exportUri, formatType, tableNames, ignoreError);
 
       msg.executeFunction();
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
-            "RECOVER_DATA successful.");
+            "DUMP_DATA successful.");
       }
     } catch (StandardException se) {
       throw PublicAPI.wrapStandardException(se);
@@ -1589,20 +1588,20 @@ public class GfxdSystemProcedures extends SystemProcedures {
    * @throws SQLException
    */
 
-  public static void RECOVER_DDLS(String exportUri) throws SQLException  {
+  public static void DUMP_DDLS(String exportUri) throws SQLException  {
     try {
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
-            "Executing RECOVER_DDLS");
+            "Executing DUMP_DDLS");
       }
       Long connectionId = Misc.getLanguageConnectionContext().getConnectionId();
       GfxdListResultCollector collector = new GfxdListResultCollector();
       GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
-          collector, GetLeadNodeInfoAsStringMessage.DataReqType.RECOVER_DDLS, connectionId, exportUri);
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.DUMP_DDLS, connectionId, exportUri);
       msg.executeFunction();
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
-            "RECOVER_DDLS successful.");
+            "DUMP_DDLS successful.");
       }
     } catch (StandardException se) {
       throw PublicAPI.wrapStandardException(se);

@@ -21,24 +21,18 @@ import com.gemstone.gemfire.DataSerializer;
 import com.gemstone.gemfire.cache.execute.ResultCollector;
 import com.gemstone.gemfire.distributed.DistributedMember;
 import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
-import com.pivotal.gemfirexd.internal.catalog.ExternalCatalog;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
-import com.pivotal.gemfirexd.internal.iapi.sql.conn.ConnectionUtil;
-import com.pivotal.gemfirexd.internal.impl.sql.conn.GenericLanguageConnectionContext;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.Set;
 
 public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object> {
@@ -47,7 +41,7 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
   private DataReqType requestType;
   private Long connID;
 
-  public enum DataReqType {GET_JARS, RECOVER_DATA, RECOVER_DDLS}
+  public enum DataReqType {GET_JARS, DUMP_DATA, DUMP_DDLS}
 
   public GetLeadNodeInfoAsStringMessage(final ResultCollector<Object, Object> rc, DataReqType reqType, Long connID, Object... args) {
     super(rc, null, false, true);
@@ -91,13 +85,13 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
         case GET_JARS:
           result = handleGetJarsRequest();
           break;
-        case RECOVER_DATA:
-          result = exportRecoveredData();
+        case DUMP_DATA:
+          result = dumpData();
           break;
-        case RECOVER_DDLS:
+        case DUMP_DDLS:
           SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
               "GetLeadNodeInfoAsStringMessage - case REcover_ddls");
-          result = exportRecoveredDDLs();
+          result = dumpDDLs();
           break;
         default:
           throw new IllegalArgumentException("GetLeadNodeInfoAsStringMessage:" +
@@ -111,16 +105,14 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
   }
 
 
-  private String exportRecoveredData() {
-
-    com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().recoverData(connID,
+  private String dumpData() {
+    com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().dumpData(connID,
         additionalArgs[0].toString(), additionalArgs[1].toString(), additionalArgs[2].toString(), Boolean.parseBoolean(additionalArgs[3].toString()));
-
     return "Data recovered";
   }
 
-  private String exportRecoveredDDLs() {
-    com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().recoverDDLs(connID, additionalArgs[0].toString());
+  private String dumpDDLs() {
+    com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().dumpDDLs(connID, additionalArgs[0].toString());
     return "DDLs recovered.";
   }
 

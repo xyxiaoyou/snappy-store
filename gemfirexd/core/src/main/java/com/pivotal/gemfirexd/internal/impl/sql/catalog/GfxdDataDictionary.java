@@ -1819,7 +1819,7 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
           DataTypeDescriptor.getCatalogType(Types.VARCHAR),
           DataTypeDescriptor.getCatalogType(Types.VARCHAR),
           DataTypeDescriptor.getCatalogType(Types.BOOLEAN)};
-      super.createSystemProcedureOrFunction("RECOVER_DATA",
+      super.createSystemProcedureOrFunction("DUMP_DATA",
           sysUUID, arg_names, arg_types, 0, 0, RoutineAliasInfo.READS_SQL_DATA, null,
           newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
     }
@@ -1829,7 +1829,7 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
       TypeDescriptor[] arg_types = new TypeDescriptor[] {
           DataTypeDescriptor.getCatalogType(Types.VARCHAR),
       };
-      super.createSystemProcedureOrFunction("RECOVER_DDLS", sysUUID, arg_name, arg_types, 0, 0, RoutineAliasInfo.READS_SQL_DATA, null, newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
+      super.createSystemProcedureOrFunction("DUMP_DDLS", sysUUID, arg_name, arg_types, 0, 0, RoutineAliasInfo.READS_SQL_DATA, null, newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
     }
 
     {

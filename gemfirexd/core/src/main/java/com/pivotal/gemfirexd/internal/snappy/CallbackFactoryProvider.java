@@ -60,11 +60,11 @@ public abstract class CallbackFactoryProvider {
     }
 
     @Override
-    public void recoverData(Long connId, String exportUri, String formatType, String tableNames, Boolean ignoreError){
+    public void dumpData(Long connId, String exportUri, String formatType, String tableNames, Boolean ignoreError){
     }
 
     @Override
-    public void recoverDDLs(Long connId, String exportUri) {
+    public void dumpDDLs(Long connId, String exportUri) {
     }
 
     @Override
