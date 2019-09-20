@@ -1705,7 +1705,7 @@ public final class FabricDatabase implements ModuleControl,
             if (logger.infoEnabled()) {
               logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath() + " continuing as size of map is 0");
             }
-            // continue;
+             continue;
           } else {
             if (logger.infoEnabled()) {
               logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath() + " size = " + adr.getRecoveredEntryMap().size());
