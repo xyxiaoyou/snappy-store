@@ -233,7 +233,7 @@ public class StatementAttrs implements org.apache.thrift.TBase<StatementAttrs, S
   private static final int __RETAINBUCKETIDS_ISSET_ID = 13;
   private static final int __METADATAVERSION_ISSET_ID = 14;
   private static final int __CATALOGVERSION_ISSET_ID = 15;
-  private short __isset_bitfield = 0;
+  public short __isset_bitfield = 0;
   private static final _Fields optionals[] = {_Fields.RESULT_SET_TYPE,_Fields.UPDATABLE,_Fields.HOLD_CURSORS_OVER_COMMIT,_Fields.REQUIRE_AUTO_INC_COLS,_Fields.AUTO_INC_COLUMNS,_Fields.AUTO_INC_COLUMN_NAMES,_Fields.BATCH_SIZE,_Fields.FETCH_REVERSE,_Fields.LOB_CHUNK_SIZE,_Fields.MAX_ROWS,_Fields.MAX_FIELD_SIZE,_Fields.TIMEOUT,_Fields.CURSOR_NAME,_Fields.POSSIBLE_DUPLICATE,_Fields.POOLABLE,_Fields.DO_ESCAPE_PROCESSING,_Fields.PENDING_TRANSACTION_ATTRS,_Fields.BUCKET_IDS,_Fields.BUCKET_IDS_TABLE,_Fields.RETAIN_BUCKET_IDS,_Fields.METADATA_VERSION,_Fields.SNAPSHOT_TRANSACTION_ID,_Fields.CATALOG_VERSION};
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
