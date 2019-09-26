@@ -30,22 +30,16 @@ import com.gemstone.gemfire.internal.cache.RegionEntry;
 import com.gemstone.gemfire.internal.cache.persistence.PRPersistentConfig;
 import com.gemstone.gemfire.internal.cache.versions.RegionVersionHolder;
 import com.gemstone.gemfire.internal.cache.versions.RegionVersionVector;
-import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.ddl.DDLConflatable;
-import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
-import io.snappydata.thrift.CatalogFunctionObject;
-import io.snappydata.thrift.CatalogSchemaObject;
-import io.snappydata.thrift.CatalogTableObject;
-import org.apache.thrift.TException;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.*;
 
-public class PersistentStateInRecoveryMode implements DataSerializable {
+public class PersistentStateInRecoveryMode {
 
   private InternalDistributedMember member = null;
   private final ArrayList<RecoveryModePersistentView>
@@ -54,6 +48,7 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
   private ArrayList<String> otherExtractedDDLText = new ArrayList<>();
   private final HashMap<String, Integer> prToNumBuckets = new HashMap<>();
   private HashSet replicatedRegions = new HashSet<String>();
+  private boolean isServer;
 
   public PersistentStateInRecoveryMode(
       List<Object> allEntries,
@@ -70,7 +65,20 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     this.isServer = Misc.getMemStore().getMyVMKind().isStore();
   }
 
-  private boolean isServer;
+  public PersistentStateInRecoveryMode (InternalDistributedMember member,
+      ArrayList<RecoveryModePersistentView> allRegionView,
+      ArrayList<Object> catalogObjects,
+      ArrayList<String> otherExtractedDDLText,
+      HashMap<String, Integer> prToNumBuckets,
+      HashSet replicatedRegions, boolean isServer) {
+    this.member = member;
+    this.allRegionView.addAll(allRegionView);
+    this.catalogObjects.addAll(catalogObjects);
+    this.otherExtractedDDLText.addAll(otherExtractedDDLText);
+    this.prToNumBuckets.putAll(prToNumBuckets);
+    this.replicatedRegions = replicatedRegions;
+    this.isServer = isServer;
+  }
 
   public PersistentStateInRecoveryMode() {
 
@@ -116,6 +124,10 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     return this.member;
   }
 
+  public Boolean isServer() {
+    return this.isServer;
+  }
+
   public ArrayList<String> getOtherDDLs() {
     return this.otherExtractedDDLText;
   }
@@ -128,94 +140,8 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     return this.prToNumBuckets;
   }
 
-  public Set<String> getReplicatedRegions() {
+  public HashSet<String> getReplicatedRegions() {
     return this.replicatedRegions;
-  }
-
-  @Override
-  public void fromData(DataInput in) throws IOException, ClassNotFoundException {
-    this.member = DataSerializer.readObject(in);
-    this.isServer = DataSerializer.readBoolean(in);
-    this.allRegionView.addAll(DataSerializer.readArrayList(in));
-    this.otherExtractedDDLText.addAll(DataSerializer.readArrayList(in));
-    this.prToNumBuckets.putAll(DataSerializer.readHashMap(in));
-    this.replicatedRegions = DataSerializer.readHashSet(in);
-    try {
-      int numCatSchemaObjects = in.readInt();
-
-      for (int i = 0; i < numCatSchemaObjects; i++) {
-        byte[] b = DataSerializer.readByteArray(in);
-        CatalogSchemaObject schemaObject = new CatalogSchemaObject();
-        GemFireXDUtils.readThriftObject(schemaObject, b);
-        this.catalogObjects.add(schemaObject);
-      }
-
-      int numCatFuncObjects = in.readInt();
-      for (int i = 0; i < numCatFuncObjects; i++) {
-        byte[] b = DataSerializer.readByteArray(in);
-        CatalogFunctionObject functionObject = new CatalogFunctionObject();
-        GemFireXDUtils.readThriftObject(functionObject, b);
-        this.catalogObjects.add(functionObject);
-      }
-
-      int numCatTabObjects = in.readInt();
-      for (int i = 0; i < numCatTabObjects; i++) {
-        byte[] b = DataSerializer.readByteArray(in);
-        CatalogTableObject tabObj = new CatalogTableObject();
-        GemFireXDUtils.readThriftObject(tabObj, b);
-        this.catalogObjects.add(tabObj);
-      }
-    } catch(TException e) {
-      throw new IOException(e);
-    }
-    this.allRegionView.forEach(x -> x.member = this.member);
-  }
-
-  @Override
-  public void toData(final DataOutput out) throws IOException {
-    DataSerializer.writeObject(this.member, out);
-    DataSerializer.writeBoolean(this.isServer, out);
-    DataSerializer.writeArrayList(this.allRegionView, out);
-    DataSerializer.writeArrayList(this.otherExtractedDDLText, out);
-    DataSerializer.writeHashMap(this.prToNumBuckets, out);
-    DataSerializer.writeHashSet(this.replicatedRegions, out);
-    int numCatalogObjects = this.catalogObjects.size();
-    ArrayList<CatalogTableObject> catTabArr =  new ArrayList<>();
-    ArrayList<CatalogSchemaObject> catSchArr =  new ArrayList<>();
-    ArrayList<CatalogFunctionObject> catfuncArr =  new ArrayList<>();
-
-    try {
-      for (int i = 0; i < numCatalogObjects; i++) {
-        if(this.catalogObjects.get(i) instanceof CatalogTableObject){
-          catTabArr.add((CatalogTableObject)this.catalogObjects.get(i));
-        } else if(this.catalogObjects.get(i) instanceof CatalogSchemaObject){
-          catSchArr.add((CatalogSchemaObject)this.catalogObjects.get(i));
-        } else if(this.catalogObjects.get(i) instanceof CatalogFunctionObject){
-          catfuncArr.add((CatalogFunctionObject)this.catalogObjects.get(i));
-        }
-      }
-
-      out.writeInt(catSchArr.size());
-      for(int i = 0; i < catSchArr.size(); i++) {
-        byte[] b = GemFireXDUtils.writeThriftObject(catSchArr.get(i));
-        DataSerializer.writeByteArray(b, out);
-      }
-
-      out.writeInt(catfuncArr.size());
-      for(int i = 0 ; i < catfuncArr.size() ; i++) {
-        byte[] b = GemFireXDUtils.writeThriftObject(catfuncArr.get(i));
-        DataSerializer.writeByteArray(b,out);
-      }
-
-      out.writeInt(catTabArr.size());
-      for(int i = 0; i < catTabArr.size(); i++) {
-          byte[] b = GemFireXDUtils.writeThriftObject(catTabArr.get(i));
-          DataSerializer.writeByteArray(b, out);
-      }
-
-    } catch (TException t) {
-      throw new IOException(t);
-    }
   }
 
   @Override
@@ -262,6 +188,11 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
     private String diskStoreName;
     private transient RegionVersionVector rvv;
     private long mostRecentEntryModifiedTime;
+
+    public void setMember(InternalDistributedMember member) {
+      this.member = member;
+    }
+
     private long latestOplogTime;
     private transient InternalDistributedMember member;
 
@@ -303,7 +234,6 @@ public class PersistentStateInRecoveryMode implements DataSerializable {
       DataSerializer.writeObject(this.rvv, out);
       DataSerializer.writeLong(mostRecentEntryModifiedTime, out);
       DataSerializer.writeLong(latestOplogTime, out);
-
     }
 
     @Override

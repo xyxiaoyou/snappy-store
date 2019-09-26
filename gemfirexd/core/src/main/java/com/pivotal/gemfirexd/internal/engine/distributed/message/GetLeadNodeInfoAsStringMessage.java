@@ -86,11 +86,17 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
           result = handleGetJarsRequest();
           break;
         case DUMP_DATA:
+          if (GemFireXDUtils.TraceQuery) {
+            SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
+                "GetLeadNodeInfoAsStringMessage - case DUMP_DATA");
+          }
           result = dumpData();
           break;
         case DUMP_DDLS:
-          SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
-              "GetLeadNodeInfoAsStringMessage - case REcover_ddls");
+          if (GemFireXDUtils.TraceQuery) {
+            SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
+                "GetLeadNodeInfoAsStringMessage - case DUMP_DDLS");
+          }
           result = dumpDDLs();
           break;
         default:

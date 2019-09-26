@@ -3109,39 +3109,6 @@ public final class GemFireStore implements AccessFactory, ModuleControl,
     return rlsEnabled;
   }
 
-  public void sendPersistentViewMsg() throws InterruptedException {
-    if (this.gemFireCache.isSnappyRecoveryMode()) {
-      if (GemFireXDUtils.TraceDDLReplay) {
-        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_DDLREPLAY,
-            "sendPersistentViewMsg called");
-      }
-      // This can come before the persistent state is prepared.
-      // Wait in a loop with exponential wait and then fail the executor.
-      int maxRetry = 10;
-      int retryCnt = 0;
-      int powerOfTwo = 1;
-      while (retryCnt < maxRetry) {
-        if (this.persistentStateMsg != null) {
-          // send msg
-        }
-        else {
-          if (retryCnt == maxRetry - 1) {
-            throw new IllegalStateException("persistent state message" +
-                " should have been created");
-          }
-          powerOfTwo = powerOfTwo * 2;
-          long timeToSleep = powerOfTwo * 1000;
-          Thread.sleep(timeToSleep);
-          if (GemFireXDUtils.TraceDDLReplay) {
-            SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_DDLREPLAY,
-                "persistent state message is not prpared retry attempt = " + retryCnt);
-          }
-          retryCnt++;
-        }
-      }
-    }
-  }
-
   private volatile PersistentStateInRecoveryMode persistentStateMsg = null;
 
   public void setPersistentStateMsg(PersistentStateInRecoveryMode msg) {
