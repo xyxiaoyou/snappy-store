@@ -532,7 +532,7 @@ public final class FabricDatabase implements ModuleControl,
           SanityManager.DEBUG_PRINT("info",
               "Total number of catalog object retrieved " + allEntries.size());
           for (Object obj : allEntries) {
-            SanityManager.DEBUG_PRINT("info", "Catalogue object " + obj);
+            SanityManager.DEBUG_PRINT("info", "Catalog object " + obj);
           }
         }
         // Also prepare the persistent state message
@@ -1634,6 +1634,7 @@ public final class FabricDatabase implements ModuleControl,
       List<GfxdDDLQueueEntry> preprocessedQueue, final LogWriter logger) {
     GfxdDDLQueueEntry qEntry = null;
     List<GfxdDDLQueueEntry> list = new ArrayList<>();
+    logger.fine("Get the DDLs required for RecoveryMode.");
     for (GfxdDDLQueueEntry entry : preprocessedQueue) {
       qEntry = entry;
       Object qVal = qEntry.getValue();
@@ -1647,7 +1648,7 @@ public final class FabricDatabase implements ModuleControl,
         } else if (Misc.SNAPPY_HIVE_METASTORE.equals(schema) ||
             Misc.SNAPPY_HIVE_METASTORE.equals(conflatable.getCurrentSchema()) ||
             Misc.SNAPPY_HIVE_METASTORE.equals(conflatable.getRegionToConflate())) {
-          logger.info("Adding conflatable for ddl replay = " + qEntry);
+          logger.info("Adding conflatable for DDL replay = " + qEntry);
           list.add(qEntry);
         } else if (conflatable.isAlterTable() ||
             conflatable.isCreateIndex() ||
@@ -1655,6 +1656,7 @@ public final class FabricDatabase implements ModuleControl,
              conflatable.isCreateTable() ||
             conflatable.isDropStatement() ||
             conflatable.isCreateSchemaText()) {
+          logger.fine("Adding to Extracted DDLs list: DDL statement = " + conflatable);
           otherExtractedDDLs.add(conflatable);
         } else {
           logger.info("Skipping conflatable = " + conflatable);
@@ -1732,7 +1734,6 @@ public final class FabricDatabase implements ModuleControl,
         }
       }
     }
-    System.out.println("1891: adding prconfigs for pmsg: " + pmsg.getMember());
     pmsg.addPRConfigs();
     this.memStore.setPersistentStateMsg(pmsg);
   }

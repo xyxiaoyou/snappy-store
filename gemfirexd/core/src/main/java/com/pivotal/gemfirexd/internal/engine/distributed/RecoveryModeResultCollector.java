@@ -18,20 +18,20 @@ import com.pivotal.gemfirexd.internal.engine.access.GemFireTransaction;
 import com.pivotal.gemfirexd.internal.engine.distributed.message.PersistentStateInRecoveryMode;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
-import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
 import com.pivotal.gemfirexd.internal.iapi.services.sanity.SanityManager;
 
 public class RecoveryModeResultCollector extends ArrayList<Object> implements
     GfxdResultCollector<Object> {
 
 
-  private HashMap<DistributedMember, ArrayList<Object>> memberNPartsMap = new HashMap<DistributedMember, ArrayList<Object>>();
+  private HashMap<DistributedMember, ArrayList<Object>> memberNPartsMap;
 
   protected final GfxdResultCollectorHelper helper;
   protected boolean throwException = false;
 
   public RecoveryModeResultCollector() {
     this.helper = new GfxdResultCollectorHelper();
+    memberNPartsMap = new HashMap<>();
   }
 
   public final Set<DistributedMember> getResultMembers() {
@@ -39,8 +39,7 @@ public class RecoveryModeResultCollector extends ArrayList<Object> implements
   }
 
   public final boolean setupContainersToClose(
-      Collection<GemFireContainer> containers, GemFireTransaction tran)
-      throws StandardException {
+      Collection<GemFireContainer> containers, GemFireTransaction tran) {
     // non-streaming collector will not have anything to do with releasing locks
     return false;
   }
@@ -50,7 +49,7 @@ public class RecoveryModeResultCollector extends ArrayList<Object> implements
   }
 
   public ArrayList<Object> getResult() throws FunctionException {
-    if (GemFireXDUtils.TraceFunctionException) {
+    if (GemFireXDUtils.TraceRecoveryMode) {
       throw new AssertionError("unexpected Throwable ");
     }
     return this;
@@ -58,7 +57,7 @@ public class RecoveryModeResultCollector extends ArrayList<Object> implements
 
   public ArrayList<Object> getResult(long timeout, TimeUnit unit)
       throws FunctionException {
-    if (GemFireXDUtils.TraceFunctionException) {
+    if (GemFireXDUtils.TraceRecoveryMode) {
       if (this.throwException) {
         throw new AssertionError("unexpected Throwable ");
       }
@@ -99,8 +98,8 @@ public class RecoveryModeResultCollector extends ArrayList<Object> implements
 
 
   public void endResults() {
+    assert(memberNPartsMap.entrySet().isEmpty() == false);
     for (Map.Entry<DistributedMember, ArrayList<Object>> entry : memberNPartsMap.entrySet()) {
-
       RecoveryModeResultHolder.PersistentStateInRMMetadata metadata = null;
       InternalDistributedMember member;
       HashMap<String, Integer> prToNumBuckets;
@@ -111,27 +110,36 @@ public class RecoveryModeResultCollector extends ArrayList<Object> implements
       ArrayList<PersistentStateInRecoveryMode.RecoveryModePersistentView> allRegionViews = new ArrayList<>();
 
       for (Object obj : entry.getValue()) {
-
         switch (obj.getClass().getSimpleName()) {
           case "PersistentStateInRMMetadata":
             metadata = (RecoveryModeResultHolder.PersistentStateInRMMetadata)obj;
             break;
 
           case "PersistentStateInRMCatalogObjectsList":
-            allCatalogObjects.addAll(((RecoveryModeResultHolder.PersistentStateInRMCatalogObjectsList)obj).getCatalogObjects());
+            allCatalogObjects
+                .addAll(((RecoveryModeResultHolder.PersistentStateInRMCatalogObjectsList)obj)
+                    .getCatalogObjects());
             break;
 
           case "PersistentStateInRMOtherDDLsList":
-            otherExtractedDDLText.addAll(((RecoveryModeResultHolder.PersistentStateInRMOtherDDLsList)obj).getOtherExtractedDDLText());
+            otherExtractedDDLText
+                .addAll(((RecoveryModeResultHolder.PersistentStateInRMOtherDDLsList)obj)
+                    .getOtherExtractedDDLText());
             break;
 
           case "PersistentStateInRMAllRegionViews":
-            allRegionViews.addAll(((RecoveryModeResultHolder.PersistentStateInRMAllRegionViews)obj).getAllRegionView());
+            allRegionViews
+                .addAll(((RecoveryModeResultHolder.PersistentStateInRMAllRegionViews)obj)
+                    .getAllRegionView());
+            break;
+
+          default: SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_RECOVERY_MODE, "Should not have come here.");
         }
       }
-
+      if (metadata == null) throw new AssertionError("RecoveryModeResultCollector could not properly" +
+          " gather bits of PersistentStateInRecoveryMode");
       member = metadata.getMember();
-      for(PersistentStateInRecoveryMode.RecoveryModePersistentView view : allRegionViews){
+      for (PersistentStateInRecoveryMode.RecoveryModePersistentView view : allRegionViews) {
         view.setMember(member);
       }
       prToNumBuckets = metadata.getPrToNumBuckets();
@@ -139,7 +147,8 @@ public class RecoveryModeResultCollector extends ArrayList<Object> implements
       isServer = metadata.isServer();
 
       PersistentStateInRecoveryMode persistentStateInRecoveryMode =
-          new PersistentStateInRecoveryMode(member, allRegionViews, allCatalogObjects, otherExtractedDDLText, prToNumBuckets, replicatedRegions, isServer);
+          new PersistentStateInRecoveryMode(member, allRegionViews, allCatalogObjects, otherExtractedDDLText,
+              prToNumBuckets, replicatedRegions, isServer);
       add(persistentStateInRecoveryMode);
     }
   }
@@ -151,10 +160,10 @@ public class RecoveryModeResultCollector extends ArrayList<Object> implements
   public void addResult(DistributedMember memberID,
       Object resultOfSingleExecution) {
 
-    if (GemFireXDUtils.TraceFunctionException) {
+    if (GemFireXDUtils.TraceRecoveryMode) {
       if (resultOfSingleExecution instanceof Throwable) {
         throwException = true;
-        com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_FUNCTION_EX,
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_RECOVERY_MODE,
             "RecoveryModeResultCollector received unexpected throwable in addResult "
                 + "from member " + memberID,
             (Throwable)resultOfSingleExecution);

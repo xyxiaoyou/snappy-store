@@ -14,16 +14,16 @@ import com.pivotal.gemfirexd.internal.engine.distributed.message.PersistentState
 
 public interface RecoveryModeResultHolder {
 
-  public class PersistentStateInRMMetadata implements DataSerializable {
+  class PersistentStateInRMMetadata implements DataSerializable {
 
     private final HashMap<String, Integer> prToNumBuckets = new HashMap<>();
     private InternalDistributedMember member = null;
-    private HashSet<String> replicatedRegions = new HashSet<String>();
+    private HashSet<String> replicatedRegions = new HashSet<>();
     private boolean isServer;
 
     public PersistentStateInRMMetadata(InternalDistributedMember member,
         HashMap<String, Integer> prToNumBuckets,
-        HashSet replicatedRegions, boolean isServer) {
+        HashSet<String> replicatedRegions, boolean isServer) {
       this.member = member;
       this.prToNumBuckets.putAll(prToNumBuckets);
       this.replicatedRegions = replicatedRegions;
@@ -42,7 +42,7 @@ public interface RecoveryModeResultHolder {
       DataSerializer.writeBoolean(this.isServer, out);
     }
 
-    public HashMap<String, Integer> getPrToNumBuckets() {
+    HashMap<String, Integer> getPrToNumBuckets() {
       return this.prToNumBuckets;
     }
 
@@ -50,7 +50,7 @@ public interface RecoveryModeResultHolder {
       return this.member;
     }
 
-    public HashSet<String> getReplicatedRegions() {
+    HashSet<String> getReplicatedRegions() {
       return this.replicatedRegions;
     }
 
@@ -80,7 +80,7 @@ public interface RecoveryModeResultHolder {
     public PersistentStateInRMAllRegionViews() {
     }
 
-    public ArrayList<PersistentStateInRecoveryMode.RecoveryModePersistentView> getAllRegionView() {
+    ArrayList<PersistentStateInRecoveryMode.RecoveryModePersistentView> getAllRegionView() {
       return this.allRegionView;
     }
 
@@ -99,7 +99,7 @@ public interface RecoveryModeResultHolder {
   class PersistentStateInRMCatalogObjectsList implements DataSerializable {
     private final ArrayList<Object> catalogObjects = new ArrayList<>();
 
-    public ArrayList<Object> getCatalogObjects() {
+    ArrayList<Object> getCatalogObjects() {
       return this.catalogObjects;
     }
 
@@ -128,7 +128,7 @@ public interface RecoveryModeResultHolder {
       this.otherExtractedDDLText.addAll(otherExtractedDDLText);
     }
 
-    public ArrayList<String> getOtherExtractedDDLText() {
+    ArrayList<String> getOtherExtractedDDLText() {
       return this.otherExtractedDDLText;
     }
 

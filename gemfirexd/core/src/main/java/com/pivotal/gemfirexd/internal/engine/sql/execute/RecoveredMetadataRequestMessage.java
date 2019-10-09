@@ -54,6 +54,7 @@ public class RecoveredMetadataRequestMessage extends MemberExecutorMessage {
     sendList(persistentStateMsg.getCatalogObjects(), CATALOG_OBJECTS_SUBLIST_SIZE, 1);
     sendList(persistentStateMsg.getOtherDDLs(), OTHER_DDLS_SUBLIST_SIZE, 2);
     sendList(persistentStateMsg.getAllRegionViews(), REGION_VIEWS_SUBLIST_SIZE, 3);
+    this.lastResult(null);
   }
 
   public <T> void sendList(ArrayList<T> arrayList, Double partSize, int type) {
@@ -68,7 +69,7 @@ public class RecoveredMetadataRequestMessage extends MemberExecutorMessage {
         sendResult(new RecoveryModeResultHolder.PersistentStateInRMOtherDDLsList((ArrayList<String>)arr));
       } else {
         // RegionViews...
-        this.lastResult(new RecoveryModeResultHolder.PersistentStateInRMAllRegionViews((ArrayList<PersistentStateInRecoveryMode
+        this.sendResult(new RecoveryModeResultHolder.PersistentStateInRMAllRegionViews((ArrayList<PersistentStateInRecoveryMode
             .RecoveryModePersistentView>)arr));
       }
     }

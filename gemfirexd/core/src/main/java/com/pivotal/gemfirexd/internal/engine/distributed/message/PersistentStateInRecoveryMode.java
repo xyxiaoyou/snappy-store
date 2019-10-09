@@ -33,6 +33,7 @@ import com.gemstone.gemfire.internal.cache.versions.RegionVersionVector;
 import com.pivotal.gemfirexd.internal.engine.GfxdConstants;
 import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.ddl.DDLConflatable;
+import com.pivotal.gemfirexd.internal.iapi.services.sanity.SanityManager;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -47,7 +48,7 @@ public class PersistentStateInRecoveryMode {
   private final ArrayList<Object> catalogObjects = new ArrayList<>();
   private ArrayList<String> otherExtractedDDLText = new ArrayList<>();
   private final HashMap<String, Integer> prToNumBuckets = new HashMap<>();
-  private HashSet replicatedRegions = new HashSet<String>();
+  private HashSet<String> replicatedRegions = new HashSet<>();
   private boolean isServer;
 
   public PersistentStateInRecoveryMode(
@@ -58,19 +59,17 @@ public class PersistentStateInRecoveryMode {
       catalogObjects.addAll(allEntries);
     }
     if (extractedDDLs != null && !extractedDDLs.isEmpty()) {
-      extractedDDLs.forEach( x -> {
-        otherExtractedDDLText.add(x.getValueToConflate());
-      });
+      extractedDDLs.forEach(x -> otherExtractedDDLText.add(x.getValueToConflate()));
     }
     this.isServer = Misc.getMemStore().getMyVMKind().isStore();
   }
 
-  public PersistentStateInRecoveryMode (InternalDistributedMember member,
+  public PersistentStateInRecoveryMode(InternalDistributedMember member,
       ArrayList<RecoveryModePersistentView> allRegionView,
       ArrayList<Object> catalogObjects,
       ArrayList<String> otherExtractedDDLText,
       HashMap<String, Integer> prToNumBuckets,
-      HashSet replicatedRegions, boolean isServer) {
+      HashSet<String> replicatedRegions, boolean isServer) {
     this.member = member;
     this.allRegionView.addAll(allRegionView);
     this.catalogObjects.addAll(catalogObjects);
@@ -92,11 +91,11 @@ public class PersistentStateInRecoveryMode {
     GemFireCacheImpl cache = Misc.getGemFireCache();
     Collection<DiskStoreImpl> diskStores = cache.listDiskStores();
 
-    for(DiskStoreImpl ds : diskStores) {
+    for (DiskStoreImpl ds : diskStores) {
       String dsName = ds.getName();
       if ((!dsName.equals(GfxdConstants.GFXD_DD_DISKSTORE_NAME) ||
-         dsName.equals(GfxdConstants.SNAPPY_DEFAULT_DELTA_DISKSTORE) ||
-         dsName.endsWith(GfxdConstants.SNAPPY_DELTA_DISKSTORE_SUFFIX))) {
+          dsName.equals(GfxdConstants.SNAPPY_DEFAULT_DELTA_DISKSTORE) ||
+          dsName.endsWith(GfxdConstants.SNAPPY_DELTA_DISKSTORE_SUFFIX))) {
         DiskInitFile dif = ds.getDiskInitFile();
         Map<String, PRPersistentConfig> prConfigs = dif.getAllPRs();
 
@@ -104,7 +103,7 @@ public class PersistentStateInRecoveryMode {
           this.prToNumBuckets.put(e.getKey(), e.getValue().getTotalNumBuckets());
         }
 
-        Set<String> diskRegionNames = new HashSet<String>();
+        Set<String> diskRegionNames = new HashSet<>();
         for (AbstractDiskRegion adr : ds.getAllDiskRegions().values()) {
           if (!adr.isBucket()) {
             diskRegionNames.add(adr.getFullPath());
@@ -178,6 +177,7 @@ public class PersistentStateInRecoveryMode {
           if (t1.getLastModified() <= t2.getLastModified()) return -1;
           return 1;
         });
+    assert (rmax.isPresent());
     return rmax.get().getLastModified();
   }
 
@@ -255,7 +255,6 @@ public class PersistentStateInRecoveryMode {
       return sb.toString();
     }
 
-    // TODO: KN put logs and comments
     @Override
     public int compareTo(RecoveryModePersistentView other) {
       // They should be called for the same region
@@ -273,9 +272,9 @@ public class PersistentStateInRecoveryMode {
         Map<?, RegionVersionHolder<?>> versionHolderOne
             = this.rvv.getMemberToVersion();
         Map<?, RegionVersionHolder<?>> versionHolderTwo
-            = this.rvv.getMemberToVersion();
+            = other.rvv.getMemberToVersion();
         if (versionHolderOne.keySet().equals(versionHolderTwo.keySet())) {
-          for(Map.Entry<?, RegionVersionHolder<?>> e : versionHolderOne.entrySet()){
+          for (Map.Entry<?, RegionVersionHolder<?>> e : versionHolderOne.entrySet()) {
             RegionVersionHolder rvh1 = e.getValue();
             RegionVersionHolder rvh2 = versionHolderTwo.get(e.getKey());
             if (rvh2.dominates(rvh1)) {

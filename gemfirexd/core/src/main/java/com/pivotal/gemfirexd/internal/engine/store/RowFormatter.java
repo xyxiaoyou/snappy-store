@@ -7140,6 +7140,7 @@ public final class RowFormatter implements Serializable {
     if (hasUnknown || maxDataLength > Integer.MAX_VALUE) {
       maxDataLength = Integer.MAX_VALUE;
     }
+    //                                                  todo change is ok?
     calcNumOffsetBytesToUse((int)maxDataLength, result[NUM_VAR_WIDTH_COLS_POS],
         result);
     return result;
