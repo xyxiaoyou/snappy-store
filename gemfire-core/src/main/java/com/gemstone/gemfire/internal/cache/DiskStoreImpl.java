@@ -492,6 +492,10 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
     this.writeBufferSize = props.getWriteBufferSize();
     this.diskDirs = props.getDiskDirs();
     this.diskDirSizes = props.getDiskDirSizes();
+    this.hdfsURL = props.getHDFSUrl();
+    this.cacheDir = props.getCacheDir();
+    this.accessFile = props.getAccessFile();
+
     this.syncWrites = props.getSyncWrites() && !DISABLE_SYNC_WRITES_FOR_TESTS;
     this.cache = (GemFireCacheImpl) cache;
     logger = cache.getLoggerI18n();
@@ -3937,6 +3941,9 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
   private final File[] diskDirs;
   private final int[] diskDirSizes;
   private final boolean syncWrites;
+  private final Optional<String> hdfsURL;
+  private final Optional<File> cacheDir;
+  private final Optional<File> accessFile;
 
   // DiskStore interface methods
   public String getName() {
@@ -3965,6 +3972,18 @@ public class DiskStoreImpl implements DiskStore, ResourceListener<MemoryEvent> {
 
   public int getQueueSize() {
     return this.queueSize;
+  }
+
+  public Optional<String> getHDFSUrl() {
+    return hdfsURL;
+  }
+
+  public Optional<File> getCacheDir() {
+    return cacheDir;
+  }
+
+  public Optional<File> getAccessFile() {
+    return accessFile;
   }
 
   public int getWriteBufferSize() {

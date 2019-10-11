@@ -17,6 +17,7 @@
 package com.gemstone.gemfire.cache;
 
 import java.io.File;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -133,6 +134,29 @@ public interface DiskStore {
    *
    */
   public int getQueueSize();
+
+  //todo[vatsal]: check whether what all implementation of disk store should override following methods
+  /**
+   * Returns the URL of secondary HDFS store (if configured).
+   *
+   */
+  default public Optional<String> getHDFSUrl() {
+    return Optional.empty();
+  }
+
+  /**
+   * Returns the local cache directory path for secondary store (if configured).
+   */
+  default public Optional<File> getCacheDir() {
+    return Optional.empty();
+  }
+
+  /**
+   * Returns access credentials file for secondary store (if provided).
+   */
+  default public Optional<File> getAccessFile() {
+    return Optional.empty();
+  }
 
   /**
    * Causes any data that is currently in the asynchronous queue to be written

@@ -23,9 +23,7 @@ import java.util.Arrays;
 import com.gemstone.gemfire.cache.Cache;
 import com.gemstone.gemfire.cache.DiskStoreFactory;
 import com.gemstone.gemfire.cache.DiskStore;
-import com.gemstone.gemfire.cache.hdfs.HDFSStoreFactory;
 import com.gemstone.gemfire.distributed.internal.ResourceEvent;
-import com.gemstone.gemfire.internal.cache.DiskStoreAttributes;
 import com.gemstone.gemfire.internal.cache.persistence.BackupManager;
 import com.gemstone.gemfire.internal.cache.xmlcache.CacheCreation;
 import com.gemstone.gemfire.internal.cache.xmlcache.CacheXml;
@@ -204,6 +202,24 @@ public class DiskStoreFactoryImpl implements DiskStoreFactory
   @Override
   public DiskStoreFactory setSyncWrites(boolean enable) {
     this.attrs.syncWrites = enable;
+    return this;
+  }
+
+  @Override
+  public DiskStoreFactory setHDFSUrl(String hdfsURL) {
+    this.attrs.setHdfsURL(hdfsURL);
+    return this;
+  }
+
+  @Override
+  public DiskStoreFactory setCacheDir(String cacheDir) {
+    this.attrs.setCacheDir(cacheDir);
+    return this;
+  }
+
+  @Override
+  public DiskStoreFactory setAccessFile(String accessFile) {
+    this.attrs.setAccessFile(accessFile);
     return this;
   }
 

@@ -21,6 +21,7 @@ package com.gemstone.gemfire.internal.cache;
 
 import java.io.File;
 import java.io.Serializable;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.gemstone.gemfire.cache.DiskStore;
@@ -55,7 +56,11 @@ public class DiskStoreAttributes implements Serializable, DiskStore {
   public String name;
 
   public boolean syncWrites;
-  
+
+  private String hdfsURL;
+  private String cacheDir;
+  private String accessFile;
+
   public DiskStoreAttributes() {
     // set all to defaults
     this.autoCompact = DiskStoreFactory.DEFAULT_AUTO_COMPACT;
@@ -145,6 +150,38 @@ public class DiskStoreAttributes implements Serializable, DiskStore {
    */
   public int getQueueSize() {
     return this.queueSize;
+  }
+
+  public void setHdfsURL(String hdfsURL) {
+    this.hdfsURL = hdfsURL;
+  }
+
+  public void setCacheDir(String cacheDir) {
+    this.cacheDir = cacheDir;
+  }
+
+  public void setAccessFile(String accessFile) {
+    this.accessFile = accessFile;
+  }
+
+  public Optional<String> getHDFSUrl() {
+    return Optional.ofNullable(hdfsURL);
+  }
+
+  public Optional<File> getCacheDir() {
+    if (cacheDir == null) {
+      return Optional.empty();
+    } else {
+      return Optional.of(new File(cacheDir));
+    }
+  }
+
+  public Optional<File> getAccessFile() {
+    if (accessFile == null) {
+      return Optional.empty();
+    } else {
+      return Optional.of(new File(accessFile));
+    }
   }
 
   /* (non-Javadoc)

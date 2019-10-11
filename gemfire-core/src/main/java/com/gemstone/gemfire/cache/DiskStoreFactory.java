@@ -212,6 +212,35 @@ public interface DiskStoreFactory
   public DiskStoreFactory setSyncWrites(boolean enable);
 
   /**
+   * This is an optional property to provide the URL of the secondary HDFS disk store which
+   * will be used to enable the disk store to store data beyond the capacity of local disk.
+   *
+   * @param string URL of the secondary disk store
+   * @return a reference to <code>this</code>
+   */
+  public DiskStoreFactory setHDFSUrl(String string);
+
+  /**
+   *  This is an optional property to provide the path to the local directory which will be
+   *  used to cache the data fetched from the secondary store. Note that this property is
+   *  relevant only when HDFS URL is set using {@link #setHDFSUrl}.
+   *
+   * @param string path to the cache directory
+   * @return a reference to <code>this</code>
+   */
+  public DiskStoreFactory setCacheDir(String string);
+
+  /**
+   * This is an optional property to provide path to the access file which provides
+   * necessary security credentials to access the secondary store data. Note that this
+   * property is relevant only when HDFS URL is set using {@link #setHDFSUrl}.
+   *
+   * @param string path to the access file
+   * @return a reference to <code>this</code>
+   */
+  public DiskStoreFactory setAccessFile(String string);
+
+  /**
    * Create a new disk store or find an existing one. In either case the returned disk store's
    * configuration will be the same as this factory's configuration.
    * 

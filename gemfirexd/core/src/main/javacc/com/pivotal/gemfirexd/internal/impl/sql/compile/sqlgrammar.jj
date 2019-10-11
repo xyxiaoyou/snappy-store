@@ -3095,6 +3095,9 @@ TOKEN [IGNORE_CASE] :
 |   <WRITEBUFFERSIZE: "writebuffersize">
 |   <QUEUESIZE: "queuesize">
 |   <MAXLOGSIZE: "maxlogsize">
+|   <HDFSURL: "hdfsurl">
+|   <CACHEDIR: "cachedir">
+|   <ACCESSFILE: "accessfile">
 |   <GATEWAYSENDER: "gatewaysender">
 |   <REMOTEDSID: "remotedsid">
 |   <SOCKETBUFFERSIZE: "socketbuffersize">
@@ -13113,8 +13116,21 @@ void diskStoreAttribs(Map otherAttribs) throws StandardException :
 	{
 	  addToMapAllowOnce(otherAttribs,tok.image,bool.image);
 	}
-   ) 
-
+   )
+   |
+   (
+      (
+        tok = <HDFSURL>
+        |
+        tok = <CACHEDIR>
+        |
+        tok = <ACCESSFILE>
+      )
+      val = stringLiteral()
+      {
+        addToMapAllowOnce(otherAttribs,tok.image,val);
+      }
+   )
     
 }
 void autoCompaction(Map otherAttribs) throws StandardException : 
@@ -18227,6 +18243,9 @@ nonReservedKeyword()  :
 	|   tok = <WRITEBUFFERSIZE>
 	|   tok = <QUEUESIZE>
 	|   tok = <MAXLOGSIZE>
+	|   tok = <HDFSURL>
+	|   tok = <CACHEDIR>
+	|   tok = <ACCESSFILE>
 	|   tok = <GATEWAYSENDER>
 	|   tok = <REMOTEDSID>
 	|   tok = <SOCKETBUFFERSIZE>

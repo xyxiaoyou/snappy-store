@@ -41,6 +41,7 @@ import com.pivotal.gemfirexd.internal.iapi.reference.SQLState;
 import com.pivotal.gemfirexd.internal.iapi.sql.Activation;
 import com.pivotal.gemfirexd.internal.iapi.sql.conn.LanguageConnectionContext;
 import com.pivotal.gemfirexd.internal.iapi.sql.dictionary.SchemaDescriptor;
+import com.pivotal.gemfirexd.internal.impl.sql.compile.CharConstantNode;
 import com.pivotal.gemfirexd.internal.impl.sql.compile.NumericConstantNode;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import org.eclipse.collections.impl.set.mutable.UnifiedSet;
@@ -92,6 +93,7 @@ public class CreateDiskStoreConstantAction extends DDLConstantAction {
     // first register operation to create the main disk store
     executeConstantAction(diskStoreName, dirPaths, dirSizes,
         otherAttribs, activation);
+    // doubt[vatsal]: what is delta store?
     // next register operation to create the internal delta store
     if (Misc.getMemStore().isSnappyStore()) {
       int numDirs = dirPaths.size();
@@ -262,6 +264,19 @@ public class CreateDiskStoreConstantAction extends DDLConstantAction {
           else {
             // throw exception
           }
+        }
+        //TODO[vatsal] : refactor this code to use switch instead of if else?
+        else if (key.equalsIgnoreCase("hdfsurl")) {
+          CharConstantNode ccn = (CharConstantNode)vn;
+          dsf.setHDFSUrl(ccn.getValue().getString());
+        }
+        else if (key.equalsIgnoreCase("cachedir")) {
+          CharConstantNode ccn = (CharConstantNode)vn;
+          dsf.setCacheDir(ccn.getValue().getString());
+        }
+        else if (key.equalsIgnoreCase("accessfile")) {
+          CharConstantNode ccn = (CharConstantNode)vn;
+          dsf.setAccessFile(ccn.getValue().getString());
         }
       } catch (IllegalArgumentException e) {
         // If some value was invalid, wrap that IllegalArgumentException
