@@ -18,7 +18,6 @@
 dependencies {
   compile "org.apache.thrift:libthrift:${thriftVersion}"
   compile "net.java.dev.jna:jna:${jnaVersion}"
-  compileOnly "org.apache.spark:spark-unsafe_${scalaBinaryVersion}:${sparkVersion}"
 
   compile project(subprojectBase + 'snappydata-store-shared')
   compile "org.apache.tomcat:tomcat-juli:${tomcatJdbcVersion}"

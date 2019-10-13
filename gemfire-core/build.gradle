@@ -31,7 +31,6 @@ dependencies {
   compileOnly files("${System.getProperty('java.home')}/../lib/tools.jar")
   compileOnly "antlr:antlr:${antlr2Version}"
   compile "net.java.dev.jna:jna:${jnaVersion}"
-  compileOnly "org.apache.spark:spark-unsafe_${scalaBinaryVersion}:${sparkVersion}"
   compile "commons-collections:commons-collections:${commonsCollectionsVersion}"
   compile "commons-io:commons-io:${commonsIoVersion}"
   compile "commons-logging:commons-logging:${commonsLoggingVersion}"
