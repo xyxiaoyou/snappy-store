@@ -78,10 +78,7 @@ import com.pivotal.gemfirexd.internal.engine.locks.GfxdDRWLockRequestProcessor.G
 import com.pivotal.gemfirexd.internal.engine.locks.GfxdLocalLockService;
 import com.pivotal.gemfirexd.internal.engine.procedure.DistributedProcedureCallFunction.DistributedProcedureCallFunctionArgs;
 import com.pivotal.gemfirexd.internal.engine.procedure.ProcedureChunkMessage;
-import com.pivotal.gemfirexd.internal.engine.sql.execute.GemFireRegionSizeResultSet;
-import com.pivotal.gemfirexd.internal.engine.sql.execute.IdentityValueManager;
-import com.pivotal.gemfirexd.internal.engine.sql.execute.MemberLogsMessage;
-import com.pivotal.gemfirexd.internal.engine.sql.execute.MemberStatisticsMessage;
+import com.pivotal.gemfirexd.internal.engine.sql.execute.*;
 import com.pivotal.gemfirexd.internal.engine.store.CompactCompositeRegionKey;
 import com.pivotal.gemfirexd.internal.engine.store.CompactExecRow;
 import com.pivotal.gemfirexd.internal.engine.store.CompactExecRowWithLobs;
@@ -277,6 +274,8 @@ public abstract class GfxdDataSerializable implements GfxdSerializable {
         () -> new ProjectionRow());
     DSFIDFactory.registerGemFireXDClass(LEAD_NODE_DATA_MSG,
         () -> new GetLeadNodeInfoAsStringMessage());
+    DSFIDFactory.registerGemFireXDClass(LEAD_DISK_STATE_MSG,
+        () -> new RecoveredMetadataRequestMessage());
 
     // register SnappyData specific types
     CallbackFactoryProvider.getStoreCallbacks().registerTypes();

@@ -267,7 +267,7 @@ public interface DiskEntry extends RegionEntry {
     }
 
     @Retained
-    static Object getOffHeapValueOnDiskOrBuffer(DiskEntry entry,
+    public static Object getOffHeapValueOnDiskOrBuffer(DiskEntry entry,
         DiskRegionView dr, RegionEntryContext context,
         boolean faultin, boolean rawValue) {
       DiskId did = entry.getDiskId();
@@ -1054,7 +1054,7 @@ public interface DiskEntry extends RegionEntry {
       }
     }
 
-    private static Object getValueRetain(DiskEntry entry, RegionEntryContext context,
+    public static Object getValueRetain(DiskEntry entry, RegionEntryContext context,
         boolean rawValue) {
       @Retained Object v = entry._getValueRetain(context, true);
       if (rawValue && GemFireCacheImpl.hasNewOffHeap() &&

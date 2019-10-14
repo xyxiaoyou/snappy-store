@@ -1039,6 +1039,8 @@ public final class RowFormatter implements Serializable {
     this.metadata = null;
     this.isTableFormatter = false;
     this.isPrimaryKeyFormatter = false;
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#cqi#column[] = " + ArrayUtils.toString(this.columns));
   }
 
   /**
@@ -1103,6 +1105,8 @@ public final class RowFormatter implements Serializable {
       this.isTableFormatter = true;
     }
     this.isPrimaryKeyFormatter = false;
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#const1#column[] = " + ArrayUtils.toString(this.columns));
   }
 
   /**
@@ -1161,6 +1165,8 @@ public final class RowFormatter implements Serializable {
     if (isTableFormatter && container != null) {
       container.hasLobs = hasLobs();
     }
+//    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+//        "RowFormatter#const2#column[] = " + ArrayUtils.toString(this.columns));
   }
 
   /**
@@ -1219,6 +1225,8 @@ public final class RowFormatter implements Serializable {
     this.metadata = null;
     this.isTableFormatter = false;
     this.isPrimaryKeyFormatter = false;
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#const3#column[] = " + ArrayUtils.toString(this.columns));
   }
 
   /**
@@ -1279,8 +1287,14 @@ public final class RowFormatter implements Serializable {
     this.metadata = getMetaData(schemaName, tableName, schemaVersion);
     this.isTableFormatter = false;
     this.isPrimaryKeyFormatter = isPrimaryKeyFormatter;
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#const4#column[] = " + ArrayUtils.toString(this.columns));
   }
 
+  public void printColumnArray() {
+    SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
+        "RowFormatter#Recovery#column[] = " + ArrayUtils.toString(this.columns));
+  }
   /**
    * Get the fixed width, variable width and LOB column positions for this
    * formatter.
@@ -1914,7 +1928,7 @@ public final class RowFormatter implements Serializable {
   /**
    * Read the schema version from the start of byte array.
    */
-  static int readVersion(final byte[] bytes) {
+  public static int readVersion(final byte[] bytes) {
     // version is written at the start of byte array
     final int schemaVersion = readCompactInt(bytes, 0);
     // special token TOKEN_RECOVERY_VERSION is used for upgrade from old Oplogs
@@ -5521,13 +5535,13 @@ public final class RowFormatter implements Serializable {
     } else {
       dvd = cd.columnType.getNull();
     }
-    if (SanityManager.DEBUG) {
-      if (GemFireXDUtils.TraceRowFormatter) {
+     if (SanityManager.DEBUG) {
+       if (GemFireXDUtils.TraceRowFormatter) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_ROW_FORMATTER,
             "RowFormatter#getColumn(byte[][]): for column at position "
                 + logicalPosition + " returning DVD {" + dvd + ", type: "
                 + cd.columnType + '}');
-      }
+       }
     }
     return dvd;
   }
@@ -7126,7 +7140,8 @@ public final class RowFormatter implements Serializable {
     if (hasUnknown || maxDataLength > Integer.MAX_VALUE) {
       maxDataLength = Integer.MAX_VALUE;
     }
-    calcNumOffsetBytesToUse((int)maxDataLength, result[VAR_DATA_OFFSET_POS],
+    //                                                  todo change is ok?
+    calcNumOffsetBytesToUse((int)maxDataLength, result[NUM_VAR_WIDTH_COLS_POS],
         result);
     return result;
   }
@@ -7157,7 +7172,7 @@ public final class RowFormatter implements Serializable {
     if (hasUnknown || maxDataLength > Integer.MAX_VALUE) {
       maxDataLength = Integer.MAX_VALUE;
     }
-    calcNumOffsetBytesToUse((int)maxDataLength, result[VAR_DATA_OFFSET_POS],
+    calcNumOffsetBytesToUse((int)maxDataLength, result[NUM_VAR_WIDTH_COLS_POS],
         result);
     return result;
   }

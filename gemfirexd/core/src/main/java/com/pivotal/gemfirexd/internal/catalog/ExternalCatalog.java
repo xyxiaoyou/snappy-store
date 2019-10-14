@@ -62,6 +62,12 @@ public interface ExternalCatalog {
   Map<String, List<String>> getAllStoreTablesInCatalogUppercase();
 
   /**
+   * Gets all the entries in hive
+   */
+  // what should be the data type here ???
+  java.util.List<Object> getAllHiveEntries();
+
+  /**
    * Removes a table from the external catalog if it exists.
    */
   void removeTableIfExists(String schema, String table, boolean skipLocks);

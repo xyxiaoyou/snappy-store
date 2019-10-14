@@ -756,6 +756,10 @@ public interface GfxdConstants {
    */
   final String TRACE_THRIFT_API = "TraceThriftAPI";
 
+  /** Flag to trace recovery mode as part of Data Extractor.
+   */
+  final String TRACE_RECOVERY_MODE = "TraceRecoveryMode";
+
   // --------------------- End flags for SanityManager debug trace
 
   /**

@@ -60,6 +60,14 @@ public abstract class CallbackFactoryProvider {
     }
 
     @Override
+    public void dumpData(Long connId, String exportUri, String formatType, String tableNames, Boolean ignoreError){
+    }
+
+    @Override
+    public void dumpDDLs(Long connId, String exportUri) {
+    }
+
+    @Override
     public Object readDataType(ByteArrayDataInput in) {
       return null;
     }

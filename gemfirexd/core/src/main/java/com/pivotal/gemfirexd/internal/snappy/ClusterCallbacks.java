@@ -43,6 +43,10 @@ public interface ClusterCallbacks {
   SparkSQLExecute getSQLExecute(String sql, String schema, LeadNodeExecutionContext ctx,
       Version v, boolean isPreparedStatement, boolean isPreparedPhase, ParameterValueSet pvs);
 
+  void dumpData(Long connId, String exportUri, String formatType, String tableNames, Boolean ignoreError);
+
+  void dumpDDLs(Long connId, String exportUri);
+
   Object readDataType(ByteArrayDataInput in);
 
   /**

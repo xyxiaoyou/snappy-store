@@ -45,6 +45,7 @@ import com.pivotal.gemfirexd.internal.engine.distributed.message.BitSetSet;
 import com.pivotal.gemfirexd.internal.engine.distributed.message.ContainsKeyBulkExecutorMessage;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.store.CompactCompositeRegionKey;
+import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer;
 import com.pivotal.gemfirexd.internal.engine.store.RegionKey;
 import com.pivotal.gemfirexd.internal.engine.store.GemFireContainer.BulkKeyLookupResult;
 import com.pivotal.gemfirexd.internal.iapi.error.StandardException;
@@ -90,6 +91,13 @@ public class Hash1IndexScanController extends MemIndexScanController {
 
     this.baseRegion = this.baseContainer.getRegion();
     this.localBucketSet = null;
+    if (this.openConglom.getGemFireContainer() == null &&
+        Misc.SNAPPY_HIVE_METASTORE.equals(baseContainer.getSchemaName()) &&
+        baseRegion.getGemFireCache() != null &&
+        baseRegion.getGemFireCache().isSnappyRecoveryMode()) {
+      MemIndex mic = openConglom.getConglomerate();
+      mic.setGemFireContainer(baseContainer);
+    }
     if (GemFireXDUtils.TraceIndex | GemFireXDUtils.TraceQuery) {
       GfxdIndexManager.traceIndex("Hash1IndexScanController: startKey=%s "
           + "stopKey=%s qualifier=%s for index container %s",

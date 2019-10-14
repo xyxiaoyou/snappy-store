@@ -88,7 +88,7 @@ import java.util.zip.GZIPInputStream;
 import com.gemstone.gemfire.internal.cache.GemFireCacheImpl;
 
 /**
- * Provides static methods for various system administation tasks.
+ * Provides static methods for various system administration tasks.
  */
 public class SystemAdmin {
   
