@@ -188,13 +188,12 @@ public class PersistentStateInRecoveryMode {
     private String diskStoreName;
     private transient RegionVersionVector rvv;
     private long mostRecentEntryModifiedTime;
+    private long latestOplogTime;
+    private transient InternalDistributedMember member;
 
     public void setMember(InternalDistributedMember member) {
       this.member = member;
     }
-
-    private long latestOplogTime;
-    private transient InternalDistributedMember member;
 
     public RecoveryModePersistentView(
         final String diskStoreName, final String regionFullPath,
@@ -208,7 +207,6 @@ public class PersistentStateInRecoveryMode {
     }
 
     public RecoveryModePersistentView() {
-
     }
 
     public String getRegionPath() {
@@ -247,19 +245,29 @@ public class PersistentStateInRecoveryMode {
 
     @Override
     public String toString() {
-      StringBuilder sb = new StringBuilder();
-      sb.append("RecoveryModePersistentView member: ");
-      sb.append(this.member);
-      sb.append(": region: ");
-      sb.append(this.regionPath);
-      return sb.toString();
+      String sb = "RecoveryModePersistentView member: " +
+          this.member +
+          ": region: " +
+          this.regionPath +
+          ": diskStoreName:" +
+          this.diskStoreName;
+      return sb;
     }
 
     @Override
     public int compareTo(RecoveryModePersistentView other) {
       // They should be called for the same region
       assert this.regionPath.equals(other.regionPath);
-      if (this.rvv.sameAs(other.rvv)) {
+
+      if (mostRecentEntryModifiedTime == other.mostRecentEntryModifiedTime &&
+          latestOplogTime == other.latestOplogTime &&
+          Objects.equals(regionPath, other.regionPath) &&
+          Objects.equals(diskStoreName, other.diskStoreName) &&
+          rvv.sameAs(other.rvv) &&
+          member.equals(other.member)){
+        return 0;
+      }
+      if (this.rvv.logicallySameAs(other.rvv)) {
         if (this.latestOplogTime <= other.latestOplogTime) {
           return -1;
         }
@@ -285,7 +293,8 @@ public class PersistentStateInRecoveryMode {
             // If no one dominates then let them be equal.
           }
         } else {
-          // log a warning and pick the one with more version holder objects
+          SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_RECOVERY_MODE,
+              "Using number of exceptiosn in the RVVs to compare");
           if (versionHolderOne.size() < versionHolderTwo.size()) {
             return -1;
           } else if (versionHolderTwo.size() < versionHolderOne.size()) {
@@ -295,7 +304,7 @@ public class PersistentStateInRecoveryMode {
           }
         }
       }
-      return 0;
+      return 1;
     }
   }
 }

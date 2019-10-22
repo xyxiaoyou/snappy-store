@@ -1203,7 +1203,8 @@ public class GfxdSystemProcedures extends SystemProcedures {
    * The "exportAll" parameter allows exporting everything including
    * configuration commands using system procedures.
    */
-  public static void EXPORT_DDLS(final Boolean exportAll, final ResultSet[] rs)
+  public static void EXPORT_ALL_DDLS(final Boolean exportAll,
+      final ResultSet[] rs)
       throws SQLException, StandardException, CacheException,
       InterruptedException {
     // take the read lock on DataDictionary to flush any existing DDLs
@@ -1560,20 +1561,23 @@ public class GfxdSystemProcedures extends SystemProcedures {
    * @throws SQLException
    */
   // comma separated table names
-  public static void DUMP_DATA(String exportUri, String formatType, String tableNames, Boolean ignoreError) throws SQLException {
+  public static void EXPORT_DATA(String exportUri, String formatType, String tableNames,
+      Boolean ignoreError) throws SQLException {
     try {
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
-            "Executing DUMP_DATA");
+            "Executing EXPORT_DATA");
       }
       Long connectionId = Misc.getLanguageConnectionContext().getConnectionId();
       GfxdListResultCollector collector = new GfxdListResultCollector();
       GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
-          collector, GetLeadNodeInfoAsStringMessage.DataReqType.DUMP_DATA, connectionId, exportUri, formatType, tableNames, ignoreError);
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.EXPORT_DATA, connectionId,
+          exportUri, formatType, tableNames, ignoreError);
+
       msg.executeFunction();
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
-            "DUMP_DATA successful.");
+            "EXPORT_DATA successful.");
       }
     } catch (StandardException se) {
       throw PublicAPI.wrapStandardException(se);
@@ -1586,20 +1590,20 @@ public class GfxdSystemProcedures extends SystemProcedures {
    * @throws SQLException
    */
 
-  public static void DUMP_DDLS(String exportUri) throws SQLException {
+  public static void EXPORT_DDLS(String exportUri) throws SQLException  {
     try {
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
-            "Executing DUMP_DDLS");
+            "Executing EXPORT_DDLS");
       }
       Long connectionId = Misc.getLanguageConnectionContext().getConnectionId();
       GfxdListResultCollector collector = new GfxdListResultCollector();
       GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
-          collector, GetLeadNodeInfoAsStringMessage.DataReqType.DUMP_DDLS, connectionId, exportUri);
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.EXPORT_DDLS, connectionId, exportUri);
       msg.executeFunction();
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
-            "DUMP_DDLS successful.");
+            "EXPORT_DDLS successful.");
       }
     } catch (StandardException se) {
       throw PublicAPI.wrapStandardException(se);

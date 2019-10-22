@@ -41,7 +41,7 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
   private DataReqType requestType;
   private Long connID;
 
-  public enum DataReqType {GET_JARS, DUMP_DATA, DUMP_DDLS, GENERATE_LOAD_SCRIPTS}
+  public enum DataReqType {GET_JARS, EXPORT_DATA, EXPORT_DDLS, GENERATE_LOAD_SCRIPTS}
 
   public GetLeadNodeInfoAsStringMessage(final ResultCollector<Object, Object> rc, DataReqType reqType, Long connID, Object... args) {
     super(rc, null, false, true);
@@ -85,17 +85,17 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
         case GET_JARS:
           result = handleGetJarsRequest();
           break;
-        case DUMP_DATA:
+        case EXPORT_DATA:
           if (GemFireXDUtils.TraceQuery) {
             SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
-                "GetLeadNodeInfoAsStringMessage - case DUMP_DATA");
+                "GetLeadNodeInfoAsStringMessage - case EXPORT_DATA");
           }
           result = dumpData();
           break;
-        case DUMP_DDLS:
+        case EXPORT_DDLS:
           if (GemFireXDUtils.TraceQuery) {
             SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
-                "GetLeadNodeInfoAsStringMessage - case DUMP_DDLS");
+                "GetLeadNodeInfoAsStringMessage - case EXPORT_DDLS");
           }
           result = dumpDDLs();
           break;
