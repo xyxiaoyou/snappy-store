@@ -1567,11 +1567,9 @@ public class GfxdSystemProcedures extends SystemProcedures {
             "Executing DUMP_DATA");
       }
       Long connectionId = Misc.getLanguageConnectionContext().getConnectionId();
-
       GfxdListResultCollector collector = new GfxdListResultCollector();
       GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
           collector, GetLeadNodeInfoAsStringMessage.DataReqType.DUMP_DATA, connectionId, exportUri, formatType, tableNames, ignoreError);
-
       msg.executeFunction();
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
@@ -1588,7 +1586,7 @@ public class GfxdSystemProcedures extends SystemProcedures {
    * @throws SQLException
    */
 
-  public static void DUMP_DDLS(String exportUri) throws SQLException  {
+  public static void DUMP_DDLS(String exportUri) throws SQLException {
     try {
       if (GemFireXDUtils.TraceSysProcedures) {
         SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
@@ -1605,6 +1603,26 @@ public class GfxdSystemProcedures extends SystemProcedures {
       }
     } catch (StandardException se) {
       throw PublicAPI.wrapStandardException(se);
+    }
+  }
+
+  public static void GENERATE_LOAD_SCRIPTS() throws SQLException {
+    try {
+      if (GemFireXDUtils.TraceSysProcedures) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+            "Executing GENERATE_LOAD_SCRIPTS");
+      }
+      Long connectionId = Misc.getLanguageConnectionContext().getConnectionId();
+      GfxdListResultCollector collector = new GfxdListResultCollector();
+      GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.GENERATE_LOAD_SCRIPTS, connectionId);
+      msg.executeFunction();
+      if (GemFireXDUtils.TraceSysProcedures) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+            "GENERATE_LOAD_SCRIPTS successful.");
+      }
+    } catch(StandardException e) {
+      throw PublicAPI.wrapStandardException(e);
     }
   }
 

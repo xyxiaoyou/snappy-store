@@ -47,6 +47,8 @@ public interface ClusterCallbacks {
 
   void dumpDDLs(Long connId, String exportUri);
 
+  void generateLoadScripts(Long connId);
+
   Object readDataType(ByteArrayDataInput in);
 
   /**

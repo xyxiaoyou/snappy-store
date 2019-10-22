@@ -68,6 +68,10 @@ public abstract class CallbackFactoryProvider {
     }
 
     @Override
+    public void generateLoadScripts(Long connId) {
+    }
+
+    @Override
     public Object readDataType(ByteArrayDataInput in) {
       return null;
     }

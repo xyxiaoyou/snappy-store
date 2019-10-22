@@ -41,7 +41,7 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
   private DataReqType requestType;
   private Long connID;
 
-  public enum DataReqType {GET_JARS, DUMP_DATA, DUMP_DDLS}
+  public enum DataReqType {GET_JARS, DUMP_DATA, DUMP_DDLS, GENERATE_LOAD_SCRIPTS}
 
   public GetLeadNodeInfoAsStringMessage(final ResultCollector<Object, Object> rc, DataReqType reqType, Long connID, Object... args) {
     super(rc, null, false, true);
@@ -99,6 +99,13 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
           }
           result = dumpDDLs();
           break;
+        case GENERATE_LOAD_SCRIPTS:
+          if (GemFireXDUtils.TraceQuery) {
+            SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
+                "GetLeadNodeInfoAsStringMessage - case GENERATE_LOAD_SCRIPTS");
+          }
+          result = generateLoadScripts();
+          break;
         default:
           throw new IllegalArgumentException("GetLeadNodeInfoAsStringMessage:" +
               " Unknown data request type: " + this.requestType);
@@ -120,6 +127,11 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
   private String dumpDDLs() {
     com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().dumpDDLs(connID, additionalArgs[0].toString());
     return "DDLs recovered.";
+  }
+
+  private String generateLoadScripts() {
+    com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().generateLoadScripts(connID);
+    return "load scripts generated";
   }
 
   private String handleGetJarsRequest() {
