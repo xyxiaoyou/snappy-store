@@ -40,6 +40,8 @@
 
 package com.pivotal.gemfirexd.internal.impl.jdbc;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import java.sql.DatabaseMetaData;
@@ -173,6 +175,9 @@ public class EmbedDatabaseMetaData extends ConnectionChild
                 props[i] = new Properties();
                 // SECURITY PERMISSION - IP3
                 InputStream is = getClass().getResourceAsStream(files[i]);
+                if (is == null) {
+                  is = new FileInputStream(new File("/Users/asifshahid/workspace/snappydata/store/gemfirexd/prebuild/src/main/resources/com/pivotal/gemfirexd/internal/impl/jdbc/metadata.properties"));
+                }
                 props[i].load(is);
                 is.close();
             } catch (IOException ioe) {

@@ -29,6 +29,7 @@ import com.pivotal.gemfirexd.internal.engine.distributed.GfxdQueryResultCollecto
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdQueryStreamingResultCollector;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdResultCollector;
 import com.pivotal.gemfirexd.internal.engine.distributed.SnappyResultHolder;
+import com.pivotal.gemfirexd.internal.engine.distributed.execution.SQLLeadNodeExecutionObject;
 import com.pivotal.gemfirexd.internal.engine.distributed.message.LeadNodeExecutorMsg;
 import com.pivotal.gemfirexd.internal.engine.distributed.metadata.DMLQueryInfo;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
@@ -321,8 +322,9 @@ public class SnappyActivation extends BaseActivation {
     // TODO: KN probably username, statement id and connId to be sent in
     // execution and of course tx id when transaction will be supported.
     LeadNodeExecutionContext ctx = new LeadNodeExecutionContext(connId);
-    LeadNodeExecutorMsg msg = new LeadNodeExecutorMsg(sql, schema, ctx, rc, pvs,
-        isPreparedStatement, false, isUpdateOrDeleteOrPut);
+    SQLLeadNodeExecutionObject execObj = new SQLLeadNodeExecutionObject(sql, schema, pvs, isPreparedStatement,
+      false, isUpdateOrDeleteOrPut);
+    LeadNodeExecutorMsg msg = new LeadNodeExecutorMsg(ctx, rc, execObj);
     // release all locks before sending the message else it can lead to deadlocks
     if (lcc != null) {
       lcc.getTransactionExecute().releaseAllLocks(true, true);
@@ -348,8 +350,9 @@ public class SnappyActivation extends BaseActivation {
     // TODO: KN probably username, statement id and connId to be sent in
     // execution and of course tx id when transaction will be supported.
     LeadNodeExecutionContext ctx = new LeadNodeExecutionContext(connId);
-    LeadNodeExecutorMsg msg = new LeadNodeExecutorMsg(sql, schema, ctx, rc, pvs,
-        true, true, isUpdateOrDeleteOrPut);
+    SQLLeadNodeExecutionObject execObj = new SQLLeadNodeExecutionObject(sql, schema, pvs, true,
+      true, isUpdateOrDeleteOrPut);
+    LeadNodeExecutorMsg msg = new LeadNodeExecutorMsg(ctx, rc, execObj);
     if (lcc != null) {
       lcc.getTransactionExecute().releaseAllLocks(true, true);
     }

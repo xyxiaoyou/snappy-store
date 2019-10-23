@@ -68,6 +68,7 @@ import com.pivotal.gemfirexd.internal.engine.distributed.ReferencedKeyCheckerMes
 import com.pivotal.gemfirexd.internal.engine.distributed.ResultHolder;
 import com.pivotal.gemfirexd.internal.engine.distributed.SnappyResultHolder;
 import com.pivotal.gemfirexd.internal.engine.distributed.StatementCloseExecutorMessage;
+import com.pivotal.gemfirexd.internal.engine.distributed.execution.SQLLeadNodeExecutionObject;
 import com.pivotal.gemfirexd.internal.engine.distributed.message.*;
 import com.pivotal.gemfirexd.internal.engine.distributed.metadata.RegionAndKey;
 import com.pivotal.gemfirexd.internal.engine.locks.GfxdDRWLockReleaseProcessor.GfxdDRWLockReleaseMessage;
@@ -260,6 +261,8 @@ public abstract class GfxdDataSerializable implements GfxdSerializable {
         () -> new LeadNodeExecutionContext());
     DSFIDFactory.registerGemFireXDClass(LEAD_NODE_EXN_MSG,
         () -> new LeadNodeExecutorMsg());
+    DSFIDFactory.registerGemFireXDClass(SQL_LEAD_NODE_EXEC_OBJECT,
+      () -> new SQLLeadNodeExecutionObject());
     DSFIDFactory.registerGemFireXDClass(SNAPPY_RESULT_HOLDER,
         () -> new SnappyResultHolder());
     DSFIDFactory.registerGemFireXDClass(SNAPPY_REGION_STATS_RESULT,

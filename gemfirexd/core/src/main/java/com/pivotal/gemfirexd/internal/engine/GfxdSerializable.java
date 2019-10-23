@@ -335,4 +335,6 @@ public interface GfxdSerializable extends GfxdDSFID {
   byte COLUMN_FORMAT_DELTA = 115;
 
   byte COLUMN_DELETE_DELTA = 116;
+
+  byte SQL_LEAD_NODE_EXEC_OBJECT = 117;
 }
