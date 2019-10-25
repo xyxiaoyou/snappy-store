@@ -168,10 +168,7 @@ public class PersistentStateInRecoveryMode {
     return sb.toString();
   }
 
-  public static long getLatestModifiedTime(AbstractDiskRegion adr, LogWriter logger) {
-    if (logger.infoEnabled()) {
-      logger.info("getLatestModifiedTime: map = " + adr.getRecoveredEntryMap());
-    }
+  public static long getLatestModifiedTime(AbstractDiskRegion adr) {
     Optional<RegionEntry> rmax = adr.getRecoveredEntryMap()
         .regionEntries().stream().max((t1, t2) -> {
           if (t1.getLastModified() <= t2.getLastModified()) return -1;

@@ -1712,13 +1712,10 @@ public final class FabricDatabase implements ModuleControl,
               logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath() + " size = " + adr.getRecoveredEntryMap().size());
             }
           }
-          if (logger.infoEnabled()) {
-            logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath());
-          }
           long mostRecentModifiedTime = 0;
           if (!(adr.getRecoveredEntryMap().size() == 0)) {
             mostRecentModifiedTime =
-                PersistentStateInRecoveryMode.getLatestModifiedTime(adr, logger);
+                PersistentStateInRecoveryMode.getLatestModifiedTime(adr);
           }
           PersistentStateInRecoveryMode.RecoveryModePersistentView dpv
               = new PersistentStateInRecoveryMode.RecoveryModePersistentView(
@@ -1735,6 +1732,9 @@ public final class FabricDatabase implements ModuleControl,
       }
     }
     pmsg.addPRConfigs();
+    if (logger.fineEnabled()) {
+      logger.fine("Setting PersistentStateInRecoveryMode: " + pmsg);
+    }
     this.memStore.setPersistentStateMsg(pmsg);
   }
 
