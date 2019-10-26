@@ -18,4 +18,5 @@ public abstract class LeadNodeExecutionObject implements GfxdSerializable {
   public Version[] getSerializationVersions() {
     return null;
   }
+  public abstract String getExceptionString();
 }

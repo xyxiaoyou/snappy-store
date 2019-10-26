@@ -85,4 +85,9 @@ public class SampleInsertExecutionObject extends LeadNodeExecutionObject {
       this.rows.add(dvds);
     }
   }
+
+  @Override
+  public String getExceptionString() {
+    return "";
+  }
 }

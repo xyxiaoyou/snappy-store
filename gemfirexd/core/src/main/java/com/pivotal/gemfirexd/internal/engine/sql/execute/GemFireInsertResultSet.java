@@ -55,6 +55,11 @@ import com.pivotal.gemfirexd.internal.engine.GemFireXDQueryObserverHolder;
 import com.pivotal.gemfirexd.internal.engine.access.GemFireTransaction;
 import com.pivotal.gemfirexd.internal.engine.access.MemConglomerate;
 import com.pivotal.gemfirexd.internal.engine.access.index.GfxdIndexManager;
+import com.pivotal.gemfirexd.internal.engine.distributed.GfxdQueryResultCollector;
+import com.pivotal.gemfirexd.internal.engine.distributed.GfxdQueryStreamingResultCollector;
+import com.pivotal.gemfirexd.internal.engine.distributed.GfxdResultCollector;
+import com.pivotal.gemfirexd.internal.engine.distributed.execution.LeadNodeExecutionObject;
+import com.pivotal.gemfirexd.internal.engine.distributed.execution.SampleInsertExecutionObject;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.sql.catalog.ExtraTableInfo;
 import com.pivotal.gemfirexd.internal.engine.sql.conn.GfxdHeapThresholdListener;
@@ -377,7 +382,19 @@ public final class GemFireInsertResultSet extends AbstractGemFireResultSet {
           } else {
             batchRows = this.batchRows;
           }
-
+          boolean enableStreaming = this.lcc.streamingEnabled();
+          SnappyUpdateDeletePutResultSet rs = new SnappyUpdateDeletePutResultSet(this.activation, false);
+          final GfxdResultCollector<Object> rc;
+          if (enableStreaming) {
+            rc = new GfxdQueryStreamingResultCollector();
+          } else {
+            rc = new GfxdQueryResultCollector();
+          }
+          rs.setupRC(rc);
+          LeadNodeExecutionObject execObj = new SampleInsertExecutionObject(
+             this.gfContainer.getQualifiedTableName(), batchRows);
+          SnappyActivation.executeOnLeadNode(rs,rc, enableStreaming, this.activation.getConnectionID(),
+            this.lcc, execObj);
         }
       } finally {
         rows.clear();
