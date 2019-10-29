@@ -834,6 +834,15 @@ public class GemFireVersion {
     }
   }
 
+  public static boolean isCustomEdition() {
+    GemFireVersion v = getInstance();
+    if(v.customEdition)
+      return true;
+    else
+      return isEnterpriseEdition();
+    }
+  }
+
   public static String getClusterType() {
     GemFireVersion v = getInstance();
     if (v.error != null) {
