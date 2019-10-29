@@ -840,7 +840,6 @@ public class GemFireVersion {
       return true;
     else
       return isEnterpriseEdition();
-    }
   }
 
   public static String getClusterType() {
