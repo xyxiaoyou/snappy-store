@@ -121,7 +121,7 @@ allprojects {
     CUSTOM_EDITION = 'true'
 
     // product and release properties
-    PRODUCT_NAME = 'TIBCO ComputeDB RowStore'
+    PRODUCT_NAME = 'SDP DB Store'
 
     GEMFIRE_PRODUCT = 'Pivotal GemFire'
     GEMFIRE_VERSION = '7.5.Beta'
