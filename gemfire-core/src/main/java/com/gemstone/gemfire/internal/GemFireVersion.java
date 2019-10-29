@@ -465,7 +465,7 @@ public class GemFireVersion {
       this.productReleaseStage = "";
     }
     this.enterpriseEdition = Boolean.parseBoolean(props.getProperty(ENTERPRISE_EDITION, "false"));
-    this.customEdition = Boolean.parseBoolean(props.getProperty(CUSTOM_EDITION, "false"));
+    this.customEdition = Boolean.parseBoolean(props.getProperty(CUSTOM_EDITION, "true"));
     this.clusterType = props.getProperty(CLUSTER_TYPE, "");
     // below setting for GemFireXD is to indicate the underlying GemFire
     // version being used in GemFireXD product; for GemFire this will not
