@@ -825,13 +825,12 @@ public class GemFireVersion {
 
   public static boolean isEnterpriseEdition() {
     GemFireVersion v = getInstance();
-    if (v.error != null) {
-      if(v.customEdition)
+    if(v.customEdition)
         return true;
-      else
+    else if (v.error != null) {
         return false;
     } else {
-      return v.enterpriseEdition;
+        return v.enterpriseEdition;
     }
   }
 
