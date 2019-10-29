@@ -117,6 +117,9 @@ allprojects {
     c3p0Version = '0.9.5.2'
     snappyDunitVersion = '1.0.3.6'
 
+    // CUSTOM_EDITION
+    CUSTOM_EDITION = 'true'
+
     // product and release properties
     PRODUCT_NAME = 'TIBCO ComputeDB RowStore'
 
