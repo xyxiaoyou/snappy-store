@@ -80,6 +80,9 @@ public class GemFireVersion {
   /** Constant for the GemFire enterprise edition Resource Property entry */
   private static final String ENTERPRISE_EDITION = "Enterprise-Edition";
 
+  /** Constant for the GemFire custom edition Resource Property entry */
+  private static final String CUSTOM_EDITION = "Custom-Edition";
+
   /** Constant for the SnappyData Cluster Type Resource Property entry */
   private static final String CLUSTER_TYPE = "Cluster-Type";
 
@@ -137,6 +140,9 @@ public class GemFireVersion {
 
   /** If the product is enterprise edition or not */
   private boolean enterpriseEdition;
+
+  /** If the product is custom edition or not */
+  private boolean customEdition;
 
   /** Cluster type, indicates any specifications for cluster */
   private String clusterType;
@@ -459,6 +465,7 @@ public class GemFireVersion {
       this.productReleaseStage = "";
     }
     this.enterpriseEdition = Boolean.parseBoolean(props.getProperty(ENTERPRISE_EDITION, "false"));
+    this.customEdition = Boolean.parseBoolean(props.getProperty(CUSTOM_EDITION, "false"));
     this.clusterType = props.getProperty(CLUSTER_TYPE, "");
     // below setting for GemFireXD is to indicate the underlying GemFire
     // version being used in GemFireXD product; for GemFire this will not
@@ -819,7 +826,10 @@ public class GemFireVersion {
   public static boolean isEnterpriseEdition() {
     GemFireVersion v = getInstance();
     if (v.error != null) {
-      return false;
+      if(v.customEdition)
+        return true;
+      else
+        return false;
     } else {
       return v.enterpriseEdition;
     }
