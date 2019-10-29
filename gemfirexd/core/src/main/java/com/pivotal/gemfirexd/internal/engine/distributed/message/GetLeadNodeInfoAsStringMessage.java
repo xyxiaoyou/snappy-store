@@ -30,24 +30,25 @@ import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Set;
 
 public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object> {
 
   private Object[] additionalArgs;
   private DataReqType requestType;
-  private Long connID;
 
-  public enum DataReqType {GET_JARS, DUMP_DATA, DUMP_DDLS}
+  public enum DataReqType {GET_JARS}
 
-  public GetLeadNodeInfoAsStringMessage(final ResultCollector<Object, Object> rc, DataReqType reqType, Long connID, Object... args) {
+  public GetLeadNodeInfoAsStringMessage(final ResultCollector<Object, Object> rc, DataReqType reqType, Object... args) {
     super(rc, null, false, true);
     this.requestType = reqType;
     this.additionalArgs = args;
-    this.connID = connID;
   }
 
   public GetLeadNodeInfoAsStringMessage() {
@@ -85,20 +86,7 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
         case GET_JARS:
           result = handleGetJarsRequest();
           break;
-        case DUMP_DATA:
-          if (GemFireXDUtils.TraceQuery) {
-            SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
-                "GetLeadNodeInfoAsStringMessage - case DUMP_DATA");
-          }
-          result = dumpData();
-          break;
-        case DUMP_DDLS:
-          if (GemFireXDUtils.TraceQuery) {
-            SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_QUERYDISTRIB,
-                "GetLeadNodeInfoAsStringMessage - case DUMP_DDLS");
-          }
-          result = dumpDDLs();
-          break;
+
         default:
           throw new IllegalArgumentException("GetLeadNodeInfoAsStringMessage:" +
               " Unknown data request type: " + this.requestType);
@@ -108,18 +96,6 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
     } catch (Exception ex) {
       throw LeadNodeExecutorMsg.getExceptionToSendToServer(ex);
     }
-  }
-
-
-  private String dumpData() {
-    com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().dumpData(connID,
-        additionalArgs[0].toString(), additionalArgs[1].toString(), additionalArgs[2].toString(), Boolean.parseBoolean(additionalArgs[3].toString()));
-    return "Data recovered";
-  }
-
-  private String dumpDDLs() {
-    com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider.getClusterCallbacks().dumpDDLs(connID, additionalArgs[0].toString());
-    return "DDLs recovered.";
   }
 
   private String handleGetJarsRequest() {
@@ -162,7 +138,6 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
     super.fromData(in);
     this.requestType = DataSerializer.readObject(in);
     this.additionalArgs = DataSerializer.readObjectArray(in);
-    this.connID = DataSerializer.readLong(in);
   }
 
   @Override
@@ -170,7 +145,6 @@ public class GetLeadNodeInfoAsStringMessage extends MemberExecutorMessage<Object
     super.toData(out);
     DataSerializer.writeObject(this.requestType, out);
     DataSerializer.writeObjectArray(this.additionalArgs, out);
-    DataSerializer.writeLong(this.connID, out);
   }
 
   public void appendFields(final StringBuilder sb) {

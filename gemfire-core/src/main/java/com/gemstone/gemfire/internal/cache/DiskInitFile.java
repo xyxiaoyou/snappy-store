@@ -1540,11 +1540,6 @@ public class DiskInitFile implements DiskInitFileInterpreter {
   private void writeIFRecord(ByteBuffer bb, boolean doStats)
     throws IOException
   {
-    // In recovery mode do not write anything in the if file
-    if (this.parent != null && this.parent.isDataRecoveryMode()) {
-      return;
-    }
-
     assert lock.isHeldByCurrentThread();
     if (this.closed) {
       throw new DiskAccessException("The disk store is closed", parent);

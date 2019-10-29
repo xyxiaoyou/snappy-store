@@ -53,7 +53,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
 
 import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.LogWriter;
@@ -64,7 +63,6 @@ import com.gemstone.gemfire.internal.ClassPathLoader;
 import com.gemstone.gemfire.internal.GFToSlf4jBridge;
 import com.gemstone.gemfire.internal.LogWriterImpl;
 import com.gemstone.gemfire.internal.cache.*;
-import com.gemstone.gemfire.internal.cache.persistence.PRPersistentConfig;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.gemstone.gnu.trove.THashMap;
@@ -87,9 +85,7 @@ import com.pivotal.gemfirexd.internal.engine.ddl.*;
 import com.pivotal.gemfirexd.internal.engine.ddl.catalog.GfxdSystemProcedures;
 import com.pivotal.gemfirexd.internal.engine.ddl.catalog.messages.GfxdSystemProcedureMessage;
 import com.pivotal.gemfirexd.internal.engine.ddl.wan.messages.AbstractGfxdReplayableMessage;
-import com.pivotal.gemfirexd.internal.engine.distributed.GfxdListResultCollector;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdMessage;
-import com.pivotal.gemfirexd.internal.engine.distributed.message.PersistentStateInRecoveryMode;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
 import com.pivotal.gemfirexd.internal.engine.fabricservice.FabricServerImpl;
 import com.pivotal.gemfirexd.internal.engine.fabricservice.FabricServiceImpl;
@@ -136,7 +132,6 @@ import com.pivotal.gemfirexd.internal.iapi.store.access.FileResource;
 import com.pivotal.gemfirexd.internal.iapi.store.access.TransactionController;
 import com.pivotal.gemfirexd.internal.iapi.store.raw.log.LogFactory;
 import com.pivotal.gemfirexd.internal.iapi.types.DataValueFactory;
-import com.pivotal.gemfirexd.internal.iapi.types.RowLocation;
 import com.pivotal.gemfirexd.internal.iapi.util.DoubleProperties;
 import com.pivotal.gemfirexd.internal.iapi.util.IdUtil;
 import com.pivotal.gemfirexd.internal.impl.io.DirFile;
@@ -147,7 +142,6 @@ import com.pivotal.gemfirexd.internal.impl.sql.catalog.XPLAINTableDescriptor;
 import com.pivotal.gemfirexd.internal.io.StorageFile;
 import com.pivotal.gemfirexd.internal.shared.common.error.ExceptionSeverity;
 import com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider;
-import io.snappydata.thrift.CatalogTableObject;
 
 /**
  * The Database interface provides control over the physical database (that is,
@@ -463,18 +457,16 @@ public final class FabricDatabase implements ModuleControl,
       }
 
       // Entry of default disk stores in sysdiskstore table
-      if (!this.memStore.getGemFireCache().isSnappyRecoveryMode()) {
-        UUIDFactory factory = dd.getUUIDFactory();
-        addInternalDiskStore(cache.findDiskStore(
-            GfxdConstants.GFXD_DD_DISKSTORE_NAME), factory);
-        addInternalDiskStore(this.memStore.getDefaultDiskStore(), factory);
-        addInternalDiskStore(cache.findDiskStore(
-            GfxdConstants.SNAPPY_DEFAULT_DELTA_DISKSTORE), factory);
+      UUIDFactory factory = dd.getUUIDFactory();
+      addInternalDiskStore(cache.findDiskStore(
+          GfxdConstants.GFXD_DD_DISKSTORE_NAME), factory);
+      addInternalDiskStore(this.memStore.getDefaultDiskStore(), factory);
+      addInternalDiskStore(cache.findDiskStore(
+          GfxdConstants.SNAPPY_DEFAULT_DELTA_DISKSTORE), factory);
 
-        // Initialize ConnectionWrapperHolder with this embeded connection
-        GfxdManagementService.handleEvent(
-            GfxdResourceEvent.EMBEDCONNECTION__INIT, embedConn);
-      }
+      // Initialize ConnectionWrapperHolder with this embeded connection
+      GfxdManagementService.handleEvent(
+          GfxdResourceEvent.EMBEDCONNECTION__INIT, embedConn);
 
       boolean ddReadLockAcquired = false;
       try {
@@ -515,29 +507,7 @@ public final class FabricDatabase implements ModuleControl,
         GemFireXDUtils.executeSQLScripts(embedConn, postScriptPaths, false,
             logger, null, null, false);
       }
-      if (!(this.memStore.getMyVMKind().isAccessor()
-          && this.memStore.getGemFireCache().isSnappyRecoveryMode())) {
-        logger.info("Initializing catalog in recovery mode");
-        initializeCatalog();
-      } else {
-        // TODO: KN: Init catalog differently
-      }
-
-      if (this.memStore.getGemFireCache().isSnappyRecoveryMode() &&
-          (this.memStore.getMyVMKind().isStore() || this.memStore.getMyVMKind().isLocator())) {
-        Misc.getMemStore().initExternalCatalog();
-        ExternalCatalog exCatalog = Misc.getMemStore().getExternalCatalog();
-        List<Object> allEntries = exCatalog.getAllHiveEntries();
-        if (logger.fineEnabled() || GemFireXDUtils.TraceDDLReplay) {
-          SanityManager.DEBUG_PRINT("info",
-              "Total number of catalog object retrieved " + allEntries.size());
-          for (Object obj : allEntries) {
-            SanityManager.DEBUG_PRINT("info", "Catalog object " + obj);
-          }
-        }
-        // Also prepare the persistent state message
-        preparePersistentStatesMsg(allEntries, logger);
-      }
+      initializeCatalog();
     } catch (Throwable t) {
       try {
 
@@ -1133,11 +1103,7 @@ public final class FabricDatabase implements ModuleControl,
             .getPreprocessedDDLQueue(currentQueue, skipRegionInit,
                 lastCurrentSchema, pre11TableSchemaVer, traceConflation);
 
-        final boolean recoveryMode = this.memStore.getGemFireCache().isSnappyRecoveryMode();
-        if (recoveryMode) {
-          preprocessedQueue =
-            getOnlyRequiredDdlsForRecoveryMode(preprocessedQueue, logger);
-        }
+
         for (GfxdDDLQueueEntry entry : preprocessedQueue) {
           qEntry = entry;
           Object qVal = qEntry.getValue();
@@ -1177,7 +1143,8 @@ public final class FabricDatabase implements ModuleControl,
               throwBootException(ex, embedConn);
               continue;
             }
-          } else if (qVal instanceof AbstractGfxdReplayableMessage) {
+          }
+          else if (qVal instanceof AbstractGfxdReplayableMessage) {
             if (this.memStore.restrictedDDLStmtQueue()) {
               continue;
             }
@@ -1193,11 +1160,11 @@ public final class FabricDatabase implements ModuleControl,
               throwBootException(ex, embedConn);
               continue;
             }
-          } else {
-            final DDLConflatable conflatable = (DDLConflatable) qVal;
+          }
+          else {
+            final DDLConflatable conflatable = (DDLConflatable)qVal;
             String schemaForTable = conflatable.getSchemaForTableNoThrow();
-            if (!this.memStore.getGemFireCache().isSnappyRecoveryMode() &&
-                this.memStore.restrictedDDLStmtQueue() &&
+            if (this.memStore.restrictedDDLStmtQueue() &&
                 !(!disallowMetastoreOnLocator &&
                     schemaForTable != null && Misc.isSnappyHiveMetaTable(schemaForTable))) {
               continue;
@@ -1281,7 +1248,8 @@ public final class FabricDatabase implements ModuleControl,
             }
             if (schema != null) {
               lastCurrentSchema = schema;
-            } else {
+            }
+            else {
               continue;
             }
           }
@@ -1530,11 +1498,6 @@ public final class FabricDatabase implements ModuleControl,
         SystemProcedures.SET_EXPLAIN_SCHEMA(lcc);
       }
 
-      // Create indexes of hive if this is the data recovery mode.
-      if (this.memStore.getMyVMKind().isStore()
-          || this.memStore.getMyVMKind().isLocator()) {
-        loadHiveIndexes(uninitializedContainers, logger, tc);
-      }
       lcc.setIsConnectionForRemote(false);
       lcc.setSkipLocks(false);
       synchronized (sync) {
@@ -1587,164 +1550,8 @@ public final class FabricDatabase implements ModuleControl,
     return  postMessages;
   }
 
-  private void loadHiveIndexes(final ArrayList<GemFireContainer> uninitializedContainers,
-      LogWriter logger, GemFireTransaction tran) throws StandardException, SQLException {
-    if (logger.infoEnabled() && this.memStore.getGemFireCache().isSnappyRecoveryMode()) {
-      logger.info("createHiveIndexes: Creating indexes for hive tables in recovery mode");
-    }
-    if (this.memStore.getGemFireCache().isSnappyRecoveryMode()) {
-      // load all the indexes one by one for this container.
-      for (GemFireContainer uc : uninitializedContainers) {
-        LocalRegion owner = uc.getRegion();
-        Iterator<?> entryIterator = uc.getEntrySetIterator(null,
-            false, 0, true);
-        GfxdIndexManager indexUpdater = uc.getIndexManager();
-        indexUpdater.refreshIndexList(tran);
-        List<GemFireContainer> indexes = indexUpdater.getAllIndexes();
-        if (logger.infoEnabled()) {
-          logger.info("createHiveIndexes: Creating indexes for uninitialized container: "
-              + uc + " indexes = " + indexes);
-        }
-        while (entryIterator.hasNext()) {
-          RegionEntry re = (RegionEntry) entryIterator.next();
-          EntryEventImpl event = EntryEventImpl.create(
-              uc.getRegion(), Operation.CREATE, re.getKey(),
-              re.getValue(owner),
-              Boolean.FALSE /* indicate that GII is in progress */,
-              false, null);
-          // Now for each index container load index for each entry
-          for (GemFireContainer index : indexes) {
-            if (logger.infoEnabled()) {
-              logger.info("createHiveIndexes: updating index = " + index + " for region = "
-                  + " owner and rl = " + re);
-            }
-            indexUpdater.insertIntoIndex(null, null, owner, event, false,
-                false, (RowLocation) re, ((RowLocation) re).getRow(uc), null, null, -1,
-                index, null, true, true,
-                GfxdIndexManager.Index.LOCAL, false);
-          }
-        }
-      }
-    }
-  }
-
-  private List<DDLConflatable> otherExtractedDDLs = new ArrayList<>();
-
-  private List<GfxdDDLQueueEntry> getOnlyRequiredDdlsForRecoveryMode(
-      List<GfxdDDLQueueEntry> preprocessedQueue, final LogWriter logger) {
-    GfxdDDLQueueEntry qEntry = null;
-    List<GfxdDDLQueueEntry> list = new ArrayList<>();
-    logger.fine("Get the DDLs required for RecoveryMode.");
-    for (GfxdDDLQueueEntry entry : preprocessedQueue) {
-      qEntry = entry;
-      Object qVal = qEntry.getValue();
-      if (qVal instanceof DDLConflatable) {
-        final DDLConflatable conflatable = (DDLConflatable) qVal;
-        String schema = conflatable.getSchemaForTableNoThrow();
-        if (conflatable.isCreateDiskStore()) {
-          logger.info("Adding create disk store statement ddl = " + conflatable);
-          list.add(qEntry);
-          otherExtractedDDLs.add(conflatable);
-        } else if (Misc.SNAPPY_HIVE_METASTORE.equals(schema) ||
-            Misc.SNAPPY_HIVE_METASTORE.equals(conflatable.getCurrentSchema()) ||
-            Misc.SNAPPY_HIVE_METASTORE.equals(conflatable.getRegionToConflate())) {
-          logger.info("Adding conflatable for DDL replay = " + qEntry);
-          list.add(qEntry);
-        } else if (conflatable.isAlterTable() ||
-            conflatable.isCreateIndex() ||
-            isGrantRevokeStatement(conflatable) ||
-             conflatable.isCreateTable() ||
-            conflatable.isDropStatement() ||
-            conflatable.isCreateSchemaText()) {
-          logger.fine("Adding to Extracted DDLs list: DDL statement = " + conflatable);
-          otherExtractedDDLs.add(conflatable);
-        } else {
-          logger.info("Skipping conflatable = " + conflatable);
-        }
-      }
-    }
-    return list;
-  }
-
-  private final static Pattern GRANTREVOKE_PATTERN =
-      Pattern.compile(
-          "(GRANT|REVOKE)\\s+(\\S+)\\s+(ON)\\s+(TABLE)?\\s+(\\S+)\\s+(TO|FROM)\\s+(\\S+)",
-          Pattern.CASE_INSENSITIVE);
-
-  private boolean isGrantRevokeStatement(DDLConflatable conflatable) {
-    String sqlText = conflatable.getValueToConflate();
-    // return (sqlText != null && GRANTREVOKE_PATTERN.matcher(sqlText).matches());
-    return sqlText != null && (sqlText.toUpperCase().startsWith("GRANT") ||
-        sqlText.toUpperCase().startsWith("REVOKE"));
-  }
-
-  private void preparePersistentStatesMsg(
-    List<Object> allEntries, final LogWriter logger) {
-    GemFireCacheImpl c = this.memStore.getGemFireCache();
-    Collection<DiskStoreImpl> diskStores = c.listDiskStores();
-    logger.info("preparePersistentStatesMsg: diskstores list = " + diskStores);
-    PersistentStateInRecoveryMode pmsg
-        = new PersistentStateInRecoveryMode(allEntries, otherExtractedDDLs);
-    for (DiskStoreImpl ds : diskStores) {
-      if (logger.infoEnabled()) {
-        logger.info("preparePersistentStatesMsg: disk store = " + ds.getName());
-      }
-      long latestOplogTime = ds.getLatestModifiedTime();
-      Map<Long, AbstractDiskRegion> drs = ds.getAllDiskRegions();
-
-      if (drs != null && !drs.isEmpty()) {
-        Iterator<Map.Entry<Long, AbstractDiskRegion>> iter = drs.entrySet().iterator();
-        while (iter.hasNext()) {
-          Map.Entry<Long, AbstractDiskRegion> elem = iter.next();
-          AbstractDiskRegion adr = elem.getValue();
-          if (adr.getRecoveredEntryMap() == null) {
-            if (logger.infoEnabled()) {
-              logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath() + " continuing as map is null");
-            }
-            continue;
-          }
-          if (adr.getRecoveredEntryMap().size() == 0) {
-            if (logger.infoEnabled()) {
-              logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath() + " continuing as size of map is 0");
-            }
-          } else {
-            if (logger.infoEnabled()) {
-              logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath() + " size = " + adr.getRecoveredEntryMap().size());
-            }
-          }
-          if (logger.infoEnabled()) {
-            logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath());
-          }
-          long mostRecentModifiedTime = 0;
-          if (!(adr.getRecoveredEntryMap().size() == 0)) {
-            mostRecentModifiedTime =
-                PersistentStateInRecoveryMode.getLatestModifiedTime(adr, logger);
-          }
-          PersistentStateInRecoveryMode.RecoveryModePersistentView dpv
-              = new PersistentStateInRecoveryMode.RecoveryModePersistentView(
-              ds.getName(), adr.getName(),
-              adr.getRegionVersionVector(),
-              mostRecentModifiedTime, latestOplogTime);
-
-          pmsg.addView(dpv);
-        }
-      } else {
-        if (logger.infoEnabled()) {
-          logger.info("preparePersistentStatesMsg: disk store = " + ds.getName() + " drs is null or empty drs = " + drs);
-        }
-      }
-    }
-    pmsg.addPRConfigs();
-    this.memStore.setPersistentStateMsg(pmsg);
-  }
-
   private void checkRecoveredIndex(ArrayList<GemFireContainer> uninitializedContainers,
       final LogWriter logger, boolean throwErrorOnMismatch) {
-    // Just return as the indexes are not built in the recovery mode
-    // Not even for the tables used by hive metastore.
-    // Indexes will be created later after the replay is done.
-    if (this.memStore.getGemFireCache().isSnappyRecoveryMode()) return;
-
     for (GemFireContainer container : uninitializedContainers) {
       LocalRegion region = container.getRegion();
       DataPolicy dp = region.getDataPolicy();

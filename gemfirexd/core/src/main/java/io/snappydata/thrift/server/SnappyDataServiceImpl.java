@@ -333,9 +333,6 @@ public final class SnappyDataServiceImpl extends LocatorServiceImpl implements
         connHolder = new ConnectionHolder(conn, xaConn, arguments, connId,
             props, this.rand);
         if (this.connectionMap.putIfAbsent(connId, connHolder) == null) {
-          if (Misc.getGemFireCache().isSnappyRecoveryMode() && Misc.isSecurityEnabled()) {
-            checkDBOwner(connId, connHolder.getToken(), "openConnection");
-          }
           ConnectionProperties connProps = new ConnectionProperties(connId,
               clientHost, clientId);
           connProps.setToken(connHolder.getToken());

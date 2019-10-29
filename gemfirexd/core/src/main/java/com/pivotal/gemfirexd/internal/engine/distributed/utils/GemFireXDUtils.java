@@ -3268,8 +3268,6 @@ public final class GemFireXDUtils {
 
   public static boolean TraceStatementMatching;
 
-  public static boolean TraceRecoveryMode;
-
   public static boolean TraceConnectionSignaller;
 
   public static boolean TraceTrigger;

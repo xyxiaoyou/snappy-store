@@ -234,11 +234,6 @@ public final class GfxdIndexManager implements Dependent, IndexUpdater,
     this.thisNodeMemberId = dm.getDistributionManagerId();
   }
 
-  public void refreshIndexList(GemFireTransaction tran) throws StandardException {
-    assert Misc.getGemFireCache().isSnappyRecoveryMode();
-    refreshIndexListAndConstriantDesc(false, false, tran);
-  }
-
   private ExecRow getExecRow(TableDescriptor td, @Unretained Object value,
       DataValueDescriptor[] row, int rowLen, boolean returnNullForDelta,
       ExtraTableInfo tableInfo) throws StandardException {
@@ -1889,8 +1884,7 @@ public final class GfxdIndexManager implements Dependent, IndexUpdater,
       }
     }
     // check for foreign key constraints before insertion
-    if (!skipDistribution && this.hasFkConstriant && !skipFKChecks
-        && !Misc.getGemFireCache().isSnappyRecoveryMode()) {
+    if (!skipDistribution && this.hasFkConstriant && !skipFKChecks) {
       checkForeignKeyConstraint(event, tc, tx, execRow, null, rl);
     }
     insertIntoIndexes(tc, tx, owner, event, diskRecovery, skipDistribution, rl,
@@ -2879,8 +2873,6 @@ public final class GfxdIndexManager implements Dependent, IndexUpdater,
    */
   public void invalidateFor(int dropColumnPos, LanguageConnectionContext lcc)
       throws StandardException {
-    // TODO: KN check again if this is required
-    if (Misc.getGemFireCache().isSnappyRecoveryMode()) return;
     final GemFireTransaction tc = (GemFireTransaction)lcc
         .getTransactionExecute();
     // if index refresh has already been added then do nothing except

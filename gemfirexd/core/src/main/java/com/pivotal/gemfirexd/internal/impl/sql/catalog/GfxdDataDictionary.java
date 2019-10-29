@@ -1787,7 +1787,7 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
           DataTypeDescriptor.getCatalogType(Types.BLOB),
           DataTypeDescriptor.getCatalogType(Types.BLOB) };
       super.createSystemProcedureOrFunction("GET_CATALOG_METADATA",
-          sysUUID, arg_names, arg_types, 1, 0, RoutineAliasInfo.NO_SQL, null,
+          sysUUID, arg_names, arg_types, 1, 0, RoutineAliasInfo.READS_SQL_DATA, null,
           newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
     }
 
@@ -1810,26 +1810,6 @@ public final class GfxdDataDictionary extends DataDictionaryImpl {
       super.createSystemProcedureOrFunction("GET_DEPLOYED_JARS",
           sysUUID, arg_names, arg_types, 1, 0, RoutineAliasInfo.READS_SQL_DATA, null,
           newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
-    }
-
-    {
-      String[] arg_names = new String[] {"PATH_URI", "FORMAT_TYPE", "TABLES", "IGNORE_ERROR"};
-      TypeDescriptor[] arg_types = new TypeDescriptor[] {
-          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
-          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
-          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
-          DataTypeDescriptor.getCatalogType(Types.BOOLEAN)};
-      super.createSystemProcedureOrFunction("DUMP_DATA",
-          sysUUID, arg_names, arg_types, 0, 0, RoutineAliasInfo.READS_SQL_DATA, null,
-          newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
-    }
-
-    {
-      String[] arg_name = new String[] { "EXPORT_URI" };
-      TypeDescriptor[] arg_types = new TypeDescriptor[] {
-          DataTypeDescriptor.getCatalogType(Types.VARCHAR),
-      };
-      super.createSystemProcedureOrFunction("DUMP_DDLS", sysUUID, arg_name, arg_types, 0, 0, RoutineAliasInfo.READS_SQL_DATA, null, newlyCreatedRoutines, tc, GFXD_SYS_PROC_CLASSNAME, false);
     }
 
     {

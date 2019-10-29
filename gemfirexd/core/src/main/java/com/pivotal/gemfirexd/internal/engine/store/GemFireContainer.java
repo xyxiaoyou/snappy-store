@@ -49,7 +49,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.gemstone.gemfire.GemFireException;
 import com.gemstone.gemfire.InternalGemFireError;
-import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.cache.*;
 import com.gemstone.gemfire.cache.asyncqueue.AsyncEventQueue;
 import com.gemstone.gemfire.cache.asyncqueue.internal.AsyncEventQueueImpl;
@@ -230,14 +229,6 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
    * initialization has been delayed, else is null if region creation is done.
    */
   private InternalRegionArguments iargs;
-
-  /**
-   * In recovery mode local region is created for hive tables. This ensures
-   * no profile exchange or GII during recovery. But in order to populate
-   * the entries map with the entries of the place holder disk region
-   * the original handle to the disk store would be required.
-   */
-  private RegionAttributes<?, ?> original_rattrs = null;
 
   /** for local index */
   private ConcurrentSkipListMap<Object, Object> skipListMap;
@@ -694,8 +685,8 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
           && lcc.skipRegionInitialization();
 
       try {
-        rgn = createSubregion(rootRegion, this.tableName,
-            rattrs, this.iargs, skipRegionInitialization);
+        rgn = (LocalRegion)((LocalRegion)rootRegion).createSubregion(
+            this.tableName, rattrs, this.iargs, skipRegionInitialization);
         // clear the initializing region (JIRA: GEMXD-1)
         LocalRegion.clearInitializingRegion();
         if (!skipRegionInitialization) {
@@ -743,25 +734,6 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
     clearRowBufferFlag();
   }
 
-  private LocalRegion createSubregion(Region<?, ?> rootRegion, String tableName,
-    RegionAttributes<?, ?> rattrs, InternalRegionArguments iargs,
-    boolean skipRegionInitialization) throws IOException, ClassNotFoundException {
-    if (!Misc.getGemFireCache().isSnappyRecoveryMode()) {
-      return (LocalRegion)((LocalRegion)rootRegion).createSubregion(
-          this.tableName, rattrs, iargs, skipRegionInitialization);
-    }
-    // Now this is a snappy recovery mode. So make local region for
-    // hive tables. We just need a local region and in memory. thats it.
-    this.original_rattrs = rattrs;
-    AttributesFactory attribFactory = new AttributesFactory();
-    attribFactory.setScope(Scope.LOCAL);
-    RegionAttributes attrs = attribFactory.createRegionAttributes();
-    // override the isuSedForMetRegion to false
-    iargs.setIsUsedForMetaRegion(false);
-    return (LocalRegion)((LocalRegion)rootRegion).createSubregion(
-        this.tableName, attrs, iargs, skipRegionInitialization);
-  }
-
   private long getDDLId(final LanguageConnectionContext lcc,
       final GemFireTransaction tran) {
     if (tran != null) {
@@ -784,82 +756,6 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
 
   public final void preInitializeRegion() throws StandardException {
     this.region.preInitialize(this.iargs);
-    // If this is a snappy data recovery mode then copy the PlaceHolderDiskRegion's map
-    // into this temporary created local region map
-    if (Misc.getGemFireCache().isSnappyRecoveryMode() &&
-        !Misc.getMemStore().getMyVMKind().isAccessor() &&
-        Misc.isSnappyHiveMetaTable(this.schemaName)) {
-      PlaceHolderDiskRegion phdr = getPlaceHolderDiskRegion(
-          this.original_rattrs.getDiskStoreName(), logRecovery, this.qualifiedName);
-      RegionMap sourcemap = phdr.getRegionMap();
-      assert sourcemap != null;
-      copyDiskEntriesIntoInMemoryEntries(sourcemap, phdr);
-    }
-  }
-
-  private void copyDiskEntriesIntoInMemoryEntries(RegionMap sourcemap,
-    PlaceHolderDiskRegion phdr) {
-    Collection<RegionEntry> disk_entries = sourcemap.regionEntries();
-    final RegionMap rm = this.region.getRegionMap();
-    LogWriter logger = Misc.getCacheLogWriter();
-    disk_entries.forEach(regionEntry -> {
-      final int[] primaryKeyColumns;
-      Object regionKey;
-      final Object val;
-      CompactCompositeRegionKey cKey = null;
-      primaryKeyColumns = GemFireContainer.this.tableInfo.getPrimaryKeyColumns();
-      Object value = DiskEntry.Helper.readValueFromDisk((DiskEntry) regionEntry, phdr);
-      try {
-        if ((regionKey = GemFireContainer.this.getGeneratedKey(primaryKeyColumns)) == null) {
-          cKey = new CompactCompositeRegionKey((OffHeapRegionEntry) null, GemFireContainer.this.tableInfo);
-          regionKey = cKey;
-          cKey.setValueBytes((byte[])value);
-        }
-      } catch (StandardException e) {
-        throw new IllegalStateException(e);
-      }
-      Object key = regionEntry.getKey();
-      RegionEntry re = rm.getEntryFactory().createEntry(
-          GemFireContainer.this.region, regionKey, value);
-      Object oldValue = rm.putEntryIfAbsent(regionKey, re);
-      if (logRecovery) {
-        logger.info("LocalRegion:copyDiskEntriesIntoInMemoryEntries phdr = "
-            + phdr.getName()
-            + ", key = " + key + ", value = " + value
-            + " being put in region: " + GemFireContainer.this.region.getName()
-            + " with region key = " + regionKey);
-      }
-      assert oldValue == null;
-    });
-  }
-
-  private boolean logRecovery = GemFireXDUtils.TraceDDLReplay ||
-      Misc.getCacheLogWriter().fineEnabled();
-
-  public static PlaceHolderDiskRegion getPlaceHolderDiskRegion(final String diskStoreName,
-    boolean logRecovery, final String fullQualifiedName) {
-    Collection<DiskStoreImpl> disk_stores = Misc.getGemFireCache().listDiskStores();
-    DiskStoreImpl ds = null;
-    for(DiskStoreImpl d : disk_stores) {
-      if (d.getName().equals(diskStoreName)) {
-        ds = d;
-        break;
-      }
-    }
-    assert ds != null;
-    Map<Long, AbstractDiskRegion> drs = ds.getAllDiskRegions();
-    if (drs != null && !drs.isEmpty()) {
-      Iterator<Map.Entry<Long, AbstractDiskRegion>> iter = drs.entrySet().iterator();
-      while (iter.hasNext()) {
-        Map.Entry<Long, AbstractDiskRegion> elem = iter.next();
-        AbstractDiskRegion adr = elem.getValue();
-        if (adr.getFullPath().equals(Misc.getRegionPath(fullQualifiedName))) {
-          return (PlaceHolderDiskRegion) adr;
-        }
-      }
-    }
-    throw new IllegalStateException("Should have found a PlaceHolderDiskRegion" +
-        " for table: " + fullQualifiedName + " in disk store: " + diskStoreName);
   }
 
   public final void initializeRegion() throws StandardException {
@@ -2481,7 +2377,6 @@ public final class GemFireContainer extends AbstractGfxdLockable implements
         true, false, false, r);
     
   }
-
   /**
    * Returns a full scan on the table that will fetch entries from all nodes
    * used by global index scan for index consistency checks. The difference from

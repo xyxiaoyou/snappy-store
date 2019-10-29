@@ -1073,8 +1073,7 @@ public class GenericStatement
                                         // populate statistics object before class generation, so that subquery capture it in sub-activation.
                                         fetchOrCreateStatementStats(lcc, qt, cc, queryTextForStats);
 
-                                        if (!createGFEPrepStmt || !cc.isGlobalScope()
-                                          || Misc.getGemFireCache().isSnappyRecoveryMode()) {
+                                        if (!createGFEPrepStmt || !cc.isGlobalScope()) {
                                           ac = qt.generate(preparedStmt.getByteCodeSaver());
                                           //Neeraj: If local execution due to cc.isGlobalScope returning false then force all the queries to run
                                           // only on primary buckets. Ideal would be to either select primaries only or secondaries only,
