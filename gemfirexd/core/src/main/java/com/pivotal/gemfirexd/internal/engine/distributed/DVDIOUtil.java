@@ -16,6 +16,7 @@
  */
 package com.pivotal.gemfirexd.internal.engine.distributed;
 
+import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -66,7 +67,7 @@ public class DVDIOUtil
    * @throws ClassNotFoundException
    */
   public static void readDVDArray(DataValueDescriptor[] dvds,
-      final ByteArrayDataInput dis, final int numEightColGrps,
+      final DataInput dis, final int numEightColGrps,
       final int numPartialCols) throws IOException, ClassNotFoundException {
     int groupNum = 0;
     for (; groupNum < numEightColGrps - 1; ++groupNum) {
@@ -247,7 +248,7 @@ public class DVDIOUtil
   }
 
   private static void readAGroup(final int groupNum, final int numColsInGrp,
-      final DataValueDescriptor[] dvds, final ByteArrayDataInput dis)
+      final DataValueDescriptor[] dvds, final DataInput dis)
       throws IOException, ClassNotFoundException {
     byte activeByteForGroup = DataSerializer.readPrimitiveByte(dis);
     if (GemFireXDUtils.TraceRSIter) {

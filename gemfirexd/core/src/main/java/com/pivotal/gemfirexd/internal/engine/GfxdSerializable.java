@@ -215,6 +215,8 @@ public interface GfxdSerializable extends GfxdDSFID {
 
   byte LEAD_NODE_DATA_MSG = 60;
 
+  byte LEAD_DISK_STATE_MSG = 61;
+
   /**
    * Marker to indicate that tests can use an ID >= this. Note whenever adding a
    * new message increment this to be greater than the last one.
@@ -333,4 +335,7 @@ public interface GfxdSerializable extends GfxdDSFID {
   byte COLUMN_FORMAT_DELTA = 115;
 
   byte COLUMN_DELETE_DELTA = 116;
+
+  byte SQL_LEAD_NODE_EXEC_OBJECT = 117;
+  byte SAMPLE_INSERT_EXEC_OBJECT = 118;
 }

@@ -19,6 +19,7 @@ package com.pivotal.gemfirexd.internal.snappy;
 
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.internal.ByteArrayDataInput;
@@ -42,6 +43,13 @@ public interface ClusterCallbacks {
 
   SparkSQLExecute getSQLExecute(String sql, String schema, LeadNodeExecutionContext ctx,
       Version v, boolean isPreparedStatement, boolean isPreparedPhase, ParameterValueSet pvs);
+
+  SparkSQLExecute getSampleInsertExecute(String baseTable,  LeadNodeExecutionContext ctx,
+    Version v, List<DataValueDescriptor[]> dvdRows, byte[] serializedDVDs);
+
+  void dumpData(Long connId, String exportUri, String formatType, String tableNames, Boolean ignoreError);
+
+  void dumpDDLs(Long connId, String exportUri);
 
   Object readDataType(ByteArrayDataInput in);
 

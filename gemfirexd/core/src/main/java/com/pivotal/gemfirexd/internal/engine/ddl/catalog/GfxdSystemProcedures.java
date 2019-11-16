@@ -46,7 +46,6 @@ import com.gemstone.gemfire.internal.NanoTimer;
 import com.gemstone.gemfire.internal.cache.*;
 import com.gemstone.gemfire.internal.cache.control.InternalResourceManager;
 import com.gemstone.gemfire.internal.cache.persistence.query.CloseableIterator;
-import com.gemstone.gemfire.internal.i18n.LocalizedStrings;
 import com.gemstone.gemfire.internal.snappy.CallbackFactoryProvider;
 import com.gemstone.gemfire.internal.snappy.ColumnTableEntry;
 import com.gemstone.gnu.trove.TIntArrayList;
@@ -1538,12 +1537,72 @@ public class GfxdSystemProcedures extends SystemProcedures {
             "executing GET_DEPLOYED_JARS");
       }
       GfxdListResultCollector collector = new GfxdListResultCollector();
+      // ConnectionId is not being used for GET_DEPLOYED_JARS; hence passing dummy value(0L)
       GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
-          collector, GetLeadNodeInfoAsStringMessage.DataReqType.GET_JARS, (Object[])null);
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.GET_JARS, 0L, (Object[])null);
       msg.executeFunction();
       ArrayList<Object> result = collector.getResult();
       String resJarStrings = (String)result.get(0);
       jarStrings[0] = resJarStrings;
+    } catch (StandardException se) {
+      throw PublicAPI.wrapStandardException(se);
+    }
+  }
+
+  /**
+   * A recovery mode procedure which allows the user to export the specified(all) tables/views
+   * in the specified format at the specified location.
+   *
+   * @param exportUri
+   * @param formatType any format supported by the spark dataframe api
+   * @param tableNames comma separated list of fully qualified table names OR all
+   * @param ignoreError ignores any exception while querying and exporting any of the tables.
+   * @throws SQLException
+   */
+  // comma separated table names
+  public static void DUMP_DATA(String exportUri, String formatType, String tableNames, Boolean ignoreError) throws SQLException {
+    try {
+      if (GemFireXDUtils.TraceSysProcedures) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+            "Executing DUMP_DATA");
+      }
+      Long connectionId = Misc.getLanguageConnectionContext().getConnectionId();
+
+      GfxdListResultCollector collector = new GfxdListResultCollector();
+      GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.DUMP_DATA, connectionId, exportUri, formatType, tableNames, ignoreError);
+
+      msg.executeFunction();
+      if (GemFireXDUtils.TraceSysProcedures) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+            "DUMP_DATA successful.");
+      }
+    } catch (StandardException se) {
+      throw PublicAPI.wrapStandardException(se);
+    }
+  }
+
+  /**
+   * Exports all DDLs to specified directory path
+   * @param exportUri complete file path
+   * @throws SQLException
+   */
+
+  public static void DUMP_DDLS(String exportUri) throws SQLException  {
+    try {
+      if (GemFireXDUtils.TraceSysProcedures) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+            "Executing DUMP_DDLS");
+      }
+      Long connectionId = Misc.getLanguageConnectionContext().getConnectionId();
+      GfxdListResultCollector collector = new GfxdListResultCollector();
+      GetLeadNodeInfoAsStringMessage msg = new GetLeadNodeInfoAsStringMessage(
+          collector, GetLeadNodeInfoAsStringMessage.DataReqType.DUMP_DDLS, connectionId, exportUri);
+      msg.executeFunction();
+      if (GemFireXDUtils.TraceSysProcedures) {
+        SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_SYS_PROCEDURES,
+            "DUMP_DDLS successful.");
+      }
     } catch (StandardException se) {
       throw PublicAPI.wrapStandardException(se);
     }

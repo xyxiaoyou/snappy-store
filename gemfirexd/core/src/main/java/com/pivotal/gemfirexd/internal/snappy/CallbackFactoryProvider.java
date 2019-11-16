@@ -19,6 +19,7 @@ package com.pivotal.gemfirexd.internal.snappy;
 
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 
 import com.gemstone.gemfire.distributed.internal.membership.InternalDistributedMember;
 import com.gemstone.gemfire.internal.ByteArrayDataInput;
@@ -57,6 +58,20 @@ public abstract class CallbackFactoryProvider {
         LeadNodeExecutionContext ctx, Version v, boolean isPreparedStatement,
         boolean isPreparedPhase, ParameterValueSet pvs) {
        return null;
+    }
+
+    @Override
+    public SparkSQLExecute getSampleInsertExecute(String baseTable,  LeadNodeExecutionContext ctx,
+      Version v, List<DataValueDescriptor[]> dvdRows, byte[] serializedDVDs) {
+      return null;
+    }
+
+    @Override
+    public void dumpData(Long connId, String exportUri, String formatType, String tableNames, Boolean ignoreError){
+    }
+
+    @Override
+    public void dumpDDLs(Long connId, String exportUri) {
     }
 
     @Override

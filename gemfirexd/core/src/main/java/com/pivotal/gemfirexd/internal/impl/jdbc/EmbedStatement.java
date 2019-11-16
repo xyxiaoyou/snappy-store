@@ -2073,7 +2073,7 @@ public class EmbedStatement extends ConnectionChild
           if (!connForRemote) {
             ddlAction = (DDLConstantAction)act;
             distribute = ddlAction.isReplayable();
-            if (distribute) {
+            if (distribute && !Misc.getGemFireCache().isSnappyRecoveryMode()) {
               ddlQ = Misc.getMemStore().getDDLStmtQueue();
               // DDL ID is deliberately different from statement ID itself since
               // it has to be unique even across restarts so has to be part of
@@ -2084,8 +2084,10 @@ public class EmbedStatement extends ConnectionChild
             }
             sys = Misc.getDistributedSystem();
             // Yogesh: Do not allow DDL to execute if no servers are available
-            DistributionDescriptor.checkAvailableDataStore(lcc, null, "DDL "
+            if (Misc.getGemFireCache() != null && !Misc.getGemFireCache().isSnappyRecoveryMode()) {
+              DistributionDescriptor.checkAvailableDataStore(lcc, null, "DDL "
                 + this.SQLText);
+            }
             if (GemFireXDUtils.TraceDDLReplay) {
               SanityManager.DEBUG_PRINT(GfxdConstants.TRACE_DDLREPLAY,
                   "EmbedStatement: Starting execution of DDL statement "
@@ -2270,7 +2272,7 @@ public class EmbedStatement extends ConnectionChild
                                                   a.getMaxDynamicResults());
 					}
 // GemStone changes BEGIN
-            if (distribute) {
+            if (distribute && !Misc.getGemFireCache().isSnappyRecoveryMode()) {
               // refresh DDLConstantAction since it may have changed
               // due to reprepare etc.
               ddlAction = (DDLConstantAction)((GenericPreparedStatement)ps)
@@ -2347,7 +2349,7 @@ public class EmbedStatement extends ConnectionChild
                                         // GemStone changes END
 				}
 // GemStone changes BEGIN
-          if (distribute) {
+          if (distribute && !Misc.getGemFireCache().isSnappyRecoveryMode()) {
             final GemFireStore memStore = Misc.getMemStore();
             // Send the message to all booted members in the DistributedSystem
             //otherMembers = (Set)ddlQ.getRegion().getCacheDistributionAdvisor()

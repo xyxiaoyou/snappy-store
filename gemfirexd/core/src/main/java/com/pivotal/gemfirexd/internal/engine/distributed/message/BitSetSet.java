@@ -59,11 +59,11 @@ public final class BitSetSet extends AbstractCollection<Integer> implements
 
   private int numUsedBits;
 
-  static int udiv8(int i) {
+  public static int udiv8(int i) {
     return (i >> ADDRESS_BYTES);
   }
 
-  static int umod8(int i) {
+  public static int umod8(int i) {
     return (i & ADDRESS_SIZE_1);
   }
 

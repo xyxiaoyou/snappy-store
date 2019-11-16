@@ -68,6 +68,8 @@ import com.pivotal.gemfirexd.internal.engine.distributed.ReferencedKeyCheckerMes
 import com.pivotal.gemfirexd.internal.engine.distributed.ResultHolder;
 import com.pivotal.gemfirexd.internal.engine.distributed.SnappyResultHolder;
 import com.pivotal.gemfirexd.internal.engine.distributed.StatementCloseExecutorMessage;
+import com.pivotal.gemfirexd.internal.engine.distributed.execution.SQLLeadNodeExecutionObject;
+import com.pivotal.gemfirexd.internal.engine.distributed.execution.SampleInsertExecutionObject;
 import com.pivotal.gemfirexd.internal.engine.distributed.message.*;
 import com.pivotal.gemfirexd.internal.engine.distributed.metadata.RegionAndKey;
 import com.pivotal.gemfirexd.internal.engine.locks.GfxdDRWLockReleaseProcessor.GfxdDRWLockReleaseMessage;
@@ -78,10 +80,7 @@ import com.pivotal.gemfirexd.internal.engine.locks.GfxdDRWLockRequestProcessor.G
 import com.pivotal.gemfirexd.internal.engine.locks.GfxdLocalLockService;
 import com.pivotal.gemfirexd.internal.engine.procedure.DistributedProcedureCallFunction.DistributedProcedureCallFunctionArgs;
 import com.pivotal.gemfirexd.internal.engine.procedure.ProcedureChunkMessage;
-import com.pivotal.gemfirexd.internal.engine.sql.execute.GemFireRegionSizeResultSet;
-import com.pivotal.gemfirexd.internal.engine.sql.execute.IdentityValueManager;
-import com.pivotal.gemfirexd.internal.engine.sql.execute.MemberLogsMessage;
-import com.pivotal.gemfirexd.internal.engine.sql.execute.MemberStatisticsMessage;
+import com.pivotal.gemfirexd.internal.engine.sql.execute.*;
 import com.pivotal.gemfirexd.internal.engine.store.CompactCompositeRegionKey;
 import com.pivotal.gemfirexd.internal.engine.store.CompactExecRow;
 import com.pivotal.gemfirexd.internal.engine.store.CompactExecRowWithLobs;
@@ -263,6 +262,10 @@ public abstract class GfxdDataSerializable implements GfxdSerializable {
         () -> new LeadNodeExecutionContext());
     DSFIDFactory.registerGemFireXDClass(LEAD_NODE_EXN_MSG,
         () -> new LeadNodeExecutorMsg());
+    DSFIDFactory.registerGemFireXDClass(SQL_LEAD_NODE_EXEC_OBJECT,
+      () -> new SQLLeadNodeExecutionObject());
+    DSFIDFactory.registerGemFireXDClass(SAMPLE_INSERT_EXEC_OBJECT,
+      () -> new SampleInsertExecutionObject());
     DSFIDFactory.registerGemFireXDClass(SNAPPY_RESULT_HOLDER,
         () -> new SnappyResultHolder());
     DSFIDFactory.registerGemFireXDClass(SNAPPY_REGION_STATS_RESULT,
@@ -277,6 +280,8 @@ public abstract class GfxdDataSerializable implements GfxdSerializable {
         () -> new ProjectionRow());
     DSFIDFactory.registerGemFireXDClass(LEAD_NODE_DATA_MSG,
         () -> new GetLeadNodeInfoAsStringMessage());
+    DSFIDFactory.registerGemFireXDClass(LEAD_DISK_STATE_MSG,
+        () -> new RecoveredMetadataRequestMessage());
 
     // register SnappyData specific types
     CallbackFactoryProvider.getStoreCallbacks().registerTypes();
