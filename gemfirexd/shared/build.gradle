@@ -39,6 +39,7 @@ task createVersionPropertiesFile(dependsOn: 'processResources') {
 
   doLast {
     def props = [
+      'Custom-Edition'    : CUSTOM_EDITION,
       'Product-Name'      : PRODUCT_NAME,
       'Product-Version'   : version,
       'Enterprise-Edition': isEnterprise,

@@ -45,32 +45,19 @@ import com.gemstone.gemfire.internal.GemFireVersion;
 import com.gemstone.gemfire.internal.shared.ClientSharedUtils;
 import com.pivotal.gemfirexd.internal.GemFireXDVersion;
 import com.pivotal.gemfirexd.internal.iapi.services.info.ProductGenusNames;
-import com.pivotal.gemfirexd.internal.iapi.tools.i18n.*;
+import com.pivotal.gemfirexd.internal.iapi.tools.i18n.LocalizedInput;
+import com.pivotal.gemfirexd.internal.iapi.tools.i18n.LocalizedOutput;
+import com.pivotal.gemfirexd.internal.iapi.tools.i18n.LocalizedResource;
+import com.pivotal.gemfirexd.internal.iapi.tools.i18n.RedirectedLocalizedOutput;
 import com.pivotal.gemfirexd.internal.shared.common.SharedUtils;
 import com.pivotal.gemfirexd.internal.shared.common.StopWatch;
 import com.pivotal.gemfirexd.internal.shared.common.sanity.SanityManager;
 import com.pivotal.gemfirexd.internal.tools.JDBCDisplayUtil;
 import jline.console.ConsoleReader;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Stack;
-import java.util.Hashtable;
-import java.util.Properties;
-import java.io.File;
-import java.io.InputStream;
-import java.io.FileInputStream;
-import java.io.BufferedInputStream;
-import java.io.FileNotFoundException;
-import java.io.StringReader;
-import java.sql.DriverManager;
-import java.sql.Driver;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.ResultSet;
-import java.sql.Statement;
-import java.sql.PreparedStatement;
+import java.io.*;
+import java.sql.*;
+import java.util.*;
 import java.util.regex.Pattern;
 
 /**
@@ -1079,7 +1066,7 @@ public class utilMain implements java.security.PrivilegedAction {
 	public static String convertGfxdMessageToSnappy(String message) {
 		if (basePrompt.contains("snappy")) {
 			GemFireVersion.getInstance(GemFireXDVersion.class, SharedUtils.GFXD_VERSION_PROPERTIES);
-			String productEditionType = GemFireVersion.isEnterpriseEdition() ? "TIBCO ComputeDB" : "SnappyData";
+			String productEditionType = GemFireVersion.isEnterpriseEdition() ? "TIBCO ComputeDB" : (GemFireVersion.isCustomEdition() ? "SDP DB" : "SnappyData");
 			return pattern.matcher(message).replaceAll(productEditionType);
 		} else {
 			return message;
