@@ -41,20 +41,6 @@
 
 package com.pivotal.gemfirexd.internal.engine.db;
 
-import java.io.IOException;
-import java.io.Serializable;
-import java.security.PrivilegedExceptionAction;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.text.DateFormat;
-import java.text.MessageFormat;
-import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
-
 import com.gemstone.gemfire.CancelException;
 import com.gemstone.gemfire.LogWriter;
 import com.gemstone.gemfire.cache.*;
@@ -64,7 +50,6 @@ import com.gemstone.gemfire.internal.ClassPathLoader;
 import com.gemstone.gemfire.internal.GFToSlf4jBridge;
 import com.gemstone.gemfire.internal.LogWriterImpl;
 import com.gemstone.gemfire.internal.cache.*;
-import com.gemstone.gemfire.internal.cache.persistence.PRPersistentConfig;
 import com.gemstone.gemfire.internal.shared.SystemProperties;
 import com.gemstone.gemfire.internal.util.ArrayUtils;
 import com.gemstone.gnu.trove.THashMap;
@@ -83,11 +68,13 @@ import com.pivotal.gemfirexd.internal.engine.Misc;
 import com.pivotal.gemfirexd.internal.engine.access.GemFireTransaction;
 import com.pivotal.gemfirexd.internal.engine.access.index.GfxdIndexManager;
 import com.pivotal.gemfirexd.internal.engine.access.index.MemIndex;
-import com.pivotal.gemfirexd.internal.engine.ddl.*;
+import com.pivotal.gemfirexd.internal.engine.ddl.DDLConflatable;
+import com.pivotal.gemfirexd.internal.engine.ddl.GfxdDDLQueueEntry;
+import com.pivotal.gemfirexd.internal.engine.ddl.GfxdDDLRegionQueue;
+import com.pivotal.gemfirexd.internal.engine.ddl.ReplayableConflatable;
 import com.pivotal.gemfirexd.internal.engine.ddl.catalog.GfxdSystemProcedures;
 import com.pivotal.gemfirexd.internal.engine.ddl.catalog.messages.GfxdSystemProcedureMessage;
 import com.pivotal.gemfirexd.internal.engine.ddl.wan.messages.AbstractGfxdReplayableMessage;
-import com.pivotal.gemfirexd.internal.engine.distributed.GfxdListResultCollector;
 import com.pivotal.gemfirexd.internal.engine.distributed.GfxdMessage;
 import com.pivotal.gemfirexd.internal.engine.distributed.message.PersistentStateInRecoveryMode;
 import com.pivotal.gemfirexd.internal.engine.distributed.utils.GemFireXDUtils;
@@ -147,7 +134,20 @@ import com.pivotal.gemfirexd.internal.impl.sql.catalog.XPLAINTableDescriptor;
 import com.pivotal.gemfirexd.internal.io.StorageFile;
 import com.pivotal.gemfirexd.internal.shared.common.error.ExceptionSeverity;
 import com.pivotal.gemfirexd.internal.snappy.CallbackFactoryProvider;
-import io.snappydata.thrift.CatalogTableObject;
+
+import java.io.IOException;
+import java.io.Serializable;
+import java.security.PrivilegedExceptionAction;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.text.DateFormat;
+import java.text.MessageFormat;
+import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Pattern;
 
 /**
  * The Database interface provides control over the physical database (that is,
@@ -458,7 +458,7 @@ public final class FabricDatabase implements ModuleControl,
           .getTransactionExecute();
 
       if (this.memStore.isSnappyStore()) {
-        this.memStore.setGlobalCmdRgn(createSnappySpecificGlobalCmdRegion(
+        this.memStore.setMetadataCmdRgn(createSnappySpecificMetadataCmdRegion(
             !this.memStore.isDataDictionaryPersistent()));
       }
 
@@ -597,7 +597,7 @@ public final class FabricDatabase implements ModuleControl,
 
   }
 
-  private Region createSnappySpecificGlobalCmdRegion(boolean isLead) throws IOException, ClassNotFoundException {
+  private Region createSnappySpecificMetadataCmdRegion(boolean isLead) throws IOException, ClassNotFoundException {
     GemFireCacheImpl cache = Misc.getGemFireCache();
     final com.gemstone.gemfire.cache.AttributesFactory<?, ?> afact
         = new com.gemstone.gemfire.cache.AttributesFactory<>();
@@ -1712,13 +1712,10 @@ public final class FabricDatabase implements ModuleControl,
               logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath() + " size = " + adr.getRecoveredEntryMap().size());
             }
           }
-          if (logger.infoEnabled()) {
-            logger.info("preparePersistentStatesMsg: adr = " + adr.getFullPath());
-          }
           long mostRecentModifiedTime = 0;
           if (!(adr.getRecoveredEntryMap().size() == 0)) {
             mostRecentModifiedTime =
-                PersistentStateInRecoveryMode.getLatestModifiedTime(adr, logger);
+                PersistentStateInRecoveryMode.getLatestModifiedTime(adr);
           }
           PersistentStateInRecoveryMode.RecoveryModePersistentView dpv
               = new PersistentStateInRecoveryMode.RecoveryModePersistentView(
@@ -1735,6 +1732,9 @@ public final class FabricDatabase implements ModuleControl,
       }
     }
     pmsg.addPRConfigs();
+    if (logger.fineEnabled()) {
+      logger.fine("Setting PersistentStateInRecoveryMode: " + pmsg);
+    }
     this.memStore.setPersistentStateMsg(pmsg);
   }
 

@@ -39,21 +39,15 @@ package org.apache.ddlutils.platform.gemfirexd;
  * LICENSE file.
  */
 
-import java.io.IOException;
-import java.io.Writer;
-import java.sql.CallableStatement;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Types;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
 import org.apache.ddlutils.DatabaseOperationException;
 import org.apache.ddlutils.platform.SqlBuilder;
 import org.apache.ddlutils.platform.derby.DerbyPlatform;
+
+import java.io.IOException;
+import java.io.Writer;
+import java.sql.*;
+import java.util.Iterator;
+import java.util.Map;
 
 /**
  * The platform implementation for GemFireXD. To be completed - right now, it is
@@ -163,7 +157,7 @@ public class GemFireXDPlatform extends DerbyPlatform {
   @Override
   protected void writeAllDDLs(Connection conn, Writer writer, boolean exportAll)
       throws SQLException, IOException {
-    CallableStatement cstmt = conn.prepareCall("call SYS.EXPORT_DDLS(?)");
+    CallableStatement cstmt = conn.prepareCall("call SYS.EXPORT_ALL_DDLS(?)");
     cstmt.setBoolean(1, exportAll);
     ResultSet rs = cstmt.executeQuery();
     while (rs.next()) {
